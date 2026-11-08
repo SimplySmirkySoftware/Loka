@@ -36,6 +36,11 @@ context.HEAPU8.set([97,0,98],160);
 const out=100, ascent=104, descent=108;
 assert.equal(imports.web_measure(4,160,3,out),status.OK);
 assert.equal(context.HEAP32[out/4],22,'exact length includes embedded NUL');
+context.HEAPU8.set([0xef,0xbb,0xbf,97],160);
+imports.web_set_text(1,160,4);
+assert.equal(el.textContent,'\uFEFFa','publication preserves leading U+FEFF');
+assert.equal(imports.web_measure(4,160,4,out),status.OK);
+assert.equal(context.HEAP32[out/4],15,'standalone range preserves leading U+FEFF');
 assert.equal(imports.web_metrics(4,ascent,descent),status.OK);
 assert.equal(context.HEAP32[ascent/4],11); assert.equal(context.HEAP32[descent/4],3);
 for(const width of [NaN,Infinity,-1,2147483647.1]) {

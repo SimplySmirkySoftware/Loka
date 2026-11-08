@@ -90,7 +90,7 @@ addToLibrary({
     Object.assign(row.element.style,{left:x+'px',top:y+'px',width:w+'px',height:h+'px'});
   },
   web_set_text__deps:['$WebDOM'],
-  web_set_text(token,bytes,length) { const row=WebDOM.row(token); if(row) row.element.textContent=new TextDecoder().decode(HEAPU8.subarray(bytes>>>0,(bytes>>>0)+length)); },
+  web_set_text(token,bytes,length) { const row=WebDOM.row(token); if(row) row.element.textContent=new TextDecoder('utf-8',{ignoreBOM:true}).decode(HEAPU8.subarray(bytes>>>0,(bytes>>>0)+length)); },
   web_set_line_height__deps:['$WebDOM'],
   /** Cost: render once per visit, one element write after font. */
   web_set_line_height(token,height) { const row=WebDOM.row(token); if(row) row.element.style.lineHeight=height+'px'; },
@@ -113,7 +113,7 @@ addToLibrary({
       ptr>>>=0; len>>>=0;
       if(ptr>HEAPU8.length || len>HEAPU8.length-ptr) return status.PROTOCOL;
       service.environment(LokaWebStyle.fontKey(d)).applyToCanvas(service.ctx);
-      const raw=service.ctx.measureText(new TextDecoder().decode(HEAPU8.subarray(ptr,ptr+len))).width;
+      const raw=service.ctx.measureText(new TextDecoder('utf-8',{ignoreBOM:true}).decode(HEAPU8.subarray(ptr,ptr+len))).width;
       const width=Math.ceil(raw);
       if(!Number.isFinite(raw) || raw<0 || width>2147483647) return status.REFUSED;
       HEAP32[out>>2]=width; return status.OK;
