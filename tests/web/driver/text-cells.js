@@ -99,10 +99,35 @@ window.runTextCells = async function() {
     button.style.width=width;
   }
   button.textContent=original;
+  // A separate mount has no prior snapshot; refuse only its Button label probes.
+  const failed = await LokaWebCounter();
+  const nativeMeasure = CanvasRenderingContext2D.prototype.measureText;
+  CanvasRenderingContext2D.prototype.measureText = function(text) {
+    if (text === 'Increment') throw new Error('forced first Button measurement refusal');
+    return nativeMeasure.call(this, text);
+  };
+  try {
+    check(failed.web.start(1) === 0, 'failure fixture starts');
+    const buttons = document.querySelectorAll('button[data-loka-token]');
+    const empty = buttons[buttons.length - 1];
+    check(empty.style.height === '0px', 'first failure has zero layout height');
+    check(getComputedStyle(empty).visibility === 'hidden', 'first failure hides Button chrome');
+    const box = empty.getBoundingClientRect();
+    check(box.width > 0 && box.height > 0, 'chrome box hit-test positive geometry');
+    check(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) !== empty,
+      'first failure excludes Button from hit testing');
+    CanvasRenderingContext2D.prototype.measureText = nativeMeasure;
+    failed._web_wake(2, performance.now());
+    check(getComputedStyle(empty).visibility === 'visible', 'recovery projects Button');
+    check(empty.textContent === 'Increment', 'recovery publishes label');
+  } finally {
+    CanvasRenderingContext2D.prototype.measureText = nativeMeasure;
+    failed.web.dispose(); await failed.web.completed;
+  }
   console.log('text projection costs '+JSON.stringify(costs));
   const before = element.style.cssText;
   check(normal.badDescriptor(+element.dataset.lokaToken) === false, 'release-active protocol refusal');
   check(element.style.cssText === before, 'protocol refusal preserves element');
   return {widths, costs, cells: ['polluted ancestor', 'language positive control', 'regular-only bold synthesis',
-    'detached canvas', 'language fixed after first key', 'protocol refusal']};
+    'detached canvas', 'language fixed after first key', 'protocol refusal', 'first Button failure and recovery']};
 };

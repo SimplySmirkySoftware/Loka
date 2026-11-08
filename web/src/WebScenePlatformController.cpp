@@ -361,9 +361,12 @@ void WebElementContext::render(IPlatformController *)
   const WebTextSnapshot *snapshot = this->projection_.get();
   if (!snapshot)
   {
+    web_set_projected(this->element_.token(), 0);
     web_set_text(this->element_.token(), "", 0);
     return;
   }
+  // Unconditional projection order: projected, style, line-height, block, text.
+  web_set_projected(this->element_.token(), 1);
   const WebTextDescriptor descriptor = WebMetricDescriptor(snapshot->constraint().fontKey, input.style);
   if (!web_set_text_style(this->element_.token(), descriptor.data(), descriptor.count()))
   {

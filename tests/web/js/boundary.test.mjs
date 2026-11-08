@@ -23,6 +23,10 @@ assert.equal(imports.web_text_admit(fingerprint,expected.count),true,'matching g
 assert(context.WebDOM.text);
 const style={},el={style:{setProperty:(k,v)=>style[k]=v},setAttribute:()=>{}};
 context.WebDOM.resources.set(1,{element:el});
+imports.web_set_projected(1,0);
+assert.equal(el.style.visibility,'hidden');
+imports.web_set_projected(1,1);
+assert.equal(el.style.visibility,'visible');
 context.HEAP32.set([2,9,1,11,-1,-1,0,-1,0],1);
 assert.equal(imports.web_set_text_style(1,4,9),true);
 assert.equal(style.font,'10px system-ui');
@@ -74,6 +78,10 @@ for(const [a,d] of [[-1,2],[0,0],[Infinity,1],[32767,0.1],[NaN,1]]) {
 rawAscent=10; rawDescent=2;
 assert.equal(imports.web_text_admit(fingerprint,expected.count),true);
 context.WebDOM.resources.clear();
+imports.web_set_projected(1,0);
+imports.web_set_projected(1,1);
+assert.equal(el.style.visibility,'visible','released token is a no-op');
+assert.equal(context.WebDOM.resources.size,0);
 assert.equal(imports.web_set_text_style(1,4,9),true,'a released token is a no-op, not a protocol refusal');
 imports.web_completed(); assert.equal(context.WebDOM.text,null);
 assert.equal(imports.web_text_admit(fingerprint^1,expected.count),false);

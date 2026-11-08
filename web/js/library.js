@@ -89,6 +89,9 @@ addToLibrary({
     const row=WebDOM.row(token); if(!row) return;
     Object.assign(row.element.style,{left:x+'px',top:y+'px',width:w+'px',height:h+'px'});
   },
+  web_set_projected__deps:['$WebDOM'],
+  /** Cost: render once per visit, writes one owned element. */
+  web_set_projected(token,projected) { const row=WebDOM.row(token); if(row) row.element.style.visibility=projected ? 'visible' : 'hidden'; },
   web_set_text__deps:['$WebDOM'],
   web_set_text(token,bytes,length) { const row=WebDOM.row(token); if(row) row.element.textContent=new TextDecoder('utf-8',{ignoreBOM:true}).decode(HEAPU8.subarray(bytes>>>0,(bytes>>>0)+length)); },
   web_set_line_height__deps:['$WebDOM'],

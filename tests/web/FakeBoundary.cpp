@@ -81,6 +81,13 @@ extern "C"
     args << "=" << x << "," << y << "," << width << "," << height;
     webtest::record("rect", token, args.str());
   }
+  void web_set_projected(uint32_t token, int projected)
+  {
+    if (webtest::resources.find(token) == webtest::resources.end())
+      return;
+    webtest::resources[token].projected = projected != 0;
+    webtest::record("projected", token, projected ? "=1" : "=0");
+  }
   void web_set_text(uint32_t token, const char *bytes, unsigned length)
   {
     webtest::resources[token].text.assign(bytes, length);

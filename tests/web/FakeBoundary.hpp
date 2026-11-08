@@ -13,6 +13,7 @@ namespace webtest
           parent(0),
           hidden(true),
           enabled(true),
+          projected(true),
           revoked(false),
           width(0),
           height(0)
@@ -20,7 +21,7 @@ namespace webtest
     }
     int kind;
     uint32_t parent;
-    bool hidden, enabled, revoked;
+    bool hidden, enabled, projected, revoked;
     int width, height;
     std::string text;
   };

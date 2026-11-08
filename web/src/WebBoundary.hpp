@@ -38,6 +38,8 @@ extern "C"
   bool web_text_admit(unsigned long fingerprint, unsigned count);
   int web_create(int kind, uint32_t token, uint32_t parent, int *width, int *height);
   void web_set_rect(uint32_t token, int x, int y, int width, int height);
+  /** Cost: render once per visit, writes one owned element. */
+  void web_set_projected(uint32_t token, int projected);
   void web_set_text(uint32_t token, const char *bytes, unsigned length);
   bool web_set_text_style(uint32_t token, const int *descriptor, unsigned count);
   /** Cost: breaker miss or natural width once; measures the borrowed range only. */

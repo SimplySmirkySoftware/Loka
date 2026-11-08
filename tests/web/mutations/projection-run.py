@@ -14,7 +14,7 @@ def run(args):
 def dirty():
     return len(run(['git','status','--porcelain','--untracked-files=all']).stdout.splitlines())
 
-relative = 'web/src/WebScenePlatformController.cpp' if number in (1,3) else 'web/src/WebTextLayout.hpp' if number == 2 else 'web/src/WebTextLayout.cpp'
+relative = 'web/src/WebScenePlatformController.cpp' if number in (1,3,6) else 'web/src/WebTextLayout.hpp' if number == 2 else 'web/src/WebTextLayout.cpp'
 path = root / relative
 original = path.read_bytes()
 source = original.decode()
@@ -41,6 +41,9 @@ elif number == 5:
       if (!this->valid()) return false;
       out = full - prefix; return true;
     }'''
+elif number == 6:
+    old = 'web_set_projected(this->element_.token(), 0);'
+    new = ''
 else:
     raise ValueError(number)
 if old not in source:

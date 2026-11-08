@@ -185,11 +185,12 @@ build without requeue or a relayout request in release. Later legitimate input
 may try again. A first failure displays empty text at height zero. Neither failure
 clears an existing snapshot. Retire drops the slot; park retains it.
 
-Each render unconditionally writes style, then line-height, then block properties,
-then joined text. Font, line step and block come from the successful snapshot;
+Each render with a snapshot unconditionally makes five writes: projected, style,
+line-height, block properties, then joined text. Font, line step and block come from the successful snapshot;
 current color and underline overlay that descriptor without rebuilding geometry.
 The order restores line-height after the Env's font shorthand. An absent snapshot
-writes empty text without line-height. ELLIPSIS suppresses wrapping and projects
+writes projected=false, then empty text without line-height; projection visibility
+hides chrome and prevents native hit testing without changing lifecycle display. ELLIPSIS suppresses wrapping and projects
 only the first explicit line. NONE and CLIP retain all explicit lines. Overflow is
 hidden; CSS performs no wrapping.
 

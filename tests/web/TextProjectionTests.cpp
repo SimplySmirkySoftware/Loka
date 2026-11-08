@@ -13,6 +13,7 @@
 #include <cstring>
 #include <cstdio>
 #include <new>
+#include <sstream>
 using namespace loka::app;
 using namespace loka::app::scene;
 namespace
@@ -256,9 +257,10 @@ namespace
     webtest::calls.clear();
     rig.visit();
     LOKA_VERIFY(webtest::textBuilds == builds && webtest::textScans == 1);
-    LOKA_VERIFY(webtest::calls.size() == 5);
-    LOKA_VERIFY(webtest::calls[1].find("style:") == 0 && webtest::calls[2].find("line-height:") == 0
-                && webtest::calls[3].find("block:") == 0 && webtest::calls[4].find("text:") == 0);
+    LOKA_VERIFY(webtest::calls.size() == 6);
+    LOKA_VERIFY(webtest::calls[1].find("projected:") == 0 && webtest::calls[2].find("style:") == 0
+                && webtest::calls[3].find("line-height:") == 0 && webtest::calls[4].find("block:") == 0
+                && webtest::calls[5].find("text:") == 0);
     rig.state.width = 90;
     rig.visit();
     LOKA_VERIFY(webtest::textBuilds == builds + 1);
@@ -296,8 +298,49 @@ namespace
     rig.visit();
     LOKA_VERIFY(rig.text() == "a\nb" && rig.state.height == 26);
   }
+  void ButtonFailureExits()
+  {
+    Rig rig;
+    ButtonNode button(Button("old").props);
+    button.setPropsTypeId(ButtonProps::staticTypeId());
+    LOKA_VERIFY(rig.controller->prepareProjectedLayout(&button, rig.state));
+    WebElementContext *context = static_cast<WebElementContext *>(button.getContext());
+    const uint32_t token = webtest::token(loka::web::BUTTON);
+    std::ostringstream hidden, visible;
+    hidden << "projected:" << token << "=0";
+    visible << "projected:" << token << "=1";
+    for (int phase = 0; phase < 4; ++phase)
+    {
+#ifndef NDEBUG
+      if (phase == 3)
+        break;
+#endif
+      if (phase >= 2)
+        LOKA_VERIFY(Button("new").applyPropsToNode(&button));
+      webtest::failMeasure = phase == 1 ? 0 : 1;
+      webtest::measureStatus = phase == 3 ? WEB_MEASURE_PROTOCOL : WEB_MEASURE_REFUSED;
+      webtest::calls.clear();
+      context->layout(rig.controller, rig.state);
+      context->render(rig.controller);
+      const bool empty = phase == 0;
+      LOKA_VERIFY(webtest::resources[token].projected == !empty);
+      LOKA_VERIFY(webtest::resources[token].height == (empty ? 0 : 23));
+      LOKA_VERIFY(webtest::resources[token].text == (empty ? "" : "old"));
+      bool wroteHidden = false, wroteVisible = false;
+      for (unsigned i = 0; i < webtest::calls.size(); ++i)
+      {
+        wroteHidden = wroteHidden || webtest::calls[i] == hidden.str();
+        wroteVisible = wroteVisible || webtest::calls[i] == visible.str();
+      }
+      LOKA_VERIFY(wroteHidden == empty && wroteVisible == !empty);
+    }
+    webtest::measureStatus = WEB_MEASURE_REFUSED;
+    LifecycleFactTestAccess::MarkSubtreeRetired(&button);
+    button.setContext(0);
+  }
   void FailureExits()
   {
+    ButtonFailureExits();
     Rig rig;
     webtest::failMeasure = 1;
     rig.visit();
