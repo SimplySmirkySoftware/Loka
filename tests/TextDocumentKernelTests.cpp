@@ -1265,6 +1265,8 @@ namespace
     int status = 0;
     LOKA_VERIFY(waitpid(child, &status, 0) == child);
     LOKA_VERIFY(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
+#else
+    std::puts("[skip] revision exhaustion death pin needs Linux fork, lifecycle audit, asserts and no ASan.");
 #endif
   }
 } // namespace
