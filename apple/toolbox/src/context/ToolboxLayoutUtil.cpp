@@ -121,14 +121,13 @@ namespace
   bool NeedsBusy(const ToolboxTextPortFont &original, const ToolboxTextFontDescriptor *descriptors, std::size_t count)
   {
     const short baseline = ToolboxTextSelection::resolve(ToolboxTextFontDescriptor(), original).size;
-    short largest = count ? ToolboxTextSelection::resolve(descriptors[0], original).size : baseline;
-    for (std::size_t i = 1; i < count; ++i)
+    for (std::size_t i = 0; i < count; ++i)
     {
       const short size = ToolboxTextSelection::resolve(descriptors[i], original).size;
-      if (size > largest)
-        largest = size;
+      if (size != baseline)
+        return true;
     }
-    return largest != baseline;
+    return false;
   }
 }
 
