@@ -1038,7 +1038,7 @@ namespace
     for (unsigned i = 0; i < count; ++i)
     {
       char target[32];
-      std::sprintf(target, "target-%u", i);
+      ::snprintf(target, sizeof(target), "target-%u", i);
       const LinkTarget link = i + 1 == count ? last : LinkTarget(String(i + 2 == count ? "last" : target));
       LOKA_VERIFY(builder.appendLink(String("x"), Bold, link));
     }
