@@ -3,6 +3,7 @@
 #include "app/text/TextChangeNote.hpp"
 #include <string>
 #include "core/Utf8Decode.hpp"
+#include "app/text/TextSeparators.hpp"
 #include "app/scene/projection/PlatformController.hpp"
 namespace loka
 {
@@ -98,9 +99,8 @@ public:
       if (!loka::core::detail::DecodeUtf8Codepoint(
               this->committedText_.data(), this->committedText_.size(), next, scalar))
         return TEXT_CHUNK_REFUSED_MALFORMED;
-      const bool newline = scalar == '\r' || scalar == '\n';
-      if (scalar == '\r' && next < this->committedText_.size() && this->committedText_[next] == '\n')
-        ++next;
+      const bool newline =
+          loka::app::TextSeparators::Fold(scalar, this->committedText_.data(), this->committedText_.size(), next);
       const unsigned long bytes = newline ? 1 : static_cast<unsigned long>(next - cursor);
       if (bytes > capacity - count)
         break;

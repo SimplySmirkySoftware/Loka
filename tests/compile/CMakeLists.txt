@@ -752,3 +752,13 @@ loka_compile_pin(text-position-no-arithmetic
   REFUSES pins/refuses_text-position-no-arithmetic.cpp
   ACCEPTS pins/accepts_text-position-no-arithmetic.cpp
 )
+
+loka_compile_pin(request-text-replacement-no-source
+  REFUSES pins/refuses_text_replacement_source.cpp
+  ACCEPTS pins/accepts_text_replacement_source.cpp
+)
+
+loka_compile_pin(request-text-replacement-private-stage
+  REFUSES pins/refuses_text_replacement_stage.cpp
+  ACCEPTS pins/accepts_text_replacement_stage.cpp
+)
