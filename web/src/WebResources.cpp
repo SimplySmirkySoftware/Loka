@@ -1,3 +1,4 @@
+#include "WebScrollContext.hpp"
 #include "WebResources.hpp"
 #include "WebTestHooks.hpp"
 #include <cassert>
@@ -63,7 +64,7 @@ WebResource *WebInputRoutes::extract(loka::web::Token token)
     *seat = replacement;
   }
   row->left = row->right = 0;
-  row->leaf = 0;
+  row->receiver = 0;
   row->root = 0;
   return row;
 }
@@ -104,4 +105,15 @@ WebResource *WebElement::revoke(WebInputRoutes &routes)
   web_revoke(this->token_);
   this->token_ = 0;
   return row;
+}
+
+WebElementContext *WebResource::leaf() const
+{
+  return this->kind == loka::web::TEXT || this->kind == loka::web::BUTTON
+             ? static_cast<WebElementContext *>(this->receiver)
+             : 0;
+}
+WebScrollContext *WebResource::scroll() const
+{
+  return this->kind == loka::web::SCROLL ? static_cast<WebScrollContext *>(this->receiver) : 0;
 }

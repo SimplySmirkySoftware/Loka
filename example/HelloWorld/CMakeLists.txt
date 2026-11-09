@@ -10,7 +10,8 @@ if(APPLE)
   loka_suppress_arclite_link()
 endif()
 
-if(NOT WIN32 AND NOT APPLE AND NOT (CMAKE_SYSTEM_NAME MATCHES "^Retro(68|PPC|Carbon)$"))
+if(NOT WIN32 AND NOT APPLE AND NOT (CMAKE_SYSTEM_NAME MATCHES "^Retro(68|PPC|Carbon)$")
+    AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   add_custom_target(LokaHelloWorld ALL
     COMMAND ${CMAKE_COMMAND} -E echo "LokaHelloWorld has no supported platform target here."
   )
@@ -217,6 +218,8 @@ if(WIN32)
       -TestSource
         ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/win32/ScenarioCaptureNativeTests.cs)
 
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  loka_add_web_app(LokaHelloWeb LokaHelloWeb src/WebMain.cpp src/MainNode.cpp)
 endif()
 
 if(APPLE)

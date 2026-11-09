@@ -9,9 +9,14 @@ namespace webtest
   std::vector<std::string> calls;
   unsigned completed = 0, failCreate = 0, failHidden = 0, failTextAdmit = 0, failTextStyle = 0;
   void (*probe)(const char *, uint32_t) = 0;
+  int scrollStatus = 0, appliedX = -1, appliedY = -1, gutterVertical = 0, gutterHorizontal = 0;
+  bool geometryMeasurable = true;
   static unsigned nextHandle = 1;
   void reset()
   {
+    scrollStatus = gutterVertical = gutterHorizontal = 0;
+    appliedX = appliedY = -1;
+    geometryMeasurable = true;
     resources.clear();
     tasks.clear();
     calls.clear();
@@ -72,6 +77,44 @@ extern "C"
     row.height = *height;
     webtest::resources[token] = row;
     return 1;
+  }
+  int web_scrollbar_geometry(int *vertical, int *horizontal)
+  {
+    if (!webtest::geometryMeasurable)
+      return 0;
+    *vertical = webtest::gutterVertical;
+    *horizontal = webtest::gutterHorizontal;
+    return 1;
+  }
+  int web_commit_scroll(uint32_t token,
+                        int x,
+                        int y,
+                        int w,
+                        int h,
+                        int horizontal,
+                        int documentWidth,
+                        int extent,
+                        int originX,
+                        int originY,
+                        int *appliedX,
+                        int *appliedY)
+  {
+    webtest::record("commit-scroll", token);
+    if (webtest::scrollStatus)
+      return webtest::scrollStatus;
+    webtest::Resource &row = webtest::resources[token];
+    row.x = x;
+    row.y = y;
+    row.width = w;
+    row.height = h;
+    row.documentWidth = documentWidth;
+    row.extent = extent;
+    row.originX = webtest::appliedX >= 0 ? webtest::appliedX : originX;
+    row.originY = webtest::appliedY >= 0 ? webtest::appliedY : originY;
+    *appliedX = row.originX;
+    *appliedY = row.originY;
+    (void)horizontal;
+    return loka::web::APPLIED;
   }
   void web_set_rect(uint32_t token, int x, int y, int width, int height)
   {

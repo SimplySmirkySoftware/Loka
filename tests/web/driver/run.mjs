@@ -9,6 +9,7 @@ const driverDir=fileURLToPath(new URL('.',import.meta.url));
 import assert from 'node:assert/strict';
 
 const build=resolve(process.argv[2] || 'build/wasm/testing/web');
+const helloBuild=resolve('build/wasm/web/example/HelloWorld');
 const chromium=process.env.CHROMIUM || ['chromium','chromium-browser','google-chrome']
   .find(name=>spawnSync('which',[name],{stdio:'ignore'}).status===0);
 if(!chromium) { console.log('[skip] browser driver: no chromium'); process.exit(0); }
@@ -56,13 +57,26 @@ class CDP {
 }
 assert.equal(spawnSync('python3',[join(driverDir,'make-font.py'),join(build,'text-probe.ttf')],{stdio:'inherit'}).status,0);
 const profile=await mkdtemp(join(tmpdir(),'loka-web-chrome-'));
+let helloWasmFetches=0;
 const server=createServer(async(req,res)=>{
   try {
     const file=basename(new URL(req.url,'http://localhost').pathname) || 'index.html';
     let data;
-    if(file === 'text-cells.js') data=await readFile(join(driverDir,file));
-    else if(file === 'skew.js' || file === 'LokaWebCounter.js') {
-      data=await readFile(join(build,'LokaWebCounter.js'),'utf8');
+    if(file === 'csp-allow.html' || file === 'csp-deny.html') {
+      const wasm=file === 'csp-allow.html' ? " 'wasm-unsafe-eval'" : '';
+      res.setHeader('Content-Security-Policy',`script-src 'nonce-X'${wasm}; connect-src 'self'; default-src 'none'`);
+      data=`<!doctype html><body><script nonce="X" src="LokaHelloWeb.js"></script>
+        <script nonce="X">LokaHelloWeb({locateFile:name=>name}).then(m=>{
+          window.fixture=m;window.web=m.web;window.ready=true;
+        }).catch(error=>{window.loadError=String(error)});</script>`;
+    } else if(file === 'hello.html') {
+      data=`<!doctype html><body><script src="LokaHelloWeb.js"></script><script>
+        LokaHelloWeb({locateFile:name=>name}).then(m=>{window.fixture=m;window.web=m.web;window.ready=true});
+        </script>`;
+    } else if(file === 'LokaHelloWeb.wasm') data=await readFile(join(helloBuild,file));
+    else if(file === 'text-cells.js') data=await readFile(join(driverDir,file));
+    else if(file === 'skew.js' || file === 'LokaWebCounter.js' || file === 'LokaHelloWeb.js') {
+      data=await readFile(file === 'LokaHelloWeb.js' ? join(helloBuild,file) : join(build,'LokaWebCounter.js'),'utf8');
       // Driver-only closure access, never a production export or a C++ test-shaped door.
       const hook=`Module['textTest']={
         service:()=>WebDOM.text,
@@ -73,15 +87,18 @@ const server=createServer(async(req,res)=>{
         badDescriptor:token=>_web_set_text_style(token,0,8)
       };
 `;
-      assert(data.includes('// Captures this module forever;'));
-      data=data.replace('// Captures this module forever;',hook+'// Captures this module forever;');
+      // Match the API assignment in Debug and minified Release output alike.
+      const api=/Module\[['"]web['"]\]\s*=/g;
+      assert.equal([...data.matchAll(api)].length,1,'one module API assignment');
+      data=data.replace(api,match=>hook+match);
       if(file === 'skew.js') data=data.replace(/"fingerprint":\d+/, '"fingerprint":0');
     } else data=await readFile(join(build,file));
     const type={'.html':'text/html','.js':'application/javascript','.wasm':'application/wasm'}[extname(file)];
     res.writeHead(200,{'Content-Type':type || 'application/octet-stream'});res.end(data);
+    if(file === 'LokaHelloWeb.wasm') ++helloWasmFetches;
   } catch {res.writeHead(404);res.end();}
 });
-await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve)});
 const child=spawn(chromium,['--headless','--no-sandbox','--disable-gpu','--remote-debugging-port=0',
   '--user-data-dir='+profile,'about:blank'],{stdio:['ignore','ignore','pipe']});
 let client;
@@ -99,9 +116,157 @@ try {
   await client.send('Emulation.setDeviceMetricsOverride',{width:800,height:600,deviceScaleFactor:1,mobile:false});
   console.log(JSON.stringify({engine:await client.send('Browser.getVersion'),os:process.platform,node:process.version,
     revision:spawnSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).stdout.trim(),viewport:[800,600]}));
-  await client.send('Page.navigate',{url:'http://127.0.0.1:'+server.address().port+'/index.html'});
-  for(let i=0; i<100 && !await client.evaluate('!!window.ready'); ++i)
-    await new Promise(resolve=>setTimeout(resolve,50));
+  async function navigate(page) {
+    // A navigation acknowledgement can precede replacement of the old document.
+    await client.evaluate('window.ready=false;window.loadError=null');
+    await client.send('Page.navigate',{url:'http://127.0.0.1:'+server.address().port+'/'+page});
+    for(let i=0;i<100 && !await client.evaluate('!!window.ready || !!window.loadError');++i)
+      await new Promise(resolve=>setTimeout(resolve,50));
+  }
+  await navigate('index.html');
+  await client.evaluate('document.body.style.direction="rtl";fixture._fixture_configure(-1,0);web.start()');
+  const scrollInfo=await client.evaluate(`(() => {
+    const root=document.querySelector('body > div[data-loka-token]'),s=root.firstElementChild,c=s.firstElementChild;
+    window.scrollCell={root,s,c};
+    return {native:s.scrollTop,fact:fixture._fixture_scroll_fact(1),vertical:s.offsetWidth-s.clientWidth,horizontal:s.offsetHeight-s.clientHeight,
+      width:s.clientWidth,reportedWidth:fixture._fixture_scroll_fact(2),document:parseFloat(c.style.width)};
+  })()`);
+  assert.equal(scrollInfo.native,scrollInfo.fact+7,'bootstrap nonzero origin after reveal');
+  assert.equal(scrollInfo.width,scrollInfo.reportedWidth);
+  assert.equal(scrollInfo.document,400);
+  console.log('scroll gutter: '+JSON.stringify(scrollInfo));
+  console.log(scrollInfo.vertical ? 'classic gutter: passed; [skip] overlay gutter: not active' : 'overlay gutter: passed; [skip] classic gutter: not active');
+  await client.evaluate('scrollCell.s.scrollTop=70;scrollCell.s.dispatchEvent(new Event("scroll"))');
+  assert.equal(await client.evaluate('fixture._fixture_scroll_fact(1)'),63,'live scroll sampling');
+  await client.evaluate('fixture._fixture_scroll_command(0,0,0)');
+  assert.equal(await client.evaluate('scrollCell.s.scrollTop'),0,'scrollTo Top');
+  for(const command of [2,3]) {
+    const mismatch=await client.evaluate(`(() => {
+      scrollCell.s.scrollTop=80;
+      const differs=Math.round(scrollCell.s.scrollTop)!==fixture._fixture_scroll_fact(1)+7;
+      fixture._fixture_scroll_command(${command},0,Number(scrollCell.root.dataset.lokaToken));
+      fixture._fixture_scroll_command(${command},1,Number(scrollCell.root.dataset.lokaToken));
+      return {differs,native:Math.round(scrollCell.s.scrollTop),fact:fixture._fixture_scroll_fact(1)+7};
+    })()`);
+    assert(mismatch.differs,'native/fact mismatch created while a layout box exists');
+    assert.equal(mismatch.native,mismatch.fact,'reveal restores native/fact agreement before a queued event can publish');
+  }
+  await client.evaluate('fixture._fixture_scroll_command(1,0,0)');
+  assert.equal(await client.evaluate('scrollCell.s.style.overflowX'),'hidden','narrow disables horizontal bar');
+  await client.evaluate('fixture._fixture_scroll_command(1,400,0)');
+  assert.equal(await client.evaluate('scrollCell.s.style.overflowX'),'scroll','wide enables horizontal bar');
+  await client.evaluate('scrollCell.s.scrollTop=99999;scrollCell.s.dispatchEvent(new Event("scroll"))');
+  assert.equal(await client.evaluate('Math.round(scrollCell.s.scrollTop)'),await client.evaluate('fixture._fixture_scroll_fact(1)+7'),'range boundary');
+  const failed=await client.evaluate(`(() => {
+    const snapshot=()=>[scrollCell.s.scrollHeight,scrollCell.c.scrollTop,...[0,1,2,3].map(i=>fixture._fixture_scroll_fact(i))];
+    const before=snapshot();window.savedScrollService=fixture.textTest.service();
+    // Measurement-only failure: a lost canvas context makes web_measure REFUSED while the style door still answers (a null service would be a protocol refusal, not a text refusal).
+    fixture.textTest.replaceService(Object.create(savedScrollService,{ctx:{value:Object.create(savedScrollService.ctx,{isContextLost:{value:()=>true}})}}));
+    fixture._fixture_scroll_command(4,12345,0);
+    return {before,after:snapshot()};
+  })()`);
+  assert.deepEqual(failed.after,failed.before,'failed traversal preserves range, content offset and fact');
+  await client.evaluate('fixture.textTest.replaceService(savedScrollService);fixture._web_wake(2,performance.now())');
+  const fraction=await client.evaluate(`(() => {
+    scrollCell.s.style.zoom='1.25';scrollCell.s.scrollTop=10.8;
+    const before=scrollCell.s.scrollTop;scrollCell.s.dispatchEvent(new Event('scroll'));
+    const afterInput=scrollCell.s.scrollTop;
+    fixture._web_wake(2,performance.now());
+    return {before,afterInput,after:scrollCell.s.scrollTop,fact:fixture._fixture_scroll_fact(1)};
+  })()`);
+  assert.equal(Math.round(fraction.after),fraction.fact+7,'fractional read-back publication');
+  assert.equal(fraction.afterInput,fraction.before,'scroll input does not snap fractional native origin');
+  assert.equal(fraction.after,fraction.before,'stable rounded origin does not snap');
+  await client.evaluate('scrollCell.s.style.zoom="1"');
+  await client.evaluate('web.dispose();web.completed.then(()=>true)');
+  assert.equal(await client.evaluate('fixture.textTest.resources()'),0,'scroll release subtree rows');
+  console.log('scroll browser: bootstrap, live input, request, reveal, ranges and release passed');
+  await navigate('index.html');
+  await client.evaluate('fixture._fixture_configure(-2,0);web.start()');
+  const closingScroll=await client.evaluate(`(() => {
+    const roots=[...document.querySelectorAll('body > div[data-loka-token]')];
+    return {count:roots.length,result:fixture._fixture_scroll_close(Number(roots[0].dataset.lokaToken),Number(roots[0].firstElementChild.dataset.lokaToken))};
+  })()`);
+  assert.equal(closingScroll.count,2);assert.equal(closingScroll.result,5,'pending-close root refuses scroll while another root remains');
+  await client.evaluate('web.dispose();web.completed.then(()=>true)');
+  for(const viewportWidth of [800,300]) {
+    await client.send('Emulation.setDeviceMetricsOverride',{width:viewportWidth,height:600,deviceScaleFactor:1,mobile:false});
+    await navigate('hello.html');
+    assert.equal(await client.evaluate('!!window.ready'),true,'HelloWeb module ready');
+    assert.equal(await client.evaluate('web.start()'),0,'HelloWeb start');
+    const hello=await client.evaluate(`(() => {
+      const roots=[...document.querySelectorAll('body > div[data-loka-token]')];
+      const root=roots[0], css=getComputedStyle(root);
+      const content=axis=>parseFloat(css[axis])-(css.boxSizing==='border-box' ?
+        (axis==='width' ? parseFloat(css.paddingLeft)+parseFloat(css.paddingRight)+parseFloat(css.borderLeftWidth)+parseFloat(css.borderRightWidth) :
+          parseFloat(css.paddingTop)+parseFloat(css.paddingBottom)+parseFloat(css.borderTopWidth)+parseFloat(css.borderBottomWidth)) : 0);
+      return {roots:roots.length,children:root.childElementCount,width:content('width'),height:content('height'),available:document.body.clientWidth};
+    })()`);
+    // ScrollView owns one scroller and its content owns all projected leaves.
+    assert.equal(hello.roots,1);assert.equal(hello.children,1);
+    assert(hello.width>0 && hello.width<=420 && hello.height>0 && hello.height<=330);
+    assert.equal(hello.width,Math.min(420,hello.available));assert.equal(hello.height,330);
+    const leaves=await client.evaluate(`(() => {
+      const scroller=document.querySelector('body > div[data-loka-token]').firstElementChild;
+      return [...scroller.firstElementChild.children].map(e=>e.textContent);
+    })()`);
+    assert.equal(leaves.length,12,'HelloWeb projected leaf order count');
+    for(const [index,label] of [[0,'Loka Sample'],[2,'Add +'],[4,'Probe Button'],[5,'Toggle Button Enabled'],[6,'Fruit Picker'],[8,'BMI Calculator'],[9,'Height (cm)'],[10,'Weight (kg)']])
+      assert(leaves[index].includes(label),'HelloWeb leaf '+index);
+    if(viewportWidth===800) {
+      const hit=await client.evaluate(`(() => {
+        const e=[...document.querySelectorAll('button')].find(e=>e.textContent==='Probe Button');
+        const r=e.getBoundingClientRect(),s=e.parentElement.parentElement.getBoundingClientRect();
+        const x=(r.left+r.right)/2,y=(r.top+r.bottom)/2;
+        return {x,y,visible:r.top>=s.top&&r.bottom<=s.bottom&&r.width>0&&r.height>0,hit:document.elementFromPoint(x,y)===e};
+      })()`);
+      assert(hit.visible && hit.hit,'Probe Button visible and hit without scrolling');
+      await client.send('Input.dispatchMouseEvent',{type:'mousePressed',x:hit.x,y:hit.y,button:'left',clickCount:1});
+      await client.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:hit.x,y:hit.y,button:'left',clickCount:1});
+      assert(await client.evaluate(`document.body.textContent.includes('clicks: 1')`),'Probe Button increments clicks');
+      const ring=await client.evaluate(`(() => {
+        const style=document.createElement('style');style.textContent='button:focus{outline:3px solid rgb(255,0,255)!important;outline-offset:0!important}';document.head.appendChild(style);
+        window.probeButton=[...document.querySelectorAll('button')].find(e=>e.textContent==='Probe Button');probeButton.blur();
+        const r=probeButton.getBoundingClientRect();return {x:r.left+4,y:r.top-3,width:Math.max(1,r.width-8),height:2,scale:1};
+      })()`);
+      const unfocused=(await client.send('Page.captureScreenshot',{format:'png',clip:ring})).data;
+      await client.evaluate('probeButton.focus()');
+      const focused=(await client.send('Page.captureScreenshot',{format:'png',clip:ring})).data;
+      assert.notEqual(focused,unfocused,'focus outline changes pixels outside button border');
+      await client.evaluate('probeButton.blur()');
+      const blurred=(await client.send('Page.captureScreenshot',{format:'png',clip:ring})).data;
+      assert.equal(blurred,unfocused,'focus outline pixels disappear on blur');
+      const clipHit=await client.evaluate(`(() => {
+        const s=probeButton.parentElement.parentElement;
+        s.scrollTop=probeButton.offsetTop+5;
+        const r=probeButton.getBoundingClientRect(),c=s.getBoundingClientRect(),x=(r.left+r.right)/2;
+        return {inside:document.elementFromPoint(x,Math.max(r.top,c.top)+3)===probeButton,
+          outside:document.elementFromPoint(x,c.top-2)===probeButton};
+      })()`);
+      assert(clipHit.inside && !clipHit.outside,'focusable button hit is clipped at viewport edge');
+    }
+    await client.evaluate('web.dispose();web.completed.then(()=>true)');
+    assert.equal(await client.evaluate('fixture.textTest.resources()'),0);
+    assert.deepEqual(client.errors,[],'HelloWeb runtime errors');
+    console.log('HelloWeb smoke: passed '+JSON.stringify({viewportWidth,...hello,resources:0,completed:true}));
+  }
+  await client.send('Emulation.setDeviceMetricsOverride',{width:800,height:600,deviceScaleFactor:1,mobile:false});
+  for(const allow of [true,false]) {
+    client.errors=[];
+    const fetchesBefore=helloWasmFetches;
+    await navigate(allow ? 'csp-allow.html' : 'csp-deny.html');
+    assert(helloWasmFetches>fetchesBefore,'CSP wasm fetch succeeds');
+    assert.equal(await client.evaluate('!!window.ready'),allow,'CSP module ready');
+    if(allow) {
+      assert.deepEqual(client.errors,[],'CSP allowed startup');
+      await client.evaluate('web.dispose();web.completed.then(()=>true)');
+    } else {
+      assert.match(await client.evaluate('window.loadError || ""'),/wasm|WebAssembly|CompileError/i);
+    }
+    console.log('CSP '+(allow ? 'with' : 'without')+" wasm-unsafe-eval: passed (ready="+allow+')');
+  }
+  client.errors=[];
+  await navigate('index.html');
   assert.equal(await client.evaluate('!!window.ready'),true,'module ready');
   // Inspect bootstrap synchronously, before ResizeObserver can repair a wrong box.
   const initial=await client.evaluate(`(() => {
@@ -109,7 +274,8 @@ try {
     style.id='loka-bootstrap-box-probe';
     style.textContent='body > div[data-loka-token] { padding:7px; border:3px solid; transform:scale(.9); }';
     document.head.appendChild(style);
-    const result=web.start(2);
+    fixture._fixture_configure(2,0);
+    const result=web.start();
     return {result,widths:[...document.querySelectorAll('body > div span')].map(e=>e.style.width)};
   })()`);
   assert.equal(initial.result,0);
@@ -117,9 +283,17 @@ try {
   const tokens=await client.evaluate(`({buttons:[...document.querySelectorAll('button')].map(e=>+e.dataset.lokaToken),
     roots:[...document.querySelectorAll('body > div')].map(e=>+e.dataset.lokaToken)})`);
   const button=tokens.buttons[0];
+  assert.equal(tokens.roots.length,2,'configured roots=2');
+  assert.equal(await client.evaluate('web.start()'),2,'second start refused');
+  assert.deepEqual(await client.evaluate(`[...document.querySelectorAll('body > div[data-loka-token]')].map(e=>+e.dataset.lokaToken)`),tokens.roots);
+  assert.equal(await client.evaluate('fixture._fixture_configured()'),20);
+  await client.evaluate('fixture._fixture_configure(1,1)');
+  assert.equal(await client.evaluate('fixture._fixture_configured()'),20,'configure after start is inert');
+  console.log('fixture configure roots=2 and configure after start: passed');
   const text=()=>client.evaluate(`document.querySelector('[data-loka-token="${tokens.roots[0]}"] span').textContent`);
   await client.evaluate(`document.querySelector('[data-loka-token="${button}"]').click()`);
   assert.equal(await text(),'Count: 1');
+  console.log('second start refusal preserves root token and click: passed');
   // Native keyboard activation must produce exactly one click export per key.
   await client.evaluate(`window.clickExports=0; const original=web.click; web.click=t=>{++clickExports;return original(t)};
     document.activeElement.blur()`);
@@ -163,10 +337,31 @@ try {
   await client.evaluate('web.quit();web.completed.then(()=>true)');
   assert.equal(await client.evaluate('document.querySelectorAll("[data-loka-token]").length'),0);
   assert.deepEqual(client.errors,[],'browser console/runtime errors');
+  for(const roots of [0,1]) {
+    const result=await client.evaluate(`(async()=>{
+      const m=await LokaWebCounter();m._fixture_configure(${roots},0);
+      const started=m.web.start(), count=document.querySelectorAll('body > div[data-loka-token]').length;
+      m.web.dispose();await m.web.completed;
+      return {started,count,configured:m._fixture_configured(),resources:m.textTest.resources()};
+    })()`);
+    assert.deepEqual(result,{started:roots ? 0 : 1,count:roots,configured:roots*10,resources:0});
+    console.log('fixture configure roots='+roots+': passed');
+  }
+  const destroy=await client.evaluate(`(async()=>{
+    const m=await LokaWebCounter();m._fixture_configure(1,1);m.web.start();
+    const old=document.querySelector('button').dataset.lokaToken;
+    m._fixture_command(0,0);const removed=!document.querySelector('button');
+    m._fixture_command(0,1);const fresh=document.querySelector('button').dataset.lokaToken;
+    const configured=m._fixture_configured();m.web.dispose();await m.web.completed;
+    return {removed,replaced:old!==fresh,configured,resources:m.textTest.resources()};
+  })()`);
+  assert.deepEqual(destroy,{removed:true,replaced:true,configured:11,resources:0});
+  console.log('fixture configure destroy-on-detach: passed');
   console.log('text cells:', await client.evaluate(`(async()=>{
     document.getElementById('loka-bootstrap-box-probe').remove();
     window.fixture=await LokaWebCounter(); window.web=fixture.web;
-    if(web.start(1)!==0) throw new Error('text fixture start');
+    fixture._fixture_configure(1,0);
+    if(web.start()!==0) throw new Error('text fixture start');
     await new Promise((resolve,reject)=>{const s=document.createElement('script');
       s.src='text-cells.js';s.onload=resolve;s.onerror=reject;document.head.appendChild(s)});
     const result=await runTextCells(); web.dispose(); await web.completed;
@@ -177,7 +372,7 @@ try {
   const skew=await client.evaluate(`(async()=>{
     await new Promise((resolve,reject)=>{const s=document.createElement('script');
       s.src='skew.js';s.onload=resolve;s.onerror=reject;document.head.appendChild(s)});
-    const m=await LokaWebCounter(); const result=m.web.start(1);
+    const m=await LokaWebCounter(); const result=m.web.start();
     const mounted=document.querySelectorAll('[data-loka-token]').length;
     await m.web.completed;
     return {result,mounted,resources:m.textTest.resources(),service:m.textTest.service(),ingress:m.web.click(1)};

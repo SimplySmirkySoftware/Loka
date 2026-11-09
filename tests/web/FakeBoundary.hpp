@@ -16,13 +16,20 @@ namespace webtest
           projected(true),
           revoked(false),
           width(0),
-          height(0)
+          height(0),
+          x(0),
+          y(0),
+          documentWidth(0),
+          extent(0),
+          originX(0),
+          originY(0)
     {
     }
     int kind;
     uint32_t parent;
     bool hidden, enabled, projected, revoked;
     int width, height;
+    int x, y, documentWidth, extent, originX, originY;
     std::string text;
   };
   struct Task
@@ -48,6 +55,8 @@ namespace webtest
   extern void (*probe)(const char *, uint32_t);
   extern unsigned measureCalls, metricCalls, measureBytes, textBuilds, textScans;
   extern int failMeasure, measureStatus, measuredWidth;
+  extern int scrollStatus, appliedX, appliedY, gutterVertical, gutterHorizontal;
+  extern bool geometryMeasurable;
   void reset();
   void fire(unsigned handle, double now);
   unsigned task(int kind);

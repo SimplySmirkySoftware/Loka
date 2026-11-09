@@ -7,13 +7,13 @@ export SANDBOX
 trap 'rm -rf "$SANDBOX"' EXIT
 fail() { echo "ToolboxStandaloneRunnerTest failed: $*" >&2; cat "$SANDBOX/output" >&2; exit 1; }
 mkdir -p "$SANDBOX/repo/tests/toolbox" "$SANDBOX/repo/scripts" "$SANDBOX/tools" "$SANDBOX/inputs"
-cp "$REPO_DIR/tests/toolbox/"{run-standalone.sh,mame-launch.lua} "$SANDBOX/repo/tests/toolbox/"
+cp "$REPO_DIR/tests/toolbox/"{run-standalone.sh,mame-launch.lua,mame-keys.lua} "$SANDBOX/repo/tests/toolbox/"
 cp "$REPO_DIR/scripts/"{mame-boot-copy.sh,mame-dev-disk.sh,hfs-disk.sh,retro68-env.sh,env-file.sh} "$SANDBOX/repo/scripts/"
 cat >"$SANDBOX/tools/mame" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$@" >"$SANDBOX/argv"
-printf '%s\n' "$LOKA_TAB_COUNT" "$LOKA_STANDALONE" "$LOKA_RUN_WAIT" "${LOKA_LAUNCH_WAIT:-}" "$WSLENV" >"$SANDBOX/env"
+printf '%s\n' "$LOKA_TAB_COUNT" "$LOKA_STANDALONE" "$LOKA_RUN_WAIT" "${LOKA_LAUNCH_WAIT:-}" "$WSLENV" "${LOKA_KEY_RELEASE_HOLD-unset}" >"$SANDBOX/env"
 while [ "$#" -gt 0 ]; do
   if [ "$1" = -hard1 ]; then
     cmp "$2" "$MAME_HDA"
@@ -66,7 +66,7 @@ MAME_ROMPATH="$SANDBOX/rom path"
 MAME_DEV_HDA="$SANDBOX/do-not-use-dev.hd"
 MAME_CONTROL_DIR="$SANDBOX/do-not-use-control"
 ENV
-unset WSL_INTEROP LOKA_TAB_COUNT LOKA_RUN_WAIT LOKA_LAUNCH_WAIT
+unset WSL_INTEROP LOKA_TAB_COUNT LOKA_RUN_WAIT LOKA_LAUNCH_WAIT LOKA_KEY_RELEASE_HOLD
 RUNNER="$SANDBOX/repo/tests/toolbox/run-standalone.sh"
 APP="$SANDBOX/inputs/Runner.bin"
 WORK="$SANDBOX/repo/build/mame-standalone/Runner"
@@ -85,7 +85,9 @@ for mode in native wsl; do
   grep -Fxq "$WORK/LokaDev.hd" "$SANDBOX/argv" || fail 'private dev disk not used'
   grep -Fxq "$SANDBOX/repo/tests/toolbox/mame-launch.lua" "$SANDBOX/argv" || fail 'shared Lua not used'
   grep -Fxq "$SANDBOX/rom path" "$SANDBOX/argv" || fail 'ROM path split'
-  grep -Fq 'LOKA_STANDALONE:LOKA_LAUNCH_WAIT' "$SANDBOX/env" || fail 'WSL forwarding missing'
+  if grep -q LOKA_KEY_RELEASE_HOLD "$SANDBOX/env"; then fail 'unset release hold forwarded'; fi
+  if grep -q LOKA_LAUNCH_WAIT "$SANDBOX/env"; then fail 'unset launch wait forwarded'; fi
+  grep -Fq 'LOKA_STANDALONE' "$SANDBOX/env" || fail 'WSL forwarding missing'
   grep -Fq "$WORK/hfs-home|-r|:LOG.TXT|$WORK/LOG.TXT" "$SANDBOX/copies" || fail 'raw retrieval missing'
   grep -Fq "humount|$WORK/hfs-home|" "$SANDBOX/mounts" || fail 'retrieval not unmounted'
   grep -Fq "$WORK/hfs-ctl/hfsutils|-m|$APP|:" "$SANDBOX/copies" || fail 'app not staged as MacBinary'
@@ -105,10 +107,13 @@ for mode in native wsl; do
   LOKA_TAB_COUNT=2 run 0 "$APP" "$picture" --expect "$SANDBOX/expected.audit"
   grep -Fq "|-r|$picture|:Pictures:" "$SANDBOX/copies" || fail 'standalone picture folder missing'
   grep -Fq "hmkdir|$WORK/hfs-ctl/hfsutils|:Pictures" "$SANDBOX/mounts" || fail 'Pictures not created'
-  LOKA_TAB_COUNT=4 LOKA_RUN_WAIT=17 LOKA_LAUNCH_WAIT=12 run 0 "$APP"
+  LOKA_KEY_RELEASE_HOLD=0 LOKA_TAB_COUNT=4 LOKA_RUN_WAIT=17 LOKA_LAUNCH_WAIT=12 run 0 "$APP"
   [ "$(head -1 "$SANDBOX/env")" = 4 ] || fail 'Tab override ignored'
   grep -Fxq 17 "$SANDBOX/env" || fail 'run wait override ignored'
   grep -Fxq 12 "$SANDBOX/env" || fail 'boot wait override ignored'
+  grep -q LOKA_KEY_RELEASE_HOLD "$SANDBOX/env" || fail 'release hold not forwarded'
+  [ "$(tail -1 "$SANDBOX/env")" = 0 ] || fail 'release hold value lost'
+  grep -q LOKA_LAUNCH_WAIT "$SANDBOX/env" || fail 'launch wait not forwarded'
   echo "[pass] $mode launch, staging, retrieval, comparison and overrides"
 done
 [ -s "$SANDBOX/wslpaths" ] || fail 'WSL path branch not exercised'

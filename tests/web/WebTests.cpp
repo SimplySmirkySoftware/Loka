@@ -4,6 +4,8 @@
 #include "WebTestAccess.hpp"
 #include "FakeBoundary.hpp"
 #include "WebFixture.hpp"
+#include "ScrollFixture.hpp"
+#include "WebScrollContext.hpp"
 #include "support/TestVerify.hpp"
 #include "support/LifecycleFactTestAccess.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
@@ -45,6 +47,309 @@ namespace
     LOKA_VERIFY(webtest::resources.empty());
     LOKA_VERIFY(Access::routesEmpty(session));
     LOKA_VERIFY(Access::disposed(session));
+  }
+  struct ScrollReposter
+  {
+    loka::app::scene::Request<loka::app::ScrollTarget> &request;
+    int takes;
+    explicit ScrollReposter(loka::app::scene::Request<loka::app::ScrollTarget> &value)
+        : request(value),
+          takes(0)
+    {
+    }
+    static void changed(void *value)
+    {
+      ScrollReposter &self = *static_cast<ScrollReposter *>(value);
+      if (!self.request.get().isNone())
+        return;
+      ++self.takes;
+      if (self.takes <= 2)
+        self.request.set(loka::app::ScrollTarget::Origin(0, self.takes));
+    }
+  };
+  void CountScrollWrite(void *value)
+  {
+    ++*static_cast<int *>(value);
+  }
+  void ScrollTest()
+  {
+    using namespace loka::app;
+    webtest::Fixture fixture;
+    Reset(fixture);
+    webtest::scrollMode() = 0;
+    webtest::gutterVertical = 15;
+    webtest::gutterHorizontal = 12;
+    WebSession session;
+    LOKA_VERIFY(session.start(&webtest::CreateScroll, 0) == WebSession::STARTED);
+    if (std::getenv("LOKA_WEB_MUTATION_REVEAL"))
+    {
+      session.routes().find(webtest::token(ROOT))->root->requestSceneRelayout();
+      session.wake(IMMEDIATE, 0);
+    }
+    webtest::ScrollFixture &body = *webtest::scrollFixture();
+    const uint32_t token = webtest::token(SCROLL), root = webtest::token(ROOT);
+    LOKA_VERIFY(token != 0);
+    WebScrollContext *ctx = session.routes().find(token)->scroll();
+    LOKA_VERIFY(ctx != 0);
+
+    const webtest::Resource &row = webtest::resources[token];
+    LOKA_VERIFY(row.x == 10 && row.y == 10 && row.width == 200 && row.height == 100);
+    LOKA_VERIFY(row.documentWidth == 400 && row.extent > 100);
+    LOKA_VERIFY(body.viewport.get() == loka::core::Frame(0, 23, 185, 88));
+    LOKA_VERIFY(row.originY == 30);
+    for (std::map<uint32_t, webtest::Resource>::const_iterator i = webtest::resources.begin();
+         i != webtest::resources.end();
+         ++i)
+      if (i->second.kind == TEXT)
+        LOKA_VERIFY(i->second.parent == token);
+    if (std::getenv("LOKA_WEB_CAPTURE_SCROLL"))
+      for (unsigned i = 0; i < webtest::calls.size(); ++i)
+        std::printf("[scroll-golden] %s\n", webtest::calls[i].c_str());
+    else
+    {
+      const std::string source(__FILE__);
+      const std::string path = source.substr(0, source.find_last_of("/\\") + 1) + "scroll.golden";
+      FILE *file = std::fopen(path.c_str(), "rb");
+      LOKA_VERIFY(file != 0);
+      std::string expected, actual;
+      char buffer[256];
+      std::size_t n;
+      while ((n = std::fread(buffer, 1, sizeof(buffer), file)) != 0)
+        expected.append(buffer, n);
+      LOKA_VERIFY(std::fclose(file) == 0);
+      for (unsigned i = 0; i < webtest::calls.size(); ++i)
+        actual += webtest::calls[i] + "\n";
+      LOKA_VERIFY(actual == expected);
+    }
+    {
+      WebScrollContext refusedContext(*ctx->owner(), ctx->controller());
+      webtest::failCreate = 1;
+      LOKA_VERIFY(!refusedContext.materialize(SCROLL));
+    }
+    // Root reveal repairs a deliberately mismatched native origin without other pending work.
+    WebWindow *window = session.routes().find(root)->root;
+    {
+      loka::core::Operation turn;
+      window->visibilityState().set(false);
+    }
+    session.wake(IMMEDIATE, 0.1);
+    webtest::resources[token].originY = 80;
+    {
+      loka::core::Operation turn;
+      window->visibilityState().set(true);
+    }
+    session.wake(IMMEDIATE, 0.2);
+    LOKA_VERIFY(row.originY == body.viewport.get().y + 7);
+    // Deterministic native read-back differs from the target on both axes.
+    int publications = 0;
+    body.viewport.state()->bind(&CountScrollWrite, &publications, false);
+    webtest::appliedX = 11;
+    webtest::appliedY = 19;
+    {
+      loka::core::Operation turn;
+      LOKA_VERIFY(ctx->apply(loka::core::Frame(90, 90, 0, 0)));
+      LOKA_VERIFY(body.viewport.get().x == 11 && body.viewport.get().y == 12);
+    }
+    LOKA_VERIFY(publications == 1);
+    body.viewport.state()->unbind(&CountScrollWrite, &publications);
+    webtest::appliedX = webtest::appliedY = -1;
+    session.wake(IMMEDIATE, 1);
+    LOKA_VERIFY(session.scroll(token, 9999, 9999, 2) == WebSession::ACCEPTED);
+    LOKA_VERIFY(body.viewport.get().x == 215 && body.viewport.get().y == row.extent - 88 - 7);
+    {
+      loka::core::Operation turn;
+      body.request.set(ScrollTarget::Top());
+    }
+    session.wake(IMMEDIATE, 3);
+    LOKA_VERIFY(body.request.get().isNone());
+    LOKA_VERIFY(body.viewport.get().y == -7 && row.originY == 0);
+    {
+      loka::core::Operation turn;
+      ScrollReposter reposter(body.request);
+      body.request.state()->bind(&ScrollReposter::changed, &reposter, false);
+      body.request.set(ScrollTarget::Origin(0, 10));
+      loka::app::scene::LayoutState seat;
+      seat.x = 10;
+      seat.y = 10;
+      seat.width = 200;
+      seat.height = 100;
+      seat.spacing = 4;
+      Access::scrollVisit(*ctx, seat);
+      LOKA_VERIFY(reposter.takes == 2 && !body.request.get().isNone());
+      body.request.state()->unbind(&ScrollReposter::changed, &reposter);
+      Access::scrollVisit(*ctx, seat);
+      LOKA_VERIFY(body.request.get().isNone());
+    }
+    const loka::core::Frame before = body.viewport.get();
+    webtest::scrollStatus = BOXLESS;
+    {
+      loka::core::Operation turn;
+      LOKA_VERIFY(!ctx->apply(loka::core::Frame(1, 20, 0, 0)));
+    }
+    LOKA_VERIFY(body.viewport.get() == before);
+#ifdef NDEBUG
+    webtest::scrollStatus = PROTOCOL;
+    {
+      loka::core::Operation turn;
+      LOKA_VERIFY(!ctx->apply(loka::core::Frame(1, 20, 0, 0)));
+    }
+    LOKA_VERIFY(body.viewport.get() == before);
+#endif
+    webtest::scrollStatus = APPLIED;
+    {
+      loka::core::Operation turn;
+      body.width.set(0);
+    }
+    session.wake(IMMEDIATE, 4);
+    LOKA_VERIFY(row.documentWidth == 185 && body.viewport.get().height == 100);
+    // A failed traversal preserves the completed native metrics and drops the reached request.
+    const int oldExtent = row.extent;
+    webtest::failMeasure = -1;
+    {
+      loka::core::Operation turn;
+      body.text.set(loka::core::String::Literal("changed measurement"));
+      body.request.set(ScrollTarget::Origin(0, 90));
+    }
+    session.wake(IMMEDIATE, 5);
+    LOKA_VERIFY(body.request.get().isNone() && row.extent == oldExtent);
+    {
+      loka::core::Operation turn;
+      loka::app::scene::LayoutState changedSeat;
+      changedSeat.x = 30;
+      changedSeat.y = 40;
+      changedSeat.width = 170;
+      changedSeat.height = 80;
+      Access::scrollVisit(*ctx, changedSeat);
+      LOKA_VERIFY(ctx->apply(loka::core::Frame(0, 20, 0, 0)));
+      LOKA_VERIFY(row.x == 10 && row.y == 10 && row.width == 200 && row.height == 100);
+    }
+    webtest::failMeasure = 0;
+    session.wake(IMMEDIATE, 6);
+    // Resize measures before layout; a refused probe keeps the previous geometry.
+    webtest::gutterVertical = 9;
+    webtest::gutterHorizontal = 8;
+    LOKA_VERIFY(session.resize(root, 220, 120, 6.1) == WebSession::ACCEPTED);
+    LOKA_VERIFY(body.viewport.get().width == 191);
+    webtest::geometryMeasurable = false;
+    webtest::gutterVertical = 2;
+    LOKA_VERIFY(session.resize(root, 220, 120, 6.2) == WebSession::ACCEPTED);
+    LOKA_VERIFY(body.viewport.get().width == 191);
+    webtest::geometryMeasurable = true;
+    LOKA_VERIFY(session.resize(root, 220, 20, 6.3) == WebSession::ACCEPTED);
+    LOKA_VERIFY(body.viewport.get().height == 0 && row.extent > 0);
+    LOKA_VERIFY(session.scroll(root, 0, 0, 7) == WebSession::REFUSED_TOKEN);
+    {
+      loka::core::Operation turn;
+      Access::close(session, session.routes().find(root)->root);
+      LOKA_VERIFY(session.scroll(token, 0, 0, 8) == WebSession::REFUSED_CLOSED);
+    }
+    Shutdown(session);
+    for (int mode = 1; mode <= 2; ++mode)
+    {
+      Reset(fixture);
+      webtest::scrollMode() = mode;
+      WebSession refused;
+      LOKA_VERIFY(refused.start(&webtest::CreateScroll, 0) == WebSession::STARTED);
+      if (mode == 1)
+      {
+        LOKA_VERIFY(webtest::scrollFixture()->innerRequest.get().isNone());
+        LOKA_VERIFY(webtest::scrollFixture()->innerViewport.get() == loka::core::Frame());
+      }
+      else
+      {
+        LOKA_VERIFY(webtest::token(TEXT) == 0);
+        LOKA_VERIFY(webtest::scrollFixture()->viewport.get().width == 0);
+      }
+      Shutdown(refused);
+    }
+    Reset(fixture);
+    webtest::scrollMode() = 3;
+    webtest::failMeasure = -1;
+    {
+      WebSession refused;
+      LOKA_VERIFY(refused.start(&webtest::CreateScroll, 0) == WebSession::STARTED);
+      unsigned texts = 0;
+      for (std::map<uint32_t, webtest::Resource>::const_iterator i = webtest::resources.begin();
+           i != webtest::resources.end();
+           ++i)
+        if (i->second.kind == TEXT)
+          ++texts;
+      LOKA_VERIFY(texts == 1); // Poisoned channel prevents sibling materialization.
+      webtest::ScrollFixture &failedBody = *webtest::scrollFixture();
+      LOKA_VERIFY(failedBody.viewport.get() == loka::core::Frame(0, 23, 0, 0));
+      LOKA_VERIFY(failedBody.request.get().isNone());
+      LOKA_VERIFY(!failedBody.innerRequest.get().isNone());
+      WebScrollContext *unmeasured = refused.routes().find(webtest::token(SCROLL))->scroll();
+      {
+        loka::core::Operation turn;
+        LOKA_VERIFY(!unmeasured->apply(loka::core::Frame(0, 90, 0, 0)));
+      }
+      webtest::failMeasure = 0;
+      refused.wake(IMMEDIATE, 1);
+      LOKA_VERIFY(failedBody.innerRequest.get().isNone());
+      LOKA_VERIFY(failedBody.viewport.get().width > 0);
+      Shutdown(refused);
+    }
+    Reset(fixture);
+    fixture.roots = 2;
+    webtest::scrollMode() = 0;
+    {
+      WebSession multiple;
+      LOKA_VERIFY(multiple.start(&webtest::CreateScroll, 0) == WebSession::STARTED);
+      webtest::gutterVertical = 7;
+      LOKA_VERIFY(multiple.resize(webtest::token(ROOT), 220, 120, 1) == WebSession::ACCEPTED);
+      unsigned scrollers = 0;
+      for (std::map<uint32_t, webtest::Resource>::const_iterator i = webtest::resources.begin();
+           i != webtest::resources.end();
+           ++i)
+        if (i->second.kind == SCROLL)
+        {
+          ++scrollers;
+          LOKA_VERIFY(multiple.routes()
+                          .find(i->first)
+                          ->scroll()
+                          ->owner()
+                          ->asScrollViewNode()
+                          ->props.viewport_.state()
+                          ->get()
+                          .width
+                      == 193);
+        }
+      LOKA_VERIFY(scrollers == 2);
+      {
+        loka::core::Operation turn;
+        const uint32_t closing = webtest::token(SCROLL);
+        const uint32_t parent = webtest::resources[closing].parent;
+        Access::close(multiple, multiple.routes().find(parent)->root);
+        LOKA_VERIFY(multiple.scroll(closing, 0, 0, 2) == WebSession::REFUSED_TOKEN);
+      }
+      Shutdown(multiple);
+    }
+    for (int parentFirst = 0; parentFirst <= 1; ++parentFirst)
+    {
+      Reset(fixture);
+      WebSession resources;
+      WebElement rootElement, scroller, child;
+      int width = 100, height = 100;
+      LOKA_VERIFY(rootElement.create(resources.routes(), resources.tokens(), ROOT, 0, width, height));
+      LOKA_VERIFY(scroller.create(resources.routes(), resources.tokens(), SCROLL, rootElement.token(), width, height));
+      LOKA_VERIFY(child.create(resources.routes(), resources.tokens(), TEXT, scroller.token(), width, height));
+      WebResource *childRow = child.revoke(resources.routes());
+      WebResource *parentRow = scroller.revoke(resources.routes());
+      LOKA_VERIFY(web_release(parentFirst ? parentRow->token : childRow->token) == CONSUMED);
+      LOKA_VERIFY(web_release(parentFirst ? childRow->token : parentRow->token) == CONSUMED);
+      delete childRow;
+      delete parentRow;
+      WebResource *rootRow = rootElement.revoke(resources.routes());
+      LOKA_VERIFY(web_release(rootRow->token) == CONSUMED);
+      delete rootRow;
+      LOKA_VERIFY(webtest::resources.empty());
+    }
+    Reset(fixture);
+    webtest::geometryMeasurable = false;
+    WebSession failed;
+    LOKA_VERIFY(failed.start(&webtest::CreateScroll, 0) == WebSession::FAILED);
+    Shutdown(failed);
   }
   void CounterTest()
   {
@@ -270,7 +575,7 @@ namespace
       for (unsigned i = 0; scene.hasPendingInvalidation() && i < 12; ++i)
         LOKA_VERIFY(scene.flushInvalidation());
       LOKA_VERIFY(!scene.hasPendingInvalidation());
-      LOKA_VERIFY(boundary->request.get().isNone());
+      LOKA_VERIFY(!boundary->request.get().isNone());
       LOKA_VERIFY(boundary->viewport.get() == loka::core::Frame(1, 2, 80, 30));
       LOKA_VERIFY(webtest::resources.size() == 1);
       loka::dsl::testing::SceneTestAccess::unmount(scene);
@@ -770,6 +1075,11 @@ void WebTextProjectionTests();
 void WebTextProtocolDeath();
 int main(int argc, char **argv)
 {
+  if (argc == 2 && std::strcmp(argv[1], "scroll-only") == 0)
+  {
+    ScrollTest();
+    return 0;
+  }
   if (argc == 2 && std::strcmp(argv[1], "text-protocol-death") == 0)
   {
     WebTextProtocolDeath();
@@ -789,6 +1099,7 @@ int main(int argc, char **argv)
   } while (0)
   RUN(WebTextProjectionTests);
   RUN(CounterTest);
+  RUN(ScrollTest);
   RUN(ParkTest);
   RUN(RetirementTest);
   RUN(SeatsTest);
@@ -809,6 +1120,6 @@ int main(int argc, char **argv)
   RUN(RootVisibilityTest);
   RUN(TwoRootTest);
 #undef RUN
-  std::puts("26 Web test groups passed (20 legacy, 6 projection)");
+  std::puts("27 Web test groups passed (20 legacy, 6 projection, 1 scroll)");
   return 0;
 }

@@ -2,6 +2,16 @@
 #define LOKA_WEB_PLATFORM_CONTEXT_HPP
 #include "app/PlatformContext.hpp"
 #include "app/core/App.hpp"
+namespace loka
+{
+  namespace web
+  {
+    namespace testing
+    {
+      struct Access;
+    }
+  } // namespace web
+} // namespace loka
 class WebSession;
 /** Web-local bootstrap adapter. Cost: once per requested owner, no row scans. */
 class WebPlatformContext : public PlatformContext
@@ -25,6 +35,7 @@ public:
   }
 
 private:
+  friend struct loka::web::testing::Access;
   WebSession &session_;
 };
 /** App rails keep the protected admission doors behind their concrete App.

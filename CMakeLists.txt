@@ -22,6 +22,7 @@ option(LOKA_TOOLBOX_MULTIVERSAL_INTERFACES
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/LokaWarnings.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/LokaStandalonePerformance.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/LokaWebApp.cmake)
 
 macro(loka_suppress_arclite_link)
   if(LOKA_MACOS_SUPPRESS_ARCLITE_LINK)
@@ -168,6 +169,7 @@ endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   add_subdirectory(web)
+  add_subdirectory(example/HelloWorld)
   loka_verify_warning_floor()
   return()
 endif()
@@ -715,6 +717,10 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   foreach(_suppression normal empty partial refused)
     add_test(NAME testToolboxViewportSuppression_${_suppression}
       COMMAND LokaToolboxAttributedTextTests suppression-${_suppression})
+  endforeach()
+  foreach(_span_case span-characterization span-refusals span-links span-cache span-geometry
+      span-compensation span-inline-growth span-heap-growth span-underfill span-char-growth span-char-shrink)
+    add_test(NAME testToolbox_${_span_case} COMMAND LokaToolboxAttributedTextTests ${_span_case})
   endforeach()
   add_test(NAME testToolboxCharWidth COMMAND LokaToolboxAttributedTextTests char-width)
   add_test(NAME testToolboxToolbarPaint COMMAND LokaToolboxAttributedTextTests toolbar)

@@ -1,5 +1,7 @@
+#include "WebAppEntry.hpp"
 #include "WebSession.hpp"
 #include "WebFixture.hpp"
+#include "ScrollFixture.hpp"
 #include "WebTestHooks.hpp"
 #include "WebTestAccess.hpp"
 #include "WebWindow.hpp"
@@ -8,7 +10,18 @@
 namespace webtest
 {
   Fixture *fixture = 0;
-}
+  struct Staged
+  {
+    int roots;
+    bool destroy;
+    Staged()
+        : roots(1),
+          destroy(false)
+    {
+    }
+  };
+  Staged staged;
+} // namespace webtest
 namespace
 {
   webtest::Fixture vehicle;
@@ -18,6 +31,16 @@ namespace loka
 {
   namespace web
   {
+    AppConfigurable *CreateAppConfig(PlatformContext *platform)
+    {
+      webtest::fixture = &vehicle;
+      vehicle.roots = webtest::staged.roots;
+      vehicle.destroy = webtest::staged.destroy;
+      session = &testing::Access::session(static_cast<WebPlatformContext &>(*platform));
+      if (webtest::staged.roots < 0)
+        vehicle.roots = -webtest::staged.roots;
+      return webtest::staged.roots < 0 ? webtest::CreateScroll(platform) : webtest::CreateCounter(platform);
+    }
     namespace testing
     {
       void beforeClick(WebElementContext &) {}
@@ -34,8 +57,49 @@ namespace loka
     } // namespace testing
   } // namespace web
 } // namespace loka
+extern "C" int web_wake(int kind, double now);
 extern "C"
 {
+  EMSCRIPTEN_KEEPALIVE int fixture_scroll_close(uint32_t root, uint32_t token)
+  {
+    loka::core::Operation turn;
+    WebResource *row = session->routes().find(root);
+    if (!row || !row->root)
+      return -1;
+    loka::web::testing::Access::close(*session, row->root);
+    return session->scroll(token, 0, 0, emscripten_get_now());
+  }
+  EMSCRIPTEN_KEEPALIVE int fixture_scroll_fact(int field)
+  {
+    if (!webtest::scrollFixture())
+      return -999;
+    const loka::core::Frame value = webtest::scrollFixture()->viewport.get();
+    return field == 0 ? value.x : field == 1 ? value.y : field == 2 ? value.width : value.height;
+  }
+  EMSCRIPTEN_KEEPALIVE void fixture_scroll_command(int command, int value, uint32_t root)
+  {
+    if (!session || !webtest::scrollFixture())
+      return;
+    {
+      loka::core::Operation turn;
+      webtest::ScrollFixture &body = *webtest::scrollFixture();
+      if (command == 0)
+        body.request.set(loka::app::ScrollTarget::Top());
+      if (command == 1)
+        body.width.set(value);
+      if (command == 2)
+        body.shown.set(value != 0);
+      if (command == 3)
+      {
+        WebResource *row = session->routes().find(root);
+        if (row && row->root)
+          row->root->visibilityState().set(value != 0);
+      }
+      if (command == 4)
+        body.text.set(loka::core::String::FromInt(value));
+    }
+    web_wake(loka::web::IMMEDIATE, emscripten_get_now());
+  }
   /** Fixture-only projection exercise. Cost: driver once per cell, its own temporary rows. */
   EMSCRIPTEN_KEEPALIVE int fixture_text_probe(int kind, int width, uint32_t token)
   {
@@ -64,40 +128,19 @@ extern "C"
     web_set_rect(token, 0, 0, width, snapshot->extent().height);
     return snapshot->extent().height;
   }
-  EMSCRIPTEN_KEEPALIVE int web_start(int config)
+  EMSCRIPTEN_KEEPALIVE void fixture_configure(int roots, int destroy)
   {
-    if (!session)
-      return WebSession::FAILED;
-    vehicle.roots = config == 2 ? 2 : config == 0 ? 0 : 1;
-    vehicle.destroy = config == 3;
-    return session->start(&webtest::CreateCounter, emscripten_get_now());
+    webtest::staged.roots = roots;
+    webtest::staged.destroy = destroy != 0;
   }
-  EMSCRIPTEN_KEEPALIVE int web_click(uint32_t token)
+  EMSCRIPTEN_KEEPALIVE int fixture_configured()
   {
-    return session->click(token, emscripten_get_now());
-  }
-  EMSCRIPTEN_KEEPALIVE int web_resize(uint32_t token, int width, int height)
-  {
-    return session->resize(token, width, height, emscripten_get_now());
-  }
-  EMSCRIPTEN_KEEPALIVE int web_wake(int kind, double now)
-  {
-    if (kind < 0 || kind >= loka::web::WAKE_COUNT)
-      return WebSession::REFUSED_CLOSED;
-    return session->wake(static_cast<loka::web::Wake>(kind), now);
-  }
-  EMSCRIPTEN_KEEPALIVE void web_quit()
-  {
-    session->requestQuit(emscripten_get_now());
-  }
-  EMSCRIPTEN_KEEPALIVE void web_dispose()
-  {
-    session->dispose();
+    return vehicle.roots * 10 + vehicle.destroy;
   }
   /** Fixture-only control; not a Web rail export. Own Boundary state through a turn. */
   EMSCRIPTEN_KEEPALIVE void fixture_command(int command, int value)
   {
-    if (vehicle.nodes.empty())
+    if (!session || vehicle.nodes.empty())
       return;
     {
       loka::core::Operation turn;
@@ -112,12 +155,6 @@ extern "C"
           loka::web::testing::Access::close(*session, row->root);
       }
     }
-    session->wake(loka::web::IMMEDIATE, emscripten_get_now());
+    web_wake(loka::web::IMMEDIATE, emscripten_get_now());
   }
-}
-int main()
-{
-  webtest::fixture = &vehicle;
-  session = new WebSession(emscripten_get_now());
-  return 0;
 }

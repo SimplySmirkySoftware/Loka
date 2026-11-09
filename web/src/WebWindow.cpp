@@ -78,8 +78,8 @@ bool WebWindow::hasPendingNativeVisibility() const
 }
 void WebWindow::applyNativeVisibility()
 {
-  if (this->hasPendingNativeVisibility())
-    this->root_.park(!this->visibility_->get());
+  if (this->hasPendingNativeVisibility() && this->root_.park(!this->visibility_->get()) && this->rootShown())
+    this->requestSceneRelayout();
 }
 void WebWindow::handleNativeSize(int width, int height)
 {
@@ -99,4 +99,10 @@ void WebWindow::drainNativeRetirements()
 {
   if (this->controller_)
     this->controller_->drainNativeRetirements();
+}
+
+void WebWindow::requestSceneRelayout()
+{
+  if (this->scene())
+    this->scene()->requestLayoutAfterRun();
 }

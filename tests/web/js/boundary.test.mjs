@@ -88,3 +88,60 @@ assert.equal(imports.web_text_admit(fingerprint^1,expected.count),false);
 assert.equal(context.WebDOM.text,null);
 assert.deepEqual(logs,['[web-text] refused: wire']);
 console.log('boundary JS: admission, projection refusal, completion release passed (mock DOM; not browser evidence)');
+// Deterministic DOM seam: native read-back differs from the requested origin.
+const scrollStyle={},contentStyle={};
+let sx=0,sy=0,box=true,writes=0;
+const scrollElement={style:scrollStyle,getClientRects:()=>box?[{}]:[],
+  get scrollLeft(){return sx},set scrollLeft(value){++writes;sx=Math.min(value,9.8)},
+  get scrollTop(){return sy},set scrollTop(value){++writes;sy=Math.min(value,19.8)}};
+context.WebDOM.resources.set(3,{kind:3,element:scrollElement,content:{style:contentStyle}});
+assert.equal(imports.web_commit_scroll(3,5,6,100,80,1,200,300,12,22,100,104),0);
+assert.equal(context.HEAP32[25],10);assert.equal(context.HEAP32[26],20);
+assert.equal(scrollStyle.left,'5px');assert.equal(contentStyle.height,'300px');
+const oldWrites=writes;
+assert.equal(imports.web_commit_scroll(3,5,6,100,80,1,200,300,10,20,100,104),0);
+assert.equal(writes,oldWrites,'rounded read-back converges without another native assignment');
+box=false;
+const styles=JSON.stringify([scrollStyle,contentStyle]);
+context.HEAP32[25]=123;context.HEAP32[26]=456;
+assert.equal(imports.web_commit_scroll(3,0,0,0,0,0,0,0,0,0,100,104),1);
+assert.equal(JSON.stringify([scrollStyle,contentStyle]),styles);
+assert.equal(context.HEAP32[25],123);assert.equal(context.HEAP32[26],456);
+assert.equal(imports.web_commit_scroll(999,0,0,0,0,0,0,0,0,0,100,104),2);
+box=true;sy=NaN;
+assert.equal(imports.web_commit_scroll(3,0,0,0,0,0,0,0,0,NaN,100,104),2);
+assert.equal(context.HEAP32[25],123);assert.equal(context.HEAP32[26],456);
+// Exercise the actual creation listener, not a reimplementation of its sampling.
+const elements=[]; const events=[];
+context.document.createElement=()=>{
+  const e={style:{setProperty(){}},dataset:{},children:[],scrollLeft:0,scrollTop:0,
+    appendChild(child){this.children.push(child);child.parent=this},
+    addEventListener(name,listener,options){this.listener=listener;this.event=name;assert.equal(options.passive,true)},
+    removeEventListener(){this.listener=null},remove(){this.removed=true}};
+  elements.push(e);return e;
+};
+context.Module._web_scroll=(...args)=>events.push(args);
+const parent={appendChild(){}};
+context.WebDOM.resources.set(4,{kind:0,element:parent});
+assert.equal(imports.web_create(3,5,4,100,104),1);
+const scroller=context.WebDOM.resources.get(5);
+assert.equal(context.WebDOM.parent(5),scroller.content);
+scroller.element.scrollLeft=2.6;scroller.element.scrollTop=7.2;scroller.listener();
+scroller.element.scrollTop=31.7;scroller.listener();
+assert.deepEqual(events,[[5,3,7],[5,3,32]],'listener samples current offsets for every delivery');
+assert(scroller.content.style.cssText.includes('overflow:clip'));
+imports.web_release(5);assert.equal(scroller.element.listener,null);assert.equal(scroller.element.removed,true);
+console.log('scroll adapter: applied read-back, BOXLESS no-write, protocol out preservation, live sampling passed');
+for(const parentFirst of [true,false]) {
+  context.WebDOM.resources.set(40,{kind:0,element:{appendChild(){}}});
+  assert.equal(imports.web_create(3,41,40,100,104),1);
+  assert.equal(imports.web_create(1,42,41,100,104),1);
+  const scrollRow=context.WebDOM.resources.get(41),child=context.WebDOM.resources.get(42);
+  const order=parentFirst?[41,42]:[42,41];
+  assert.equal(imports.web_release(order[0]),0);
+  assert(context.WebDOM.resources.has(order[1]),'other token retains its independent obligation');
+  assert.equal(imports.web_release(order[1]),0);
+  assert(scrollRow.element.removed && child.element.removed);
+  context.WebDOM.resources.delete(40);
+}
+console.log('scroll adapter: parent-first and child-first release passed');
