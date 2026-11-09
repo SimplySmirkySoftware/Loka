@@ -5,6 +5,7 @@ addToLibrary({
     text: null,
     resources: new Map(), tasks: new Map(), next: 1,
     row(token) { return WebDOM.resources.get(token >>> 0); },
+    parent(token) { const row = WebDOM.row(token); return row && (row.kind === 3 ? row.content : row.element); },
     /** Cost: bootstrap once per root, reads only its computed content-box dimensions.
      * Unlike getBoundingClientRect, this is unaffected by transforms. */
     contentBox(element) {
@@ -60,9 +61,18 @@ addToLibrary({
         });
         row.observer.observe(element);
       } else {
-        const root = WebDOM.row(parent);
+        const root = WebDOM.parent(parent);
         if (!root) throw new Error('missing root');
-        root.element.appendChild(element);
+        root.appendChild(element);
+        if (kind === 3) {
+          const physical = 'box-sizing:border-box;margin:0;padding:0;border:0;min-width:0;min-height:0;direction:ltr;writing-mode:horizontal-tb;';
+          element.style.cssText = physical + 'position:absolute;overflow-y:scroll;overflow-x:hidden;';
+          row.content = document.createElement('div');
+          row.content.style.cssText = physical + 'position:relative;overflow:clip;';
+          element.appendChild(row.content);
+          row.listener = () => Module['_web_scroll'](token, Math.round(element.scrollLeft), Math.round(element.scrollTop));
+          element.addEventListener('scroll', row.listener, {passive:true});
+        }
         if (kind === 2) {
           element.type = 'button';
           const g=LokaWebStyle.webButtonGeometry;
@@ -79,10 +89,40 @@ addToLibrary({
       return 1;
     } catch (_) {
       if (row && row.observer) row.observer.disconnect();
-      if (row && row.listener) element.removeEventListener('click', row.listener);
+      if (row && row.listener) element.removeEventListener(row.kind === 3 ? 'scroll' : 'click', row.listener);
+      if (row && row.content) row.content.remove();
       if (element) element.remove();
       return 0;
     }
+  },
+  web_commit_scroll__deps:['$WebDOM'],
+  web_commit_scroll(token,x,y,w,h,horizontal,documentWidth,extent,originX,originY,appliedX,appliedY) {
+    const row=WebDOM.row(token);
+    if(!row || row.kind!==3) return 2;
+    const element=row.element;
+    // getClientRects is empty for display:none, including an ancestor's display:none;
+    // a zero-sized but laid-out box still has a rect and is eligible.
+    if(!element.getClientRects().length) return 1;
+    Object.assign(element.style,{left:x+'px',top:y+'px',width:w+'px',height:h+'px'});
+    element.style.overflowX=horizontal ? 'scroll' : 'hidden';
+    Object.assign(row.content.style,{width:documentWidth+'px',height:extent+'px'});
+    if(Math.round(element.scrollLeft)!==originX) element.scrollLeft=originX;
+    if(Math.round(element.scrollTop)!==originY) element.scrollTop=originY;
+    const ax=Math.round(element.scrollLeft), ay=Math.round(element.scrollTop);
+    if(!Number.isFinite(ax) || !Number.isFinite(ay)) return 2;
+    HEAP32[appliedX>>2]=ax; HEAP32[appliedY>>2]=ay;
+    return 0;
+  },
+  web_scrollbar_geometry(vertical,horizontal) {
+    const probe=document.createElement('div');
+    probe.style.cssText='position:fixed;left:0;top:0;width:100px;height:100px;overflow:scroll;visibility:hidden;pointer-events:none;margin:0;padding:0;border:0;direction:ltr;writing-mode:horizontal-tb;';
+    try {
+      document.body.appendChild(probe);
+      if(!probe.getClientRects().length || probe.offsetWidth!==100 || probe.offsetHeight!==100) return 0;
+      const v=probe.offsetWidth-probe.clientWidth, h=probe.offsetHeight-probe.clientHeight;
+      HEAP32[vertical>>2]=v; HEAP32[horizontal>>2]=h;
+      return 1;
+    } finally { probe.remove(); }
   },
   web_set_rect__deps:['$WebDOM'],
   web_set_rect(token,x,y,w,h) {
@@ -170,7 +210,7 @@ addToLibrary({
   web_revoke__deps:['$WebDOM'],
   web_revoke(token) {
     const row=WebDOM.row(token); if(!row) return;
-    if(row.listener) row.element.removeEventListener('click',row.listener);
+    if(row.listener) row.element.removeEventListener(row.kind === 3 ? 'scroll' : 'click',row.listener);
     if(row.observer) row.observer.disconnect();
     row.listener=row.observer=null;
   },
@@ -178,7 +218,7 @@ addToLibrary({
   web_release(token) {
     token >>>=0; if(!token) return 2;
     const row=WebDOM.row(token); if(!row) return 1;
-    if(row.listener) row.element.removeEventListener('click',row.listener);
+    if(row.listener) row.element.removeEventListener(row.kind === 3 ? 'scroll' : 'click',row.listener);
     if(row.observer) row.observer.disconnect();
     row.element.remove(); WebDOM.resources.delete(token); return 0;
   },

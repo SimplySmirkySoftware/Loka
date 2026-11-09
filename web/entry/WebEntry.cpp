@@ -17,6 +17,10 @@ extern "C"
   {
     return session->click(token, emscripten_get_now());
   }
+  EMSCRIPTEN_KEEPALIVE int web_scroll(uint32_t token, int x, int y)
+  {
+    return session->scroll(token, x, y, emscripten_get_now());
+  }
   EMSCRIPTEN_KEEPALIVE int web_resize(uint32_t token, int width, int height)
   {
     return session->resize(token, width, height, emscripten_get_now());

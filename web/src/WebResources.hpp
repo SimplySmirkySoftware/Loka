@@ -4,6 +4,8 @@
 
 class WebWindow;
 class WebElementContext;
+class WebResourceContext;
+class WebScrollContext;
 class WebScenePlatformController;
 namespace loka
 {
@@ -44,7 +46,7 @@ struct WebResource
   WebResource(loka::web::Token value, loka::web::Kind type)
       : token(value),
         kind(type),
-        leaf(0),
+        receiver(0),
         root(0),
         next(0),
         left(0),
@@ -53,7 +55,11 @@ struct WebResource
   }
   const loka::web::Token token;
   const loka::web::Kind kind;
-  WebElementContext *leaf;
+  WebResourceContext *receiver;
+  /** Cost: receiver admission/dispatch once each; checked kind conversion, O(1). */
+  WebElementContext *leaf() const;
+  /** Cost: scroll admission/dispatch once each; checked kind conversion, O(1). */
+  WebScrollContext *scroll() const;
   WebWindow *root;
   WebResource *next;
   WebResource *left;
@@ -82,7 +88,22 @@ public:
   /** Cost: revoke/rollback once; at most two 33-step own-index paths, no allocation. */
   WebResource *extract(loka::web::Token token);
 
+  /** Cost: gutter change once; visits this index's live rows without mutation. */
+  template <class Visitor> void forEachRoot(Visitor &visitor) const
+  {
+    visitRoots(this->live_, visitor);
+  }
+
 private:
+  template <class Visitor> static void visitRoots(WebResource *row, Visitor &visitor)
+  {
+    if (!row)
+      return;
+    if (row->root)
+      visitor(*row->root);
+    visitRoots(row->left, visitor);
+    visitRoots(row->right, visitor);
+  }
   friend struct loka::web::testing::Access;
   WebResource *live_;
   WebInputRoutes(const WebInputRoutes &);

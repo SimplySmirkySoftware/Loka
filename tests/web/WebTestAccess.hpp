@@ -18,14 +18,18 @@ namespace loka
           return platform.session_;
         }
 #ifdef TEST_BUILD
+        static int scrollVisit(WebResourceContext &context, const loka::app::scene::LayoutState &seat)
+        {
+          return context.controller().layoutNode(context.owner(), seat);
+        }
         /** Deliberately slow alternative used only by mutation 4. */
         static bool scanNode(loka::app::scene::Node *node, Token token)
         {
           if (!node)
             return false;
           routeProbe();
-          if ((node->asTextNode() || node->asButtonNode()) && node->getContext()
-              && static_cast<WebElementContext *>(node->getContext())->element_.token() == token)
+          if ((node->asTextNode() || node->asButtonNode() || node->asScrollViewNode()) && node->getContext()
+              && static_cast<WebResourceContext *>(node->getContext())->element_.token() == token)
             return true;
           loka::app::scene::INestable *nestable = node->asNestable();
           if (nestable)
