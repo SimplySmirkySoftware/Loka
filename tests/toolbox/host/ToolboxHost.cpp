@@ -301,6 +301,13 @@ void MeasureText(short count, const void *bytes, void *charLocs)
   toolbox_host::measurePayloads.push_back(std::string(static_cast<const char *>(bytes), count));
   ++toolbox_host::measures;
   short *positions = static_cast<short *>(charLocs);
+  if (toolbox_host::positionMode == 7)
+  {
+    // Cumulative fractional advance rounds independently in every native batch.
+    for (short i = 0; i <= count; ++i)
+      positions[i] = static_cast<short>(i * 9 / 2);
+    return;
+  }
   if (toolbox_host::positionMode == 5)
     return; // No positions written, including the origin.
   if (toolbox_host::positionMode == 6)

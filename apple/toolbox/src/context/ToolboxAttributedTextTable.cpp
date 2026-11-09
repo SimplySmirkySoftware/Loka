@@ -1,5 +1,6 @@
 #include "ToolboxPaintGround.hpp"
 #include "app/layout/AlignedLineOffset.hpp"
+#include "app/layout/TextSpanBreaks.hpp"
 #include "context/ToolboxAttributedTextTable.hpp"
 #include "platform/StringUTF8.hpp"
 #include "platform/ToolboxPascalText.hpp"
@@ -109,7 +110,7 @@ bool ToolboxAttributedTextTable::matches(const AttributedString &value) const
     const AttributedString::Segment &b = value.segment(s);
     if (&a == &b)
       return true; // Shared immutable storage owns every segment.
-    if (a.style != b.style || !a.text.equals(b.text))
+    if (a.style != b.style || !a.text.equals(b.text) || a.link != b.link)
       return false;
   }
   return true;
@@ -125,9 +126,9 @@ bool ToolboxAttributedTextTable::reconcileProjection(const AttributedString &val
   const bool roman = GetScriptManagerVariable(smSysScript) == smRoman;
   std::size_t count = 0, spanCount = 0;
   // Sizing and filling below use the same segment-local traversal and
-  // nonempty/equal-style coalescing rule (the synthetic rail keeps its own
+  // nonempty span predicate (the synthetic rail keeps its own
   // decoder in SyntheticTextWidthSource). Neither pass joins input segments.
-  const loka::app::TextStyle *previous = 0;
+  const AttributedString::Segment *previous = 0;
   for (std::size_t s = 0; s < value.segmentCount(); ++s)
   {
     const AttributedString::Segment &segment = value.segment(s);
@@ -136,9 +137,9 @@ bool ToolboxAttributedTextTable::reconcileProjection(const AttributedString &val
       return false;
     if (utf8.empty())
       continue;
-    if (!previous || *previous != segment.style)
+    if (TextSpanBreaks(previous, segment))
       ++spanCount;
-    previous = &segment.style;
+    previous = &segment;
     for (std::size_t input = 0; input < utf8.size(); ++count)
     {
       if (count == (std::numeric_limits<std::size_t>::max)() - 1)
@@ -151,7 +152,7 @@ bool ToolboxAttributedTextTable::reconcileProjection(const AttributedString &val
   if (!this->bytes_.allocate(count) || !this->characters_.allocate(count)
       || !this->spans_.allocate(spanCount) || !this->fonts_.allocate(spanCount))
     return false;
-  std::size_t character = 0, offset = 0, span = 0;
+  std::size_t character = 0, offset = 0, filledSpans = 0;
   previous = 0;
   for (std::size_t s = 0; s < value.segmentCount(); ++s)
   {
@@ -161,20 +162,25 @@ bool ToolboxAttributedTextTable::reconcileProjection(const AttributedString &val
       return false;
     if (utf8.empty())
       continue;
-    if (!previous || *previous != segment.style)
+    const bool starts = TextSpanBreaks(previous, segment);
+    const std::size_t span = starts ? filledSpans : filledSpans - 1;
+    // Fonts share the descriptor count; this also covers continuation end.
+    if (span >= this->spans_.size())
+      return false;
+    if (starts)
     {
-      if (previous)
-        ++span;
       TextStyleSpan &descriptor = this->spans_[span];
       descriptor.segment = s;
       descriptor.start = character;
       descriptor.style = segment.style;
       this->fonts_[span] = ToolboxTextFontDescriptor(segment.style);
+      ++filledSpans;
     }
-    previous = &segment.style;
     for (std::size_t input = 0; input < utf8.size();)
     {
       const ToolboxTextUnit unit = ToolboxNextTextUnit(utf8.data() + input, utf8.size() - input, roman);
+      if (character >= this->characters_.size())
+        return false;
       TextBreakCharacter &row = this->characters_[character++];
       row.value = static_cast<unsigned int>(unit.scalar);
       row.span = span;
@@ -184,7 +190,10 @@ bool ToolboxAttributedTextTable::reconcileProjection(const AttributedString &val
       input += unit.consumed;
     }
     this->spans_[span].end = character;
+    previous = &segment;
   }
+  if (character != this->characters_.size() || filledSpans != this->spans_.size())
+    return false;
   this->snapshot_ = value;
   return true;
 }
