@@ -95,7 +95,12 @@ private:
     {
     }
   };
-  enum Ellipsis { ELLIPSIS_NONE, ELLIPSIS_DRAWN, ELLIPSIS_LINE_OMITTED };
+  enum Ellipsis
+  {
+    ELLIPSIS_NONE,
+    ELLIPSIS_DRAWN,
+    ELLIPSIS_LINE_OMITTED
+  };
   /** Completed seat-relative fitting result, consumed only after success. */
   struct FittedLine
   {

@@ -314,8 +314,8 @@ bool ToolboxAttributedTextTable::fitLine(const TextLineRecord &line,
 {
   const WidthSource source(*this, measure);
   const bool ellipsis = (!block.hasWrap_ || block.wrap_ == TEXT_WRAP_NONE) && block.hasTruncation_
-                        && block.truncation_ == TEXT_TRUNCATION_ELLIPSIS && seatWidth > 0
-                        && line.width > seatWidth && line.fragmentCount > 0;
+                        && block.truncation_ == TEXT_TRUNCATION_ELLIPSIS && seatWidth > 0 && line.width > seatWidth
+                        && line.fragmentCount > 0;
   const std::size_t lastSpan =
       line.fragmentCount ? this->lines_->fragment(line.firstFragment + line.fragmentCount - 1).span : 0;
   int budget = seatWidth;
@@ -333,8 +333,8 @@ bool ToolboxAttributedTextTable::fitLine(const TextLineRecord &line,
   // Twin: ToolboxTextContext.cpp PlainDisplay emits nothing when even dots
   // exceed a positive width. Keep this line's advance even when it is empty.
   const bool omitLine = ellipsis && dotsWidth > seatWidth;
-  std::size_t paintedEnd = line.fragmentCount
-      ? this->lines_->fragment(line.firstFragment + line.fragmentCount - 1).end : 0;
+  std::size_t paintedEnd =
+      line.fragmentCount ? this->lines_->fragment(line.firstFragment + line.fragmentCount - 1).end : 0;
   int paintedWidth = omitLine ? 0 : line.width;
   if (ellipsis && !omitLine)
   {
@@ -377,8 +377,7 @@ bool ToolboxAttributedTextTable::fitLine(const TextLineRecord &line,
   }
   // Twin: ToolboxTextContext's plain Text painter aligns its own painted
   // lines. Both use AlignedLineOffset; this path reuses table prefix widths.
-  const int offset = AlignedLineOffset(seatWidth, paintedWidth,
-      block.hasAlign_ ? block.align_ : TEXT_ALIGN_LEFT);
+  const int offset = AlignedLineOffset(seatWidth, paintedWidth, block.hasAlign_ ? block.align_ : TEXT_ALIGN_LEFT);
   out.paintedEnd = paintedEnd;
   out.offset = offset;
   out.paintedWidth = paintedWidth;

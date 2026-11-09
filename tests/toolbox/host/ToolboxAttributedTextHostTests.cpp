@@ -583,16 +583,47 @@ namespace
 
 int main(int argc, char **argv)
 {
-  if (argc == 2 && std::string(argv[1]) == "span-links") { SpanLinks(); return 0; }
-  if (argc == 2 && std::string(argv[1]) == "span-cache") { SpanCache(); return 0; }
-  if (argc == 2 && std::string(argv[1]) == "span-geometry") { SpanGeometry(); return 0; }
-  if (argc == 2 && std::string(argv[1]) == "span-compensation") { SpanCompensation(); return 0; }
-  if (argc == 2 && (std::string(argv[1]) == "span-inline-growth" || std::string(argv[1]) == "span-heap-growth"
-      || std::string(argv[1]) == "span-underfill" || std::string(argv[1]) == "span-char-growth"
-      || std::string(argv[1]) == "span-char-shrink")) { SpanWall(argv[1]); return 0; }
-  if (argc == 2 && std::string(argv[1]) == "span-characterization") { SpanCharacterization(); SpanUnlinkedProjection(); SpanClipCharacterization(); return 0; }
+  if (argc == 2 && std::string(argv[1]) == "span-links")
+  {
+    SpanLinks();
+    return 0;
+  }
+  if (argc == 2 && std::string(argv[1]) == "span-cache")
+  {
+    SpanCache();
+    return 0;
+  }
+  if (argc == 2 && std::string(argv[1]) == "span-geometry")
+  {
+    SpanGeometry();
+    return 0;
+  }
+  if (argc == 2 && std::string(argv[1]) == "span-compensation")
+  {
+    SpanCompensation();
+    return 0;
+  }
+  if (argc == 2
+      && (std::string(argv[1]) == "span-inline-growth" || std::string(argv[1]) == "span-heap-growth"
+          || std::string(argv[1]) == "span-underfill" || std::string(argv[1]) == "span-char-growth"
+          || std::string(argv[1]) == "span-char-shrink"))
+  {
+    SpanWall(argv[1]);
+    return 0;
+  }
+  if (argc == 2 && std::string(argv[1]) == "span-characterization")
+  {
+    SpanCharacterization();
+    SpanUnlinkedProjection();
+    SpanClipCharacterization();
+    return 0;
+  }
   if (argc == 2 && std::string(argv[1]) == "span-refusals")
-  { for (int i = 0; i < 5; ++i) SpanRefusal(i); return 0; }
+  {
+    for (int i = 0; i < 5; ++i)
+      SpanRefusal(i);
+    return 0;
+  }
   if (argc == 2 && std::string(argv[1]) == "char-width")
   {
     CharWidthPins();
