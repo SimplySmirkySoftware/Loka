@@ -4,7 +4,9 @@ param(
 )
 
 # Returns the tracked working tree ID, or throws with the reason it is absent.
-# The caller's index (including staged changes) is never used or modified.
+# Tracked means "in the checkout's own index", so a file added but not yet
+# committed counts; staged content never does, because `add -u` replaces
+# every entry with its working content. No real index is modified.
 function Get-SourceTreeId([string]$Directory) {
     # Native stderr is diagnostic text; Git's exit code decides success (PS 5.1).
     $ErrorActionPreference = "Continue"
@@ -12,8 +14,21 @@ function Get-SourceTreeId([string]$Directory) {
     $index = Join-Path ([System.IO.Path]::GetTempPath()) ("loka-source-index-" + [Guid]::NewGuid())
     $savedIndex = $env:GIT_INDEX_FILE
     try {
+        # Start from a copy of the checkout's own index (never the caller's
+        # GIT_INDEX_FILE); an unborn index starts from HEAD instead.
+        $gitDirectory = & $git -C $Directory rev-parse --absolute-git-dir 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "git rev-parse --absolute-git-dir failed: $($gitDirectory -join ' ')"
+        }
+        $ownIndex = Join-Path ([string]$gitDirectory).Trim() 'index'
+        $steps = @(@('add', '-u'), @('write-tree'))
+        if (Test-Path -LiteralPath $ownIndex -PathType Leaf) {
+            Copy-Item -LiteralPath $ownIndex -Destination $index -ErrorAction Stop
+        } else {
+            $steps = @(, @('read-tree', 'HEAD')) + $steps
+        }
         $env:GIT_INDEX_FILE = $index
-        foreach ($arguments in @(@('read-tree', 'HEAD'), @('add', '-u'), @('write-tree'))) {
+        foreach ($arguments in $steps) {
             $result = & $git -C $Directory @arguments 2>&1
             if ($LASTEXITCODE -ne 0) {
                 throw "git $($arguments -join ' ') failed: $($result -join ' ')"

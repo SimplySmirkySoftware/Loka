@@ -55,12 +55,24 @@ try {
     Assert-Equal ((Git-Test diff --cached) -join "`n") $StagedBefore 'staged edit preserved'
     [IO.File]::WriteAllText((Join-Path $Repo 'untracked.txt'), "ignored`n")
     Assert-Equal (Get-SourceTreeId $Repo) $Clean 'untracked file ignored'
-    Expect-Failure { Get-SourceTreeId $TestRoot } 'git read-tree HEAD failed'
+    # A file added but not committed is tracked: editing it must move the id.
+    $Added = Join-Path $Repo 'added.txt'
+    [IO.File]::WriteAllText($Added, "first`n")
+    Git-Test add added.txt | Out-Null
+    $AddedFirst = Get-SourceTreeId $Repo
+    if ($AddedFirst -ceq $Clean) { throw "Newly added file was invisible" }
+    [IO.File]::WriteAllText($Added, "second`n")
+    $AddedSecond = Get-SourceTreeId $Repo
+    if ($AddedSecond -ceq $AddedFirst) { throw "Edit to a newly added file was invisible" }
+    Git-Test rm --cached --quiet added.txt | Out-Null
+    Remove-Item -LiteralPath $Added
+    Assert-Equal (Get-SourceTreeId $Repo) $Clean 'removing the added file restores the id'
+    Expect-Failure { Get-SourceTreeId $TestRoot } 'git rev-parse --absolute-git-dir failed'
 
     $env:GIT_INDEX_FILE = Join-Path $TestRoot 'caller-index'
     try {
         Assert-Equal (Get-SourceTreeId $Repo) $Clean 'caller index override ignored'
-        Expect-Failure { Get-SourceTreeId $TestRoot } 'git read-tree HEAD failed'
+        Expect-Failure { Get-SourceTreeId $TestRoot } 'git rev-parse --absolute-git-dir failed'
         Assert-Equal $env:GIT_INDEX_FILE (Join-Path $TestRoot 'caller-index') 'caller index environment restored'
     } finally {
         $env:GIT_INDEX_FILE = $null
