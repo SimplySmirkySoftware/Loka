@@ -458,7 +458,7 @@ loka_add_toolbox_test_application(
   ${CMAKE_SOURCE_DIR}/tests/TestingHooks.cpp
   ${CMAKE_SOURCE_DIR}/tests/scenarios/ScenarioTypes.cpp
   ${CMAKE_SOURCE_DIR}/tests/scenarios/RectSurfaceScenarioObservation.cpp
-  ${CMAKE_CURRENT_BINARY_DIR}/SmirkBenchSize.r
+  ${CMAKE_CURRENT_SOURCE_DIR}/SmirkBenchVehicleSize.r
 )
 target_include_directories(${LOKA_SMIRK_BENCH_TESTS_TOOLBOX_TARGET} PRIVATE
   ${CMAKE_SOURCE_DIR}/example/SmirkBench/src
