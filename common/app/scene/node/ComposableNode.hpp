@@ -800,6 +800,11 @@ namespace loka
         friend class BoundaryNode;
         friend class Scene;
         friend class TextDocumentRegistration;
+        friend class ::loka::app::detail::TextDocumentReplyAccess;
+        static WriteSeat<Reply<TextReplacement> > textDocumentReplySeat(RequestWithReply<TextReplacement> &request)
+        {
+          return request.reply_.seat_.writeSeat();
+        }
         friend class RootBoundaryWrapper;
         template <class PropsT> friend class StdCompositionBoundaryNodeBase;
 #ifdef TEST_BUILD

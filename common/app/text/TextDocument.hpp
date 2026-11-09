@@ -1,11 +1,15 @@
 #ifndef LOKA_APP_TEXT_DOCUMENT_HPP
 #define LOKA_APP_TEXT_DOCUMENT_HPP
-#include "app/text/TextDocumentValues.hpp"
+#include "app/text/TextReplacement.hpp"
 #include "app/scene/TwinLink.hpp"
 namespace loka
 {
   namespace app
   {
+    namespace detail
+    {
+      class TextDocumentReplyAccess;
+    }
     namespace scene
     {
       class TextDocumentRegistration;
@@ -30,6 +34,14 @@ namespace loka
       {
         if (this->request_.isValid())
           this->request_.set(caret);
+      }
+      /** One pending replacement; publication also closes admission. Refused posts
+          leave both boxes unchanged. Cancellation on detach delivers no reply. */
+      scene::PostResult replace(const TextReplacement &replacement);
+      /** Last taken replacement result; receipts retain no body bytes. */
+      core::State<scene::Reply<TextReplacement> > *replaceReply() const
+      {
+        return this->replacement_.reply().state();
       }
       bool queryLength(unsigned long &out) const;
       bool queryLineCount(unsigned long &out) const;
@@ -57,12 +69,16 @@ namespace loka
       }
       scene::NodeState<TextDocumentFact> fact_;
       scene::Request<TextPosition> request_;
+      scene::RequestWithReply<TextReplacement> replacement_;
       scene::TwinLink<TextDocument, scene::TextDocumentRegistration> registration_;
       friend class TextReader;
       friend class scene::ComposableNode;
       friend class scene::TextDocumentRegistration;
       friend class detail::TextDocumentPublisher;
       friend struct testing::TextDocumentAccess;
+#ifdef TEST_BUILD
+      friend void testing::startTextDocumentRevision(TextDocument &, unsigned long);
+#endif
     };
   } // namespace app
 } // namespace loka

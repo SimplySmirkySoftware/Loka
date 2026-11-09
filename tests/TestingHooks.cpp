@@ -965,3 +965,41 @@ namespace loka
   } // namespace app
 } // namespace loka
 #endif
+
+#ifdef TEST_BUILD
+#include "app/text/TextStore.hpp"
+#include "app/text/TextDocument.hpp"
+namespace loka
+{
+  namespace app
+  {
+    namespace testing
+    {
+      namespace
+      {
+        unsigned textStoreBirthFailures = 0;
+        scene::TextStoreBirth textStoreBirthFailure = scene::TEXT_STORE_BORN;
+
+      } // namespace
+      void failTextStoreBirths(scene::TextStoreBirth reason, unsigned count)
+      {
+        textStoreBirthFailure = reason;
+        textStoreBirthFailures = count;
+      }
+      scene::TextStoreBirth consumeTextStoreBirthFailure()
+      {
+        if (!textStoreBirthFailures)
+          return scene::TEXT_STORE_BORN;
+        --textStoreBirthFailures;
+        return textStoreBirthFailure;
+      }
+      void startTextDocumentRevision(TextDocument &document, unsigned long revision)
+      {
+        TextDocumentFact fact = document.fact_.get();
+        fact.textRevision_ = revision;
+        document.fact_.set(fact);
+      }
+    } // namespace testing
+  } // namespace app
+} // namespace loka
+#endif

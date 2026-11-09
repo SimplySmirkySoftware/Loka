@@ -13,6 +13,9 @@ namespace loka
     {
       struct TextDocumentAccess;
 #ifdef TEST_BUILD
+      void failTextStoreBirths(scene::TextStoreBirth reason, unsigned count);
+      scene::TextStoreBirth consumeTextStoreBirthFailure();
+      void startTextDocumentRevision(TextDocument &, unsigned long revision);
       void failTextChunkReads(unsigned count);
       bool consumeTextChunkReadFailure();
 #endif
@@ -28,6 +31,35 @@ public:
         caret_(0),
         anchor_(0)
   {
+  }
+  /** Construct the native body in one source traversal, then consume construction marks. */
+  loka::app::scene::TextStoreReading build(loka::app::TextStoreSource &source)
+  {
+    unsigned int scalar;
+    bool separator;
+    while (source.next(scalar, separator))
+    {
+      if (scalar < 0x80)
+        this->committedText_ += static_cast<char>(scalar);
+      else
+      {
+        const unsigned count = scalar < 0x800 ? 2 : scalar < 0x10000 ? 3 : 4;
+        this->committedText_ += static_cast<char>((count == 2   ? 0xc0
+                                                   : count == 3 ? 0xe0
+                                                                : 0xf0)
+                                                  | (scalar >> (6 * (count - 1))));
+        for (unsigned i = count - 1; i; --i)
+          this->committedText_ += static_cast<char>(0x80 | ((scalar >> (6 * (i - 1))) & 0x3f));
+      }
+    }
+    const loka::app::TextPlacement placement = source.appliedPlacement();
+    this->apply(placement.kind() == loka::app::TextPlacement::START ? 0
+                : placement.kind() == loka::app::TextPlacement::END ? this->length()
+                                                                    : placement.utf8Offset());
+    const loka::app::TextChangedRange range(0, 0, this->length());
+    this->changes_.noteEdit(&range);
+    this->take();
+    return loka::app::scene::TextStoreReading(false, &range, this->caret_, this->anchor_, false);
   }
   loka::app::scene::TextStoreReading take()
   {

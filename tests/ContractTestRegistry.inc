@@ -1758,3 +1758,5 @@ LOKA_TEST(testLinkActivationPlacement)
 LOKA_TEST(testLinkActivationRetiringArm)
 LOKA_TEST(testLinkActivationCompletion)
 LOKA_TEST(testLinkActivationClosingArm)
+
+LOKA_TEST(testTextWholeReplacementContracts)

@@ -90,9 +90,13 @@ class Win32ScenePlatformController : public loka::app::scene::IPlatformControlle
 public:
   /** Refuse until text body page 1d is frozen and implemented: committed IME text
       reaches the body later through the message queue. */
-  virtual bool createTextStore(loka::app::scene::TextDocumentRegistration &)
+  virtual loka::app::scene::TextStoreBirth createTextStore(loka::app::TextStoreSource &,
+                                                           loka::app::scene::TextStoreRow *,
+                                                           loka::app::scene::TextStoreRow *&fresh,
+                                                           loka::app::scene::TextStoreReading &)
   {
-    return false;
+    fresh = 0;
+    return loka::app::scene::TEXT_STORE_REFUSED_UNSUPPORTED;
   }
   virtual bool queryNaturalHeight(loka::app::scene::Node *child, short &height) const;
   virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const;

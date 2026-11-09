@@ -18,7 +18,7 @@ namespace loka
       class TextDocumentRegistration;
       class IPlatformController;
       /** Membership twin of SceneFocus; documents publish independently, not through one focus edge. */
-      class SceneTextDocuments
+      class SceneTextDocuments : private MemberList<TextDocumentRegistration>
       {
       public:
         /** Receives rows while membership and traversal remain with the Scene. */
@@ -71,7 +71,6 @@ namespace loka
           SceneTextDocuments &owner_;
           const Phase previous_;
         };
-        MemberList<TextDocumentRegistration> members_;
         class StoreCreator;
         Phase phase_;
         friend struct ::loka::app::testing::TextDocumentAccess;
