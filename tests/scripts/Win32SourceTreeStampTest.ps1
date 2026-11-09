@@ -64,7 +64,7 @@ try {
     [IO.File]::WriteAllText($Added, "second`n")
     $AddedSecond = Get-SourceTreeId $Repo
     if ($AddedSecond -ceq $AddedFirst) { throw "Edit to a newly added file was invisible" }
-    Git-Test rm --cached --quiet added.txt | Out-Null
+    Git-Test rm --cached --force --quiet added.txt | Out-Null
     Remove-Item -LiteralPath $Added
     Assert-Equal (Get-SourceTreeId $Repo) $Clean 'removing the added file restores the id'
     Expect-Failure { Get-SourceTreeId $TestRoot } 'git rev-parse --absolute-git-dir failed'
