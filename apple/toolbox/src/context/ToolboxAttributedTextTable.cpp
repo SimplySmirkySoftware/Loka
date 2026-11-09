@@ -1,5 +1,6 @@
 #include "ToolboxPaintGround.hpp"
 #include "app/layout/AlignedLineOffset.hpp"
+#include "app/layout/TextSpanBreaks.hpp"
 #include "context/ToolboxAttributedTextTable.hpp"
 #include "platform/StringUTF8.hpp"
 #include "platform/ToolboxPascalText.hpp"
@@ -109,7 +110,7 @@ bool ToolboxAttributedTextTable::matches(const AttributedString &value) const
     const AttributedString::Segment &b = value.segment(s);
     if (&a == &b)
       return true; // Shared immutable storage owns every segment.
-    if (a.style != b.style || !a.text.equals(b.text))
+    if (a.style != b.style || !a.text.equals(b.text) || a.link != b.link)
       return false;
   }
   return true;
@@ -125,9 +126,9 @@ bool ToolboxAttributedTextTable::reconcileProjection(const AttributedString &val
   const bool roman = GetScriptManagerVariable(smSysScript) == smRoman;
   std::size_t count = 0, spanCount = 0;
   // Sizing and filling below use the same segment-local traversal and
-  // nonempty/equal-style coalescing rule (the synthetic rail keeps its own
+  // nonempty span predicate (the synthetic rail keeps its own
   // decoder in SyntheticTextWidthSource). Neither pass joins input segments.
-  const loka::app::TextStyle *previous = 0;
+  const AttributedString::Segment *previous = 0;
   for (std::size_t s = 0; s < value.segmentCount(); ++s)
   {
     const AttributedString::Segment &segment = value.segment(s);
@@ -136,9 +137,9 @@ bool ToolboxAttributedTextTable::reconcileProjection(const AttributedString &val
       return false;
     if (utf8.empty())
       continue;
-    if (!previous || *previous != segment.style)
+    if (TextSpanBreaks(previous, segment))
       ++spanCount;
-    previous = &segment.style;
+    previous = &segment;
     for (std::size_t input = 0; input < utf8.size(); ++count)
     {
       if (count == (std::numeric_limits<std::size_t>::max)() - 1)
@@ -151,7 +152,7 @@ bool ToolboxAttributedTextTable::reconcileProjection(const AttributedString &val
   if (!this->bytes_.allocate(count) || !this->characters_.allocate(count)
       || !this->spans_.allocate(spanCount) || !this->fonts_.allocate(spanCount))
     return false;
-  std::size_t character = 0, offset = 0, span = 0;
+  std::size_t character = 0, offset = 0, filledSpans = 0;
   previous = 0;
   for (std::size_t s = 0; s < value.segmentCount(); ++s)
   {
@@ -161,20 +162,25 @@ bool ToolboxAttributedTextTable::reconcileProjection(const AttributedString &val
       return false;
     if (utf8.empty())
       continue;
-    if (!previous || *previous != segment.style)
+    const bool starts = TextSpanBreaks(previous, segment);
+    const std::size_t span = starts ? filledSpans : filledSpans - 1;
+    // Fonts share the descriptor count; this also covers continuation end.
+    if (span >= this->spans_.size())
+      return false;
+    if (starts)
     {
-      if (previous)
-        ++span;
       TextStyleSpan &descriptor = this->spans_[span];
       descriptor.segment = s;
       descriptor.start = character;
       descriptor.style = segment.style;
       this->fonts_[span] = ToolboxTextFontDescriptor(segment.style);
+      ++filledSpans;
     }
-    previous = &segment.style;
     for (std::size_t input = 0; input < utf8.size();)
     {
       const ToolboxTextUnit unit = ToolboxNextTextUnit(utf8.data() + input, utf8.size() - input, roman);
+      if (character >= this->characters_.size())
+        return false;
       TextBreakCharacter &row = this->characters_[character++];
       row.value = static_cast<unsigned int>(unit.scalar);
       row.span = span;
@@ -184,7 +190,10 @@ bool ToolboxAttributedTextTable::reconcileProjection(const AttributedString &val
       input += unit.consumed;
     }
     this->spans_[span].end = character;
+    previous = &segment;
   }
+  if (character != this->characters_.size() || filledSpans != this->spans_.size())
+    return false;
   this->snapshot_ = value;
   return true;
 }
@@ -297,6 +306,86 @@ std::size_t ToolboxAttributedTextTable::rangeEnd(std::size_t start, std::size_t 
   return low && this->characters_[low - 1].end > start ? this->characters_[low - 1].end : start;
 }
 
+bool ToolboxAttributedTextTable::fitLine(const TextLineRecord &line,
+                                         short seatWidth,
+                                         const BlockStyle &block,
+                                         const ToolboxTextMeasureScope &measure,
+                                         FittedLine &out) const
+{
+  const WidthSource source(*this, measure);
+  const bool ellipsis = (!block.hasWrap_ || block.wrap_ == TEXT_WRAP_NONE) && block.hasTruncation_
+                        && block.truncation_ == TEXT_TRUNCATION_ELLIPSIS && seatWidth > 0 && line.width > seatWidth
+                        && line.fragmentCount > 0;
+  const std::size_t lastSpan =
+      line.fragmentCount ? this->lines_->fragment(line.firstFragment + line.fragmentCount - 1).span : 0;
+  int budget = seatWidth;
+  int dotsWidth = 0;
+  if (ellipsis)
+  {
+    // Null defines overflow/extent, but no glyph descriptor. Follow Text's
+    // measured three-dot prefix rule, with the terminal run's face for dots.
+    measure.select(this->fonts_[lastSpan]);
+    dotsWidth = TextWidth("...", 0, 3);
+    budget -= dotsWidth;
+    if (budget < 0)
+      budget = 0;
+  }
+  // Twin: ToolboxTextContext.cpp PlainDisplay emits nothing when even dots
+  // exceed a positive width. Keep this line's advance even when it is empty.
+  const bool omitLine = ellipsis && dotsWidth > seatWidth;
+  std::size_t paintedEnd =
+      line.fragmentCount ? this->lines_->fragment(line.firstFragment + line.fragmentCount - 1).end : 0;
+  int paintedWidth = omitLine ? 0 : line.width;
+  if (ellipsis && !omitLine)
+  {
+    paintedWidth = dotsWidth;
+    for (std::size_t f = 0; f < line.fragmentCount; ++f)
+    {
+      const TextFragment &fragment = this->lines_->fragment(line.firstFragment + f);
+      std::size_t end = fragment.end;
+      if (fragment.width > budget)
+      {
+        end = fragment.start;
+        std::size_t low = 0, high = this->characters_.size();
+        while (low < high)
+        {
+          const std::size_t mid = low + (high - low) / 2;
+          if (this->characters_[mid].offset < fragment.start)
+            low = mid + 1;
+          else
+            high = mid;
+        }
+        for (; low < this->characters_.size() && this->characters_[low].end <= fragment.end; ++low)
+        {
+          int width = 0;
+          if (!source.width(fragment.start, this->characters_[low].end, fragment.span, width))
+            return false;
+          if (width > budget)
+            break;
+          end = this->characters_[low].end;
+        }
+      }
+      int advance = 0;
+      if (!source.width(fragment.start, end, fragment.span, advance))
+        return false;
+      paintedWidth += advance;
+      budget -= advance;
+      paintedEnd = end;
+      if (end != fragment.end)
+        break;
+    }
+  }
+  // Twin: ToolboxTextContext's plain Text painter aligns its own painted
+  // lines. Both use AlignedLineOffset; this path reuses table prefix widths.
+  const int offset = AlignedLineOffset(seatWidth, paintedWidth, block.hasAlign_ ? block.align_ : TEXT_ALIGN_LEFT);
+  out.paintedEnd = paintedEnd;
+  out.offset = offset;
+  out.paintedWidth = paintedWidth;
+  out.ellipsis = omitLine ? ELLIPSIS_LINE_OMITTED : ellipsis ? ELLIPSIS_DRAWN : ELLIPSIS_NONE;
+  out.dotsSpan = lastSpan;
+  return true;
+}
+
 bool ToolboxAttributedTextTable::draw(short x,
                                       short top,
                                       const ToolboxScenePlatformController &controller,
@@ -315,76 +404,14 @@ bool ToolboxAttributedTextTable::draw(short x,
   for (std::size_t i = 0; i < this->lines_->lineCount(); ++i)
   {
     const TextLineRecord &line = this->lines_->line(i);
-    const bool ellipsis = (!block.hasWrap_ || block.wrap_ == TEXT_WRAP_NONE) && block.hasTruncation_
-                          && block.truncation_ == TEXT_TRUNCATION_ELLIPSIS && availableWidth > 0
-                          && line.width > availableWidth && line.fragmentCount > 0;
-    const std::size_t lastSpan =
-        line.fragmentCount ? this->lines_->fragment(line.firstFragment + line.fragmentCount - 1).span : 0;
-    int budget = availableWidth;
-    int dotsWidth = 0;
-    if (ellipsis)
-    {
-      // Null defines overflow/extent, but no glyph descriptor. Follow Text's
-      // measured three-dot prefix rule, with the terminal run's face for dots.
-      measure.select(this->fonts_[lastSpan]);
-      dotsWidth = TextWidth("...", 0, 3);
-      budget -= dotsWidth;
-      if (budget < 0)
-        budget = 0;
-    }
-    // Twin: ToolboxTextContext.cpp PlainDisplay emits nothing when even dots
-    // exceed a positive width. Keep this line's advance even when it is empty.
-    const bool omitLine = ellipsis && dotsWidth > availableWidth;
-    std::size_t paintedEnd = line.fragmentCount
-        ? this->lines_->fragment(line.firstFragment + line.fragmentCount - 1).end : 0;
-    int paintedWidth = omitLine ? 0 : line.width;
-    if (ellipsis && !omitLine)
-    {
-      paintedWidth = dotsWidth;
-      for (std::size_t f = 0; f < line.fragmentCount; ++f)
-      {
-        const TextFragment &fragment = this->lines_->fragment(line.firstFragment + f);
-        std::size_t end = fragment.end;
-        if (fragment.width > budget)
-        {
-          end = fragment.start;
-          std::size_t low = 0, high = this->characters_.size();
-          while (low < high)
-          {
-            const std::size_t mid = low + (high - low) / 2;
-            if (this->characters_[mid].offset < fragment.start)
-              low = mid + 1;
-            else
-              high = mid;
-          }
-          for (; low < this->characters_.size() && this->characters_[low].end <= fragment.end; ++low)
-          {
-            int width = 0;
-            if (!source.width(fragment.start, this->characters_[low].end, fragment.span, width))
-              return false;
-            if (width > budget)
-              break;
-            end = this->characters_[low].end;
-          }
-        }
-        int advance = 0;
-        if (!source.width(fragment.start, end, fragment.span, advance))
-          return false;
-        paintedWidth += advance;
-        budget -= advance;
-        paintedEnd = end;
-        if (end != fragment.end)
-          break;
-      }
-    }
-    // Twin: ToolboxTextContext's plain Text painter aligns its own painted
-    // lines. Both use AlignedLineOffset; this path reuses table prefix widths.
-    int cursor = x + AlignedLineOffset(availableWidth, paintedWidth,
-        block.hasAlign_ ? block.align_ : TEXT_ALIGN_LEFT);
-    for (std::size_t f = 0; !omitLine && f < line.fragmentCount; ++f)
+    FittedLine fitted;
+    if (!this->fitLine(line, availableWidth, block, measure, fitted))
+      return false;
+    int cursor = x + fitted.offset;
+    for (std::size_t f = 0; fitted.ellipsis != ELLIPSIS_LINE_OMITTED && f < line.fragmentCount; ++f)
     {
       const TextFragment &fragment = this->lines_->fragment(line.firstFragment + f);
-      const std::size_t end = fragment.end < paintedEnd ? fragment.end : paintedEnd;
+      const std::size_t end = fragment.end < fitted.paintedEnd ? fragment.end : fitted.paintedEnd;
       measure.select(this->fonts_[fragment.span]);
       loka::toolbox::ToolboxTextInkScope ink(
           loka::toolbox::ToolboxTextInk(this->spans_[fragment.span].style.color_, SURFACE_GROUND_WINDOW));
@@ -405,12 +432,12 @@ bool ToolboxAttributedTextTable::draw(short x,
       if (end != fragment.end)
         break;
     }
-    if (ellipsis && !omitLine)
+    if (fitted.ellipsis == ELLIPSIS_DRAWN)
     {
-      measure.select(this->fonts_[lastSpan]);
+      measure.select(this->fonts_[fitted.dotsSpan]);
       MoveTo(Coordinate(cursor), Coordinate(y + line.metrics.ascent));
       loka::toolbox::ToolboxTextInkScope ink(
-          loka::toolbox::ToolboxTextInk(this->spans_[lastSpan].style.color_, SURFACE_GROUND_WINDOW));
+          loka::toolbox::ToolboxTextInk(this->spans_[fitted.dotsSpan].style.color_, SURFACE_GROUND_WINDOW));
       DrawText("...", 0, 3);
     }
     y = Coordinate(y + line.metrics.ascent + line.metrics.descent + line.metrics.leading);

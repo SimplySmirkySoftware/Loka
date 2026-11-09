@@ -28,6 +28,8 @@ mkdir -p \
   "$SANDBOX/retro-tools"
 cp "$RUNNER" "$SANDBOX/repo/tests/toolbox/run-scenario.sh"
 cp "$LAUNCHER" "$SANDBOX/repo/tests/toolbox/mame-launch.lua"
+cp "$REPO_DIR/tests/toolbox/mame-keys.lua" "$SANDBOX/repo/tests/toolbox/"
+unset LOKA_KEY_RELEASE_HOLD
 cp "$REPO_DIR/scripts/rig/toolbox/classic_golden_identity.py" \
   "$SANDBOX/repo/scripts/rig/toolbox/classic_golden_identity.py"
 cp "$REPO_DIR/scripts/rig/toolbox/scenario_run_provenance.py" \
@@ -136,6 +138,8 @@ for argument in "$@"; do
     exit 0
   fi
 done
+printf '%s\n' "$WSLENV" >"$SANDBOX/wslenv"
+printf '%s\n' "${LOKA_KEY_RELEASE_HOLD-unset}" >"$SANDBOX/release-hold"
 printf '%s\n' "${LOKA_TAB_COUNT-unset}" >"$SANDBOX/tab-count"
 printf '%s\n' "${LOKA_SETTLE_TIMEOUT-unset}" >"$SANDBOX/settle-timeout"
 if [ "${FAKE_MAME_RESULT:-failure}" = "success" ]; then
@@ -1039,4 +1043,19 @@ verify_writable_boot_copy() {
 
 verify_writable_boot_copy
 
+# The last successful launch must have staged the dependency beside its driver.
+cmp "$SANDBOX/repo/tests/toolbox/mame-keys.lua" \
+  "$SANDBOX/repo/build/mame-scenario/helloworld/startup/mame-keys.lua" || fail 'shared keys not staged'
+if grep -q LOKA_KEY_RELEASE_HOLD "$SANDBOX/wslenv"; then fail 'unset release hold forwarded'; fi
+LOKA_KEY_RELEASE_HOLD=0 verify_writable_boot_copy
+grep -q LOKA_KEY_RELEASE_HOLD "$SANDBOX/wslenv" || fail 'release hold not forwarded'
+[ "$(cat "$SANDBOX/release-hold")" = 0 ] || fail 'release hold value lost'
+rm "$SANDBOX/repo/tests/toolbox/mame-keys.lua"
+if MAME_ENV_FILE="$SANDBOX/mame.env" RETRO68_TOOLCHAIN_BIN="$SANDBOX/retro-tools" \
+    env -u WSL_INTEROP bash "$SANDBOX/repo/tests/toolbox/run-scenario.sh" helloworld startup \
+    >"$SANDBOX/missing-keys.log" 2>&1; then
+  fail 'missing shared keys accepted'
+fi
+grep -Fq 'mame stage failed: could not stage mame-keys.lua' "$SANDBOX/missing-keys.log" \
+  || fail 'missing shared keys did not fail the mame stage'
 echo "Toolbox scenario runner tests passed"

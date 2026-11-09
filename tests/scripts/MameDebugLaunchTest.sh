@@ -22,7 +22,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$SANDBOX/scripts" "$SANDBOX/bin"
+mkdir -p "$SANDBOX/scripts" "$SANDBOX/bin" "$SANDBOX/tests/toolbox"
+printf '%s\n' '-- shared keys fixture' >"$SANDBOX/tests/toolbox/mame-keys.lua"
 cp "$SUBJECT" "$SANDBOX/scripts/mame-debug.sh"
 touch "$SANDBOX/scripts/mame-find-base.lua" "$SANDBOX/scripts/mame-attach.gdb"
 
@@ -315,3 +316,5 @@ assert_argv \
   -x \
   "$SANDBOX/extra cmds.gdb"
 pass gdb-script-appended
+
+cmp "$SANDBOX/tests/toolbox/mame-keys.lua" "$SANDBOX/build/mame-debug/mame-keys.lua"

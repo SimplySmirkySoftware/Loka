@@ -5,6 +5,7 @@ namespace loka
 {
   namespace testing
   {
+    class ToolboxAttributedTextTableAccess;
     void failToolboxAttributedDraws(unsigned count);
     bool refuseToolboxAttributedDraw();
   } // namespace testing
@@ -70,6 +71,9 @@ public:
             short availableWidth) const;
 
 private:
+#ifdef TEST_BUILD
+  friend class loka::testing::ToolboxAttributedTextTableAccess;
+#endif
   /** Completed scalar geometry; line/fragment geometry remains in lines_. */
   struct Extent
   {
@@ -91,6 +95,26 @@ private:
     {
     }
   };
+  enum Ellipsis
+  {
+    ELLIPSIS_NONE,
+    ELLIPSIS_DRAWN,
+    ELLIPSIS_LINE_OMITTED
+  };
+  /** Completed seat-relative fitting result, consumed only after success. */
+  struct FittedLine
+  {
+    std::size_t paintedEnd;
+    int offset;
+    int paintedWidth;
+    Ellipsis ellipsis;
+    std::size_t dotsSpan;
+  };
+  bool fitLine(const loka::app::TextLineRecord &line,
+               short seatWidth,
+               const loka::app::BlockStyle &block,
+               const ToolboxTextMeasureScope &measure,
+               FittedLine &out) const;
   bool reconcileProjection(const loka::app::AttributedString &value);
   std::size_t rangeEnd(std::size_t start, std::size_t end, std::size_t span) const;
   loka::app::detail::TextMeasureTable<char> bytes_;
