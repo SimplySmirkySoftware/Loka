@@ -107,7 +107,8 @@ window.runTextCells = async function() {
     return nativeMeasure.call(this, text);
   };
   try {
-    check(failed.web.start(1) === 0, 'failure fixture starts');
+    failed._fixture_configure(1,0);
+    check(failed.web.start() === 0, 'failure fixture starts');
     const buttons = document.querySelectorAll('button[data-loka-token]');
     const empty = buttons[buttons.length - 1];
     check(empty.style.height === '0px', 'first failure has zero layout height');

@@ -33,24 +33,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   target_compile_options(LokaWebCore PRIVATE -UTEST_BUILD -ULOKA_DIAG -fno-exceptions -fno-rtti -Werror)
   set_target_properties(LokaWebCore PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
   loka_enable_warnings(LokaWebCore)
-  add_executable(LokaWebCounter ../tests/web/BrowserMain.cpp)
+  loka_add_web_app(LokaWebCounter LokaWebCounter ../tests/web/BrowserMain.cpp)
   target_include_directories(LokaWebCounter PRIVATE ${PROJECT_SOURCE_DIR}/tests)
-  target_compile_options(LokaWebCounter PRIVATE -UTEST_BUILD -ULOKA_DIAG -fno-exceptions -fno-rtti -Werror)
-  target_link_libraries(LokaWebCounter PRIVATE LokaWebCore)
-  set_target_properties(LokaWebCounter PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  loka_enable_warnings(LokaWebCounter)
-  target_link_options(LokaWebCounter PRIVATE
-    -sSTACK_SIZE=8MB -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=0
-    -sMODULARIZE=1 -sEXPORT_NAME=LokaWebCounter -sENVIRONMENT=web
-    "--js-library=${CMAKE_CURRENT_SOURCE_DIR}/js/library.js"
-    "--pre-js=${CMAKE_CURRENT_SOURCE_DIR}/js/style-vocab.js"
-    "--pre-js=${CMAKE_CURRENT_SOURCE_DIR}/js/text.js"
-    "--post-js=${CMAKE_CURRENT_SOURCE_DIR}/js/api.js")
-  set_property(TARGET LokaWebCounter APPEND PROPERTY LINK_DEPENDS
-    ${CMAKE_CURRENT_SOURCE_DIR}/js/library.js
-    ${CMAKE_CURRENT_SOURCE_DIR}/js/style-vocab.js
-    ${CMAKE_CURRENT_SOURCE_DIR}/js/text.js
-    ${CMAKE_CURRENT_SOURCE_DIR}/js/api.js)
   configure_file(../tests/web/driver/index.html ${CMAKE_CURRENT_BINARY_DIR}/index.html COPYONLY)
 endif()
 
