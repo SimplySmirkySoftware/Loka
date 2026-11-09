@@ -1,6 +1,6 @@
 # Web Rail
 
-> **Status:** Normative; frozen Web rally pages 1, 2, 3a, 3b and 4, with the delegator's applied-root-visibility clarification.
+> **Status:** Normative; frozen Web rally pages 1, 2, 3a, 3b, 4 and 4b, with the delegator's applied-root-visibility clarification.
 >
 > **Owns:** DOM resource ownership, browser entries, completion, shutdown, text wire and typography environment.
 >
@@ -66,9 +66,9 @@ User-facing quit is an ingress-checked request that the roster may decline, leav
 
 PR 1 initially projected one-line Text through INaturalSizeSource with fixed metrics (eight CSS pixels per scalar, sixteen-pixel Text height, twenty-four-pixel Button height and sixteen-pixel horizontal inset). The Text projection section below replaces those metrics and adds wrapping. The preview style descriptor carries all six TextStyle axes, preserving absence and signed point values; wire v2 and font resolution are specified below. Style constants come from `tools/ci/gen_style_vocab.py`.
 
-Buttons are native `<button type="button">` elements. Mouse, Space and Enter use the same click export. Browser focus is read at completion; no keyboard or focus-event export is added. Layout containers have no DOM elements.
+Buttons are native `<button type="button">` elements. Mouse, Space and Enter use the same click export. Browser focus is read at completion; no keyboard or focus-event export is added. Layout containers other than ScrollView have no DOM elements.
 
-EditText, TextEditor, PopupMenu, ImageView, RectSurface, ScrollBar, Cell and CardBand are explicit refused handlers. A ScrollView visit settles refusal without publishing a viewport or projecting children. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. Examples, IME, pointer input, scrolling, skins and hot reload are outside this PR.
+EditText, TextEditor, PopupMenu, ImageView, RectSurface, ScrollBar, Cell and CardBand are explicit refused handlers. A reached ScrollView visit settles once after projection, including refusal; a deferred visit leaves its request pending. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. IME, general pointer input, skins and hot reload remain outside this increment.
 
 ## Host contract
 
@@ -91,15 +91,16 @@ if the document remains alive and teardown finishes. If resources remain,
 `web_completed` throws and the Promise stays pending, not rejected. Load failure,
 abort and callback exceptions are separate failures, not completion signals.
 
-`click`, `resize` and `wake` are adapter-only exports, not host entry points. The
+The seven production exports are `start`, `quit`, `dispose`, `click`, `resize`, `wake` and `scroll`.
+`click`, `resize`, `wake` and `scroll` are adapter-only exports, not host entry points. The
 adapter's listeners and ResizeObserver deliver input; timers use the wasm
 function table callback. The host must not run a wake loop.
 
 The current host profile appends roots to `document.body` and constrains requested
 size by the measured content box (including the adapter's `maxWidth:100%`).
 HelloWorld requests 420×330. Container selection and panel filling belong to
-page 5. Before page 4b projects ScrollView, HelloWorld has one root and zero child
-elements; this smoke test verifies production boot and teardown, not its controls.
+page 5. HelloWorld has one scroller directly under its root; projected leaves belong
+to its content element. The smoke test clicks the visible Probe Button at 420×330.
 
 For CSP, put the same nonce on both the external classic script and inline
 bootstrap. Allow `'wasm-unsafe-eval'` in `script-src` and the wasm fetch origin in
@@ -116,7 +117,7 @@ profile. Both HelloWeb and counter use this same function.
 
 ## Reproduction
 
-Build `LokaWebTests` with the existing testing and testing-asan presets and run `ctest --test-dir <build> -R '^webRail$' --output-on-failure`. The fake boundary implements the same imports as the real adapter. `LOKA_WEB_CAPTURE_GOLDEN=1` prints the initial instruction sequence; ordinary runs compare the committed golden.
+Build `LokaWebTests` with the existing testing, testing-release and testing-asan presets and run `ctest --test-dir <build> -R '^webRail$' --output-on-failure`. The fake boundary implements the same imports as the real adapter. `LOKA_WEB_CAPTURE_GOLDEN=1` prints the initial instruction sequence; ordinary runs compare the committed golden.
 
 With emsdk 7.0.0 sourced, use `emcmake cmake --preset testing-web`, then build `build/wasm/testing`. The node fixture alone links NODERAWFS. The browser fixture links production Web/common libraries without TEST_BUILD and keeps EXIT_RUNTIME disabled. Run `node tests/web/driver/run.mjs build/wasm/testing/web`; absence of Chromium is an explicit skip, and `CHROMIUM=<executable>` names a browser outside PATH. No npm installation is needed.
 
@@ -124,7 +125,7 @@ Production build: `emcmake cmake --preset web && cmake --build --preset web
 --target LokaHelloWeb LokaWebCounter`. Run
 `CHROMIUM=/path/to/chrome node tests/web/driver/run.mjs build/wasm/testing/web`.
 The same driver serves HelloWeb from `build/wasm/web/example/HelloWorld` and checks
-its content box, pre-4b empty root, completion and zero resources, plus staged
+its content box, ScrollView content tree and Probe Button, completion and zero resources, plus staged
 fixture configuration, second-start refusal and both CSP branches.
 `tests/web/mutations/entry-{1,2}.py <worktree>` exercise factory dispatch and staging;
 entry placement and fixture leakage are separate expected compile refusals.
@@ -270,3 +271,71 @@ Natural width is label advance + 18 and height is H + 10, including empty labels
 the upper bound is checked before addition. Browser cells exercise native Tab,
 Space, Enter and focus-visible outline, content/padding/border geometry and narrow
 offers. A missing Chromium is a reported skip, not runtime verification.
+
+## ScrollView projection
+
+SCROLL is resource kind 3. One token owns an absolute scroller and its relative
+content element; child tokens own their own elements. The shared
+`WebResourceContext` retires either leaf or scroll resources. The route record
+holds one base receiver; checked conversions live in that record. Release is
+order independent among descendants: removing a scroller detaches its subtree,
+and later child releases remove their own elements and rows. The root releases
+last. `web_completed` counts rows, so SCROLL counts as one.
+
+Children use content coordinates through `ProjectionParentScopeStack`.
+`deriveScrolled` receives positive seat coordinates `(x, y - top)`, as on macOS;
+the browser applies scrolling. Content uses `overflow:clip` so children from a
+failed traversal cannot create a second scroll offset. Scroller, content and
+measurement probe use physical LTR, horizontal writing coordinates.
+
+The decide-first vocabulary distinguishes `knownOverflowWidth`, `viewportWidth`,
+`documentWidth = max(viewportWidth, knownOverflowWidth)` and
+`maximumOffsetX = max(0, knownOverflowWidth - viewportWidth)`. The width question
+runs before traversal. The vertical gutter is always reserved; horizontal chrome
+is reserved only when the range and seat height are positive. Children receive
+viewport width, and the channel accumulates their height plus content insets.
+A poisoned channel stops further child dispatch. Nested viewport admission is
+refused without poisoning its enclosing channel. Text measurement refusal also
+refuses the reached visit; its pending request is taken and dropped, including
+on first measurement.
+
+One synchronous import, `web_commit_scroll`, checks resource kind and layout box
+before writing rect, horizontal overflow, document size and origin in that order.
+APPLIED returns both rounded native offsets; C++ clamps read-back to its completed
+range before publishing. BOXLESS writes nothing, publishes nothing and schedules
+no retry. PROTOCOL asserts in debug and preserves the fact in release; writes
+may already have happened, so this is not a native rollback guarantee. Origin
+assignment is skipped when the current rounded offset already equals the target.
+`WebScrollMetrics` preserves the last successfully committed rect, document,
+viewport and native axes for request replay; failed layout never replaces it.
+
+A detached node is not visited. A parked root produces a deferred visit: no
+traversal, writes, publication or settlement. Successful root reveal requests
+layout through the Window-owned `requestSceneRelayout()` door, which calls its
+Scene's `requestLayoutAfterRun()`. Reached refusals instead settle and consume
+requests through `SettleScrollViewVisit`, with the shared bound of two takes.
+No Show/Match attach hook is added.
+
+`WebScrollbarGeometry` is a session value, read through the controller's existing
+session reference. A hidden fixed probe is measured during bootstrap admission
+before constructing the App, and inside accepted resize dispatch before native
+size handling. An unmeasurable bootstrap fails through pre-commit rollback;
+unmeasurable resize preserves the old value. Changed geometry visits the route
+store's live root rows and requests each eligible Window's own Scene layout.
+Style-only scrollbar changes without resize remain stale until module replacement.
+
+The passive listener immediately samples `scrollLeft` and `scrollTop`, rounds
+them, and calls the seventh export `web_scroll`. Its typed input invocation
+checks the SCROLL receiver, attachment, completed metrics and owning root
+admission, then publishes origin once without writing native offsets. There is
+no cached event origin or mute flag. Requests replay completed geometry through
+the same commit import and publish only on APPLIED.
+
+Web scrollbars are not shortened by content insets. Stack uses its vertical
+fallback until the separate layout-handler registration page. These are Web
+limits, not claims of native parity.
+
+Scroll reproduction adds `LOKA_WEB_CAPTURE_SCROLL=1` for `scroll.golden`,
+`node tests/web/js/boundary.test.mjs` for deterministic adapter read-back and
+listener checks, and `tests/web/mutations/scroll-{1,2,3,4,5,6,7}.py <worktree>`.
+The counter golden includes the intended additional root-reveal projection pass.

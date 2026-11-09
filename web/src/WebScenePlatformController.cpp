@@ -1,3 +1,6 @@
+#include <algorithm>
+#include "WebWindow.hpp"
+#include "WebScrollContext.hpp"
 #include "WebTextDescriptor.hpp"
 #include "WebScenePlatformController.hpp"
 #include "WebSession.hpp"
@@ -43,6 +46,7 @@ namespace
   };
   Handler<TextNode, WebTextContext, loka::web::TEXT> TextHandler;
   Handler<ButtonNode, WebButtonContext, loka::web::BUTTON> ButtonHandler;
+  Handler<ScrollViewNode, WebScrollContext, loka::web::SCROLL> ScrollHandler;
   RefusedNodeHandler Refused[] = {RefusedNodeHandler(NodeTypeToken<EditTextNode>()),
                                   RefusedNodeHandler(NodeTypeToken<TextEditorNode>()),
                                   RefusedNodeHandler(NodeTypeToken<PopupMenuNode>()),
@@ -55,19 +59,6 @@ namespace
   {
     return static_cast<short>(n < SHRT_MIN ? SHRT_MIN : n > SHRT_MAX ? SHRT_MAX : n);
   }
-  /** Unsupported ScrollView still settles one visited request; never publishes a viewport. */
-  class RefusedScrollSeat : public ScrollViewSeat
-  {
-  public:
-    RefusedScrollSeat()
-        : ScrollViewSeat(ScrollViewVisit::refused())
-    {
-    }
-    virtual RequestApplication<loka::core::Frame, ScrollRequestResult> apply(Node &, const ScrollTarget &)
-    {
-      return RequestApplication<loka::core::Frame, ScrollRequestResult>(loka::core::Frame(), SCROLL_UNAVAILABLE);
-    }
-  };
 } // namespace
 class WebScenePlatformController::Traversal : public IPlatformLayoutTraversal
 {
@@ -93,6 +84,13 @@ public:
   {
     this->bottom_ = y;
   }
+  virtual bool refuseLayoutResultY(int y)
+  {
+    if (y >= SHRT_MIN && y <= SHRT_MAX)
+      return false;
+    this->controller_.refuseMeasurement();
+    return true;
+  }
   virtual short layoutResultY() const
   {
     return this->bottom_;
@@ -110,7 +108,8 @@ WebScenePlatformController::WebScenePlatformController(WebSession &session,
       root_(root),
       tree_(0),
       layout_(),
-      retired_(0)
+      retired_(0),
+      projectionParents_(reinterpret_cast<void *>(static_cast<uintptr_t>(root)))
 {
   this->layout_.width = Narrow(width);
   this->layout_.height = Narrow(height);
@@ -125,6 +124,8 @@ WebScenePlatformController::~WebScenePlatformController()
 void WebScenePlatformController::onChange(Node *root, NodeDirtyFlags, bool)
 {
   this->tree_ = root;
+  this->projectionParents_.resetRoot(reinterpret_cast<void *>(static_cast<uintptr_t>(this->root_)),
+                                     loka::core::Frame());
   this->layoutNode(root, this->layout_);
 }
 void WebScenePlatformController::synchronize() {}
@@ -161,12 +162,18 @@ void WebScenePlatformController::retire(WebElement &element)
     this->retired_ = row;
   }
 }
-bool WebScenePlatformController::materialize(WebElement &element, loka::web::Kind kind, WebElementContext &receiver)
+bool WebScenePlatformController::materialize(WebElement &element, loka::web::Kind kind, WebResourceContext &receiver)
 {
   int width = 0, height = 0;
-  if (!element.create(this->session_.routes(), this->session_.tokens(), kind, this->root_, width, height))
+  if (!element.create(
+          this->session_.routes(),
+          this->session_.tokens(),
+          kind,
+          static_cast<loka::web::Token>(reinterpret_cast<uintptr_t>(this->projectionParents_.current().nativeParent)),
+          width,
+          height))
     return false;
-  this->session_.routes().find(element.token())->leaf = &receiver;
+  this->session_.routes().find(element.token())->receiver = &receiver;
   return true;
 }
 bool WebScenePlatformController::prepareProjectedLayout(Node *node, LayoutState &state)
@@ -199,7 +206,7 @@ bool WebScenePlatformController::readNativeFocus(NodeContext *&out)
 {
   const loka::web::Token token = web_read_native_focus(this->root_);
   WebResource *row = this->session_.routes().find(token);
-  out = row && row->leaf && &row->leaf->controller() == this ? row->leaf : 0;
+  out = row && row->leaf() && &row->leaf()->controller() == this ? row->leaf() : 0;
   return true;
 }
 namespace
@@ -249,23 +256,23 @@ bool WebScenePlatformController::queryNaturalHeight(Node *node, short &out) cons
 }
 int WebScenePlatformController::layoutNode(Node *node, const LayoutState &received)
 {
+  if (this->projectionParents_.current().hasShortRangeRefusal())
+    return received.y;
   if (!node || node->lifecycleFact() != NODE_FACT_ATTACHED)
     return received.y;
   LayoutState state = received;
   state.spacing = Narrow(loka::app::layout::resolveLayoutGap(node, received.spacing, Spacing));
   if (node->asScrollViewNode())
   {
-    ScrollViewVisitOwner owner(*this, node);
-    RefusedScrollSeat seat;
-    RequestSettlement<loka::core::Frame>::settle(owner,
-                                                 seat,
-                                                 SETTLE_PROPS
-#ifdef TEST_BUILD
-                                                 ,
-                                                 owner.fact(*node)
-#endif
-    );
-    return state.y;
+    WebResource *root = this->session_.routes().find(this->root_);
+    if (!root || !root->root || !root->root->rootShown())
+      return state.y + state.height;
+    return SettleScrollViewVisit(*this,
+                                 &WebScenePlatformController::layoutScroll,
+                                 &WebScenePlatformController::applyScroll,
+                                 node->asScrollViewNode(),
+                                 state)
+        .bottom;
   }
   if (IPlatformLayoutHandler *handler = this->layouts_.find(node))
   {
@@ -284,33 +291,38 @@ int WebScenePlatformController::layoutNode(Node *node, const LayoutState &receiv
   loka::app::layout::StackGaps gaps(state.spacing);
   for (Node *child = nestable->childrenHead(); child; child = child->nextInComposition)
   {
-    state.y = Narrow(state.y + gaps.before(child));
-    state.y = Narrow(this->layoutNode(child, state));
+    const int start = state.y + gaps.before(child);
+    if (!this->checkCoordinate(start))
+      break;
+    state.y = Narrow(start);
+    const int bottom = this->layoutNode(child, state);
+    if (this->projectionParents_.current().hasShortRangeRefusal() || !this->checkCoordinate(bottom))
+      break;
+    state.y = Narrow(bottom);
   }
   return state.y;
 }
-WebElementContext::WebElementContext(Node &node, WebScenePlatformController &controller)
+WebResourceContext::WebResourceContext(Node &node, WebScenePlatformController &controller)
     : controller_(controller)
 {
   this->setOwner(&node);
 }
-WebElementContext::~WebElementContext()
+WebResourceContext::~WebResourceContext()
 {
   assert(!this->element_.token());
 }
-bool WebElementContext::materialize(loka::web::Kind kind)
+bool WebResourceContext::materialize(loka::web::Kind kind)
 {
   return this->controller_.materialize(this->element_, kind, *this);
 }
-void WebElementContext::readLifecycleFactOnAttach()
+void WebResourceContext::readLifecycleFactOnAttach()
 {
   web_set_hidden(this->element_.token(), this->owner()->lifecycleFact() != NODE_FACT_ATTACHED);
 }
-void WebElementContext::onFactChanged(NodeLifecycleFact, NodeLifecycleFact next)
+void WebResourceContext::onFactChanged(NodeLifecycleFact, NodeLifecycleFact next)
 {
   if (next == NODE_FACT_RETIRED)
   {
-    this->projection_.clear();
     this->controller_.retire(this->element_);
   }
   else
@@ -345,12 +357,19 @@ short WebElementContext::layout(IPlatformController *, LayoutState &state)
       this->projection_.replace(built);
   }
   if (status == WEB_MEASURE_REFUSED)
+  {
     this->controller_.refuseTextMeasurement(this->owner(), state);
+    this->controller_.refuseMeasurement();
+  }
   int height = this->projection_.get() ? this->projection_.get()->extent().height : 0;
   if (input.button && this->projection_.get())
     height += 2 * (kWebButtonInsetY + kWebButtonBorder);
+  if (!this->controller_.checkCoordinate(height) || !this->controller_.checkCoordinate(state.y + height))
+    return state.y;
   state.height = Narrow(height);
-  web_set_rect(this->element_.token(), state.x, state.y, state.width, state.height);
+  LayoutState projected;
+  if (this->controller_.project(state, projected))
+    web_set_rect(this->element_.token(), projected.x, projected.y, projected.width, projected.height);
   return Narrow(state.y + state.height);
 }
 void WebElementContext::render(IPlatformController *)
@@ -380,7 +399,7 @@ void WebElementContext::render(IPlatformController *)
                 block.hasTruncation_ ? block.truncation_ : TEXT_TRUNCATION_NONE);
   web_set_text(this->element_.token(), snapshot->joined(), snapshot->joinedLength());
 }
-bool WebElementContext::acceptsInstallation() const
+bool WebResourceContext::acceptsInstallation() const
 {
 #ifdef TEST_BUILD
   return !loka::web::testing::refuseInstallation();
@@ -402,4 +421,107 @@ bool WebButtonContext::click()
     return true;
   }
   return false;
+}
+
+void WebElementContext::onFactChanged(NodeLifecycleFact old, NodeLifecycleFact next)
+{
+  if (next == NODE_FACT_RETIRED)
+    this->projection_.clear();
+  WebResourceContext::onFactChanged(old, next);
+}
+bool WebResourceContext::attached() const
+{
+  return this->element_.token() && this->owner() && this->owner()->lifecycleFact() == NODE_FACT_ATTACHED;
+}
+
+bool WebScenePlatformController::checkCoordinate(int value)
+{
+  if (!this->projectionParents_.insideViewport() || (value >= SHRT_MIN && value <= SHRT_MAX))
+    return true;
+  this->refuseMeasurement();
+  return false;
+}
+void WebScenePlatformController::refuseMeasurement()
+{
+  this->projectionParents_.current().markShortRangeRefused();
+}
+bool WebScenePlatformController::project(const LayoutState &state, LayoutState &projected)
+{
+  if (this->projectionParents_.current().project(state, projected))
+    return true;
+  this->refuseMeasurement();
+  return false;
+}
+WebScenePlatformController::ScrollResult WebScenePlatformController::layoutScroll(ScrollViewNode *node,
+                                                                                  const LayoutState &state)
+{
+  const ScrollResult refused(state.y + state.height, ScrollViewVisit::refused());
+  if (this->projectionParents_.insideViewport() || this->projectionParents_.insideUnit())
+    return refused;
+  const int top = node->props.contentInsets_.top();
+  if (state.width < 0 || state.height < 0 || state.y + state.height > SHRT_MAX || state.y - top < SHRT_MIN)
+    return refused;
+  WebScrollContext *ctx = static_cast<WebScrollContext *>(ScrollHandler.ensureContext(node, this, state));
+  if (!ctx)
+    return refused;
+  short knownWidth = 0;
+  const bool known = loka::app::layout::queryContentOverflowWidth(node, Spacing, this, knownWidth);
+  const int knownOverflowWidth = known ? knownWidth : 0;
+  const WebScrollbarGeometry &gutter = this->session_.scrollbarGeometry();
+  const int viewportWidth = std::max(0, state.width - gutter.vertical());
+  const int documentWidth = std::max(viewportWidth, knownOverflowWidth);
+  const int maximumOffsetX = std::max(0, knownOverflowWidth - viewportWidth);
+  const bool horizontal = maximumOffsetX > 0 && state.height > 0;
+  const int viewportHeight = std::max(0, state.height - (horizontal ? gutter.horizontal() : 0));
+  LayoutState childState = state;
+  childState.width = static_cast<short>(viewportWidth);
+  childState.height = static_cast<short>(viewportHeight);
+  ProjectionParentScope scope;
+  if (!this->projectionParents_.current().deriveScrolled(reinterpret_cast<void *>(static_cast<uintptr_t>(ctx->token())),
+                                                         state.x,
+                                                         state.y - top,
+                                                         loka::core::Frame(0, 0, viewportWidth, viewportHeight),
+                                                         scope))
+    return refused;
+  int extent = 0;
+  {
+    ProjectionViewportScopeGuard guard(this->projectionParents_, scope);
+    if (!guard.isActive())
+      return refused;
+    int currentY = state.y;
+    loka::app::layout::StackGaps gaps(state.spacing);
+    for (Node *child = node->childrenHead(); child; child = child->nextInComposition)
+    {
+      const int start = currentY + gaps.before(child);
+      if (!this->checkCoordinate(start))
+        break;
+      childState.y = static_cast<short>(start);
+      const int bottom = this->layoutNode(child, childState);
+      if (this->projectionParents_.current().hasShortRangeRefusal())
+        break;
+      if (!this->checkCoordinate(bottom)
+          || !this->projectionParents_.current().tryAccumulateContentHeight(currentY, bottom))
+      {
+        this->refuseMeasurement();
+        break;
+      }
+      currentY = bottom;
+    }
+    extent = this->projectionParents_.current().contentHeight() + node->props.contentInsets_.extentExtra();
+    if (!this->checkCoordinate(extent) || (state.height == 0 && !this->checkCoordinate(state.y + extent))
+        || this->projectionParents_.current().hasShortRangeRefusal())
+      return refused;
+  }
+  const ScrollViewVisit axes = ScrollViewVisit::succeededWithNativeAxes(horizontal, true);
+  WebScrollMetrics *metrics =
+      new (std::nothrow) WebScrollMetrics(state, documentWidth, extent, viewportWidth, viewportHeight, axes);
+  const bool applied = ctx->commit(metrics);
+  return ScrollResult(state.y + (state.height ? state.height : extent), applied ? axes : ScrollViewVisit::refused());
+}
+bool WebScenePlatformController::applyScroll(ScrollViewNode &node,
+                                             const ScrollResult &,
+                                             const loka::core::Frame &target)
+{
+  WebScrollContext *ctx = static_cast<WebScrollContext *>(node.getContext());
+  return ctx && ctx->apply(target);
 }

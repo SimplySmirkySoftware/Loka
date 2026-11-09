@@ -1,6 +1,7 @@
 #include "WebAppEntry.hpp"
 #include "WebSession.hpp"
 #include "WebFixture.hpp"
+#include "ScrollFixture.hpp"
 #include "WebTestHooks.hpp"
 #include "WebTestAccess.hpp"
 #include "WebWindow.hpp"
@@ -36,7 +37,9 @@ namespace loka
       vehicle.roots = webtest::staged.roots;
       vehicle.destroy = webtest::staged.destroy;
       session = &testing::Access::session(static_cast<WebPlatformContext &>(*platform));
-      return webtest::CreateCounter(platform);
+      if (webtest::staged.roots < 0)
+        vehicle.roots = -webtest::staged.roots;
+      return webtest::staged.roots < 0 ? webtest::CreateScroll(platform) : webtest::CreateCounter(platform);
     }
     namespace testing
     {
@@ -57,6 +60,46 @@ namespace loka
 extern "C" int web_wake(int kind, double now);
 extern "C"
 {
+  EMSCRIPTEN_KEEPALIVE int fixture_scroll_close(uint32_t root, uint32_t token)
+  {
+    loka::core::Operation turn;
+    WebResource *row = session->routes().find(root);
+    if (!row || !row->root)
+      return -1;
+    loka::web::testing::Access::close(*session, row->root);
+    return session->scroll(token, 0, 0, emscripten_get_now());
+  }
+  EMSCRIPTEN_KEEPALIVE int fixture_scroll_fact(int field)
+  {
+    if (!webtest::scrollFixture())
+      return -999;
+    const loka::core::Frame value = webtest::scrollFixture()->viewport.get();
+    return field == 0 ? value.x : field == 1 ? value.y : field == 2 ? value.width : value.height;
+  }
+  EMSCRIPTEN_KEEPALIVE void fixture_scroll_command(int command, int value, uint32_t root)
+  {
+    if (!session || !webtest::scrollFixture())
+      return;
+    {
+      loka::core::Operation turn;
+      webtest::ScrollFixture &body = *webtest::scrollFixture();
+      if (command == 0)
+        body.request.set(loka::app::ScrollTarget::Top());
+      if (command == 1)
+        body.width.set(value);
+      if (command == 2)
+        body.shown.set(value != 0);
+      if (command == 3)
+      {
+        WebResource *row = session->routes().find(root);
+        if (row && row->root)
+          row->root->visibilityState().set(value != 0);
+      }
+      if (command == 4)
+        body.text.set(loka::core::String::FromInt(value));
+    }
+    web_wake(loka::web::IMMEDIATE, emscripten_get_now());
+  }
   /** Fixture-only projection exercise. Cost: driver once per cell, its own temporary rows. */
   EMSCRIPTEN_KEEPALIVE int fixture_text_probe(int kind, int width, uint32_t token)
   {

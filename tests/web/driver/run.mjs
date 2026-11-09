@@ -123,6 +123,72 @@ try {
     for(let i=0;i<100 && !await client.evaluate('!!window.ready || !!window.loadError');++i)
       await new Promise(resolve=>setTimeout(resolve,50));
   }
+  await navigate('index.html');
+  await client.evaluate('document.body.style.direction="rtl";fixture._fixture_configure(-1,0);web.start()');
+  const scrollInfo=await client.evaluate(`(() => {
+    const root=document.querySelector('body > div[data-loka-token]'),s=root.firstElementChild,c=s.firstElementChild;
+    window.scrollCell={root,s,c};
+    return {native:s.scrollTop,fact:fixture._fixture_scroll_fact(1),vertical:s.offsetWidth-s.clientWidth,horizontal:s.offsetHeight-s.clientHeight,
+      width:s.clientWidth,reportedWidth:fixture._fixture_scroll_fact(2),document:parseFloat(c.style.width)};
+  })()`);
+  assert.equal(scrollInfo.native,scrollInfo.fact+7,'bootstrap nonzero origin after reveal');
+  assert.equal(scrollInfo.width,scrollInfo.reportedWidth);
+  assert.equal(scrollInfo.document,400);
+  console.log('scroll gutter: '+JSON.stringify(scrollInfo));
+  console.log(scrollInfo.vertical ? 'classic gutter: passed; [skip] overlay gutter: not active' : 'overlay gutter: passed; [skip] classic gutter: not active');
+  await client.evaluate('scrollCell.s.scrollTop=70;scrollCell.s.dispatchEvent(new Event("scroll"))');
+  assert.equal(await client.evaluate('fixture._fixture_scroll_fact(1)'),63,'live scroll sampling');
+  await client.evaluate('fixture._fixture_scroll_command(0,0,0)');
+  assert.equal(await client.evaluate('scrollCell.s.scrollTop'),0,'scrollTo Top');
+  for(const command of [2,3]) {
+    const mismatch=await client.evaluate(`(() => {
+      scrollCell.s.scrollTop=80;
+      const differs=Math.round(scrollCell.s.scrollTop)!==fixture._fixture_scroll_fact(1)+7;
+      fixture._fixture_scroll_command(${command},0,Number(scrollCell.root.dataset.lokaToken));
+      fixture._fixture_scroll_command(${command},1,Number(scrollCell.root.dataset.lokaToken));
+      return {differs,native:Math.round(scrollCell.s.scrollTop),fact:fixture._fixture_scroll_fact(1)+7};
+    })()`);
+    assert(mismatch.differs,'native/fact mismatch created while a layout box exists');
+    assert.equal(mismatch.native,mismatch.fact,'reveal restores native/fact agreement before a queued event can publish');
+  }
+  await client.evaluate('fixture._fixture_scroll_command(1,0,0)');
+  assert.equal(await client.evaluate('scrollCell.s.style.overflowX'),'hidden','narrow disables horizontal bar');
+  await client.evaluate('fixture._fixture_scroll_command(1,400,0)');
+  assert.equal(await client.evaluate('scrollCell.s.style.overflowX'),'scroll','wide enables horizontal bar');
+  await client.evaluate('scrollCell.s.scrollTop=99999;scrollCell.s.dispatchEvent(new Event("scroll"))');
+  assert.equal(await client.evaluate('Math.round(scrollCell.s.scrollTop)'),await client.evaluate('fixture._fixture_scroll_fact(1)+7'),'range boundary');
+  const failed=await client.evaluate(`(() => {
+    const snapshot=()=>[scrollCell.s.scrollHeight,scrollCell.c.scrollTop,...[0,1,2,3].map(i=>fixture._fixture_scroll_fact(i))];
+    const before=snapshot();window.savedScrollService=fixture.textTest.service();
+    // Measurement-only failure: a lost canvas context makes web_measure REFUSED while the style door still answers (a null service would be a protocol refusal, not a text refusal).
+    fixture.textTest.replaceService(Object.create(savedScrollService,{ctx:{value:Object.create(savedScrollService.ctx,{isContextLost:{value:()=>true}})}}));
+    fixture._fixture_scroll_command(4,12345,0);
+    return {before,after:snapshot()};
+  })()`);
+  assert.deepEqual(failed.after,failed.before,'failed traversal preserves range, content offset and fact');
+  await client.evaluate('fixture.textTest.replaceService(savedScrollService);fixture._web_wake(2,performance.now())');
+  const fraction=await client.evaluate(`(() => {
+    scrollCell.s.style.zoom='1.25';scrollCell.s.scrollTop=10.8;
+    const before=scrollCell.s.scrollTop;scrollCell.s.dispatchEvent(new Event('scroll'));
+    const afterInput=scrollCell.s.scrollTop;
+    fixture._web_wake(2,performance.now());
+    return {before,afterInput,after:scrollCell.s.scrollTop,fact:fixture._fixture_scroll_fact(1)};
+  })()`);
+  assert.equal(Math.round(fraction.after),fraction.fact+7,'fractional read-back publication');
+  assert.equal(fraction.afterInput,fraction.before,'scroll input does not snap fractional native origin');
+  assert.equal(fraction.after,fraction.before,'stable rounded origin does not snap');
+  await client.evaluate('scrollCell.s.style.zoom="1"');
+  await client.evaluate('web.dispose();web.completed.then(()=>true)');
+  assert.equal(await client.evaluate('fixture.textTest.resources()'),0,'scroll release subtree rows');
+  console.log('scroll browser: bootstrap, live input, request, reveal, ranges and release passed');
+  await navigate('index.html');
+  await client.evaluate('fixture._fixture_configure(-2,0);web.start()');
+  const closingScroll=await client.evaluate(`(() => {
+    const roots=[...document.querySelectorAll('body > div[data-loka-token]')];
+    return {count:roots.length,result:fixture._fixture_scroll_close(Number(roots[0].dataset.lokaToken),Number(roots[0].firstElementChild.dataset.lokaToken))};
+  })()`);
+  assert.equal(closingScroll.count,2);assert.equal(closingScroll.result,5,'pending-close root refuses scroll while another root remains');
+  await client.evaluate('web.dispose();web.completed.then(()=>true)');
   for(const viewportWidth of [800,300]) {
     await client.send('Emulation.setDeviceMetricsOverride',{width:viewportWidth,height:600,deviceScaleFactor:1,mobile:false});
     await navigate('hello.html');
@@ -136,10 +202,49 @@ try {
           parseFloat(css.paddingTop)+parseFloat(css.paddingBottom)+parseFloat(css.borderTopWidth)+parseFloat(css.borderBottomWidth)) : 0);
       return {roots:roots.length,children:root.childElementCount,width:content('width'),height:content('height'),available:document.body.clientWidth};
     })()`);
-    // Page 4b will replace ScrollView refusal; before 4b the root has no children.
-    assert.equal(hello.roots,1);assert.equal(hello.children,0);
+    // ScrollView owns one scroller and its content owns all projected leaves.
+    assert.equal(hello.roots,1);assert.equal(hello.children,1);
     assert(hello.width>0 && hello.width<=420 && hello.height>0 && hello.height<=330);
     assert.equal(hello.width,Math.min(420,hello.available));assert.equal(hello.height,330);
+    const leaves=await client.evaluate(`(() => {
+      const scroller=document.querySelector('body > div[data-loka-token]').firstElementChild;
+      return [...scroller.firstElementChild.children].map(e=>e.textContent);
+    })()`);
+    assert.equal(leaves.length,12,'HelloWeb projected leaf order count');
+    for(const [index,label] of [[0,'Loka Sample'],[2,'Add +'],[4,'Probe Button'],[5,'Toggle Button Enabled'],[6,'Fruit Picker'],[8,'BMI Calculator'],[9,'Height (cm)'],[10,'Weight (kg)']])
+      assert(leaves[index].includes(label),'HelloWeb leaf '+index);
+    if(viewportWidth===800) {
+      const hit=await client.evaluate(`(() => {
+        const e=[...document.querySelectorAll('button')].find(e=>e.textContent==='Probe Button');
+        const r=e.getBoundingClientRect(),s=e.parentElement.parentElement.getBoundingClientRect();
+        const x=(r.left+r.right)/2,y=(r.top+r.bottom)/2;
+        return {x,y,visible:r.top>=s.top&&r.bottom<=s.bottom&&r.width>0&&r.height>0,hit:document.elementFromPoint(x,y)===e};
+      })()`);
+      assert(hit.visible && hit.hit,'Probe Button visible and hit without scrolling');
+      await client.send('Input.dispatchMouseEvent',{type:'mousePressed',x:hit.x,y:hit.y,button:'left',clickCount:1});
+      await client.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:hit.x,y:hit.y,button:'left',clickCount:1});
+      assert(await client.evaluate(`document.body.textContent.includes('clicks: 1')`),'Probe Button increments clicks');
+      const ring=await client.evaluate(`(() => {
+        const style=document.createElement('style');style.textContent='button:focus{outline:3px solid rgb(255,0,255)!important;outline-offset:0!important}';document.head.appendChild(style);
+        window.probeButton=[...document.querySelectorAll('button')].find(e=>e.textContent==='Probe Button');probeButton.blur();
+        const r=probeButton.getBoundingClientRect();return {x:r.left+4,y:r.top-3,width:Math.max(1,r.width-8),height:2,scale:1};
+      })()`);
+      const unfocused=(await client.send('Page.captureScreenshot',{format:'png',clip:ring})).data;
+      await client.evaluate('probeButton.focus()');
+      const focused=(await client.send('Page.captureScreenshot',{format:'png',clip:ring})).data;
+      assert.notEqual(focused,unfocused,'focus outline changes pixels outside button border');
+      await client.evaluate('probeButton.blur()');
+      const blurred=(await client.send('Page.captureScreenshot',{format:'png',clip:ring})).data;
+      assert.equal(blurred,unfocused,'focus outline pixels disappear on blur');
+      const clipHit=await client.evaluate(`(() => {
+        const s=probeButton.parentElement.parentElement;
+        s.scrollTop=probeButton.offsetTop+5;
+        const r=probeButton.getBoundingClientRect(),c=s.getBoundingClientRect(),x=(r.left+r.right)/2;
+        return {inside:document.elementFromPoint(x,Math.max(r.top,c.top)+3)===probeButton,
+          outside:document.elementFromPoint(x,c.top-2)===probeButton};
+      })()`);
+      assert(clipHit.inside && !clipHit.outside,'focusable button hit is clipped at viewport edge');
+    }
     await client.evaluate('web.dispose();web.completed.then(()=>true)');
     assert.equal(await client.evaluate('fixture.textTest.resources()'),0);
     assert.deepEqual(client.errors,[],'HelloWeb runtime errors');

@@ -11,7 +11,14 @@ namespace loka
       ROOT,
       TEXT,
       BUTTON,
+      SCROLL,
       KIND_COUNT
+    };
+    enum ScrollCommit
+    {
+      APPLIED,
+      BOXLESS,
+      PROTOCOL
     };
     enum Release
     {
@@ -37,6 +44,21 @@ extern "C"
   /** Cost: session start once before allocation; probes the private service's fixed Env table. */
   bool web_text_admit(unsigned long fingerprint, unsigned count);
   int web_create(int kind, uint32_t token, uint32_t parent, int *width, int *height);
+  /** Cost: successful layout/request once; one row, box check and native read-back may flush layout. */
+  int web_commit_scroll(uint32_t token,
+                        int x,
+                        int y,
+                        int w,
+                        int h,
+                        int horizontal,
+                        int documentWidth,
+                        int extent,
+                        int originX,
+                        int originY,
+                        int *appliedX,
+                        int *appliedY);
+  /** Cost: bootstrap and accepted resize once; one temporary probe, synchronous layout. */
+  int web_scrollbar_geometry(int *vertical, int *horizontal);
   void web_set_rect(uint32_t token, int x, int y, int width, int height);
   /** Cost: render once per visit, writes one owned element. */
   void web_set_projected(uint32_t token, int projected);
