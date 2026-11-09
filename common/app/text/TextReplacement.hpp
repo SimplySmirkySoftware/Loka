@@ -102,6 +102,7 @@ namespace loka
             length_(length)
       {
       }
+      friend class detail::TextDocumentPublisher;
       Stage stage_;
       core::resource::Blob bytes_;
       TextPlacement placement_;
@@ -157,43 +158,6 @@ namespace loka
       TEXT_REPLACE_NOT_REPRESENTABLE,
       TEXT_REPLACE_ALLOCATION,
       TEXT_REPLACE_CAPACITY
-    };
-    /** Source and revision of a completed replacement, independent of later edits. */
-    class TextDocumentOrigin
-    {
-    public:
-      TextDocumentOrigin()
-          : revision_(0)
-      {
-      }
-      TextDocumentOrigin(const file::File &source, unsigned long revision)
-          : source_(source),
-            revision_(revision)
-      {
-      }
-      bool querySource(file::File &out) const
-      {
-        if (this->source_.sharesRepresentation(file::File()))
-          return false;
-        out = this->source_;
-        return true;
-      }
-      unsigned long revision() const
-      {
-        return this->revision_;
-      }
-      bool operator==(const TextDocumentOrigin &other) const
-      {
-        return this->revision_ == other.revision_ && this->source_.sharesRepresentation(other.source_);
-      }
-      bool operator!=(const TextDocumentOrigin &other) const
-      {
-        return !(*this == other);
-      }
-
-    private:
-      file::File source_;
-      unsigned long revision_;
     };
     namespace scene
     {

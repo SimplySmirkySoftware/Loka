@@ -75,6 +75,8 @@ set(LOKA_SHARED_TEST_SOURCES
   ${_LOKA_TEST_SOURCE_ROOT}/tests/TextDocumentFileTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/AttributedStringTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/AttributedTextTests.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/LinkActivationTests.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/TextSpanWin32Tests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/StyleTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/WebURLTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/IncomingURLTests.cpp

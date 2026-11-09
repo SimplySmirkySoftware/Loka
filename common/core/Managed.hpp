@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <functional>
 #include "core/LokaAlloc.hpp"
 
 namespace loka
@@ -113,6 +114,14 @@ namespace loka
       bool operator!=(const Managed &other) const
       {
         return block_ != other.block_;
+      }
+
+      /** Strict control-block identity order consistent with ==; no handle sorts first. */
+      bool identityBefore(const Managed &other) const
+      {
+        if (!this->block_ || !other.block_)
+          return !this->block_ && other.block_;
+        return std::less<const ControlBlock *>()(this->block_, other.block_);
       }
 
     private:

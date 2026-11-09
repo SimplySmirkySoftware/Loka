@@ -762,3 +762,8 @@ loka_compile_pin(request-text-replacement-private-stage
   REFUSES pins/refuses_text_replacement_stage.cpp
   ACCEPTS pins/accepts_text_replacement_stage.cpp
 )
+
+loka_compile_pin(request-text-replacement-reply-write
+  REFUSES pins/refuses_text_replacement_reply_write.cpp
+  ACCEPTS pins/accepts_text_replacement_reply_write.cpp
+)

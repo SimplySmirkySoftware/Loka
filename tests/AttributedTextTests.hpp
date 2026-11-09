@@ -23,4 +23,16 @@ void testAttributedStringEstimateRefusal();
 
 void testTextBreakerCountingCapacityRefusal();
 
+void testTextSpanUnlinkedCharacterization();
+
+void testTextSpanLinkBoundaries();
+void testTextSpanPreviousNonempty();
+void testTextSpanDescriptorInlineGrowth();
+void testTextSpanDescriptorHeapGrowth();
+void testTextSpanDescriptorUnderfill();
+void testTextSpanCharacterHeapGrowth();
+void testTextSpanCharacterUnderfill();
+void testTextSpanEmptyBecomesNonempty();
+void testTextSpanNonemptyBecomesEmpty();
+
 #endif

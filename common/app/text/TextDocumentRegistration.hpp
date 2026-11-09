@@ -67,6 +67,12 @@ namespace loka
         {
           row.connect(this->store_);
         }
+        /** Membership supplies the owning publication phase without a second owner pointer. */
+        bool isPublishing() const
+        {
+          const SceneTextDocuments *owner = static_cast<SceneTextDocuments *>(this->membership_.owner());
+          return owner && owner->isPublishing();
+        }
         TextStoreRow *store() const
         {
           return this->store_.row();

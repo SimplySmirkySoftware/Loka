@@ -1,4 +1,5 @@
 #include "app/layout/TextLineBreaker.hpp"
+#include "app/layout/TextSpanBreaks.hpp"
 #include <cassert>
 #include <climits>
 #include <limits>
@@ -35,11 +36,6 @@ namespace loka
         if (b.leading > a.leading)
           a.leading = b.leading;
       }
-      // Sizing and filling must agree on exactly which segments introduce rows.
-      bool startsSpan(const TextStyle *previous, const TextStyle &style)
-      {
-        return !previous || *previous != style;
-      }
       bool decode(const core::String &text, core::StringBuffer &buffer)
       {
         std::string utf8;
@@ -55,7 +51,7 @@ namespace loka
       if (!value.valid())
         return;
       std::size_t count = 0, spanCount = 0;
-      const TextStyle *previousStyle = 0;
+      const AttributedString::Segment *previous = 0;
       for (std::size_t s = 0; s < value.segmentCount(); ++s)
       {
         const core::String &text = value.segment(s).text;
@@ -67,22 +63,27 @@ namespace loka
         count += buffer.length();
         if (buffer.length() > 0)
         {
-          const TextStyle &style = value.segment(s).style;
-          if (startsSpan(previousStyle, style))
+          if (TextSpanBreaks(previous, value.segment(s)))
             ++spanCount;
-          previousStyle = &style;
+          previous = &value.segment(s);
         }
       }
       if (!this->characters_.allocate(count) || !this->spans_.allocate(spanCount))
         return;
+      previous = 0;
+      std::size_t filledSpans = 0;
       for (std::size_t s = 0; s < value.segmentCount(); ++s)
       {
-        const core::String &text = value.segment(s).text;
         core::StringBuffer buffer(core::StringEncodingUtf32);
-        if (!decode(text, buffer))
+        if (!decode(value.segment(s).text, buffer))
           return;
-        this->append(buffer, value.segment(s).style, s);
+        if (!this->append(buffer, previous, value.segment(s), s, filledSpans))
+          return;
+        if (buffer.length() > 0)
+          previous = &value.segment(s);
       }
+      if (this->length_ != this->characters_.size() || filledSpans != this->spans_.size())
+        return;
       this->valid_ = true;
     }
     SyntheticTextWidthSource::SyntheticTextWidthSource(const core::String &value, const TextStyle &style)
@@ -96,25 +97,40 @@ namespace loka
         return;
       if (!this->characters_.allocate(buffer.length()) || !this->spans_.allocate(buffer.length() > 0 ? 1 : 0))
         return;
-      this->append(buffer, style, 0);
+      AttributedString::Segment segment;
+      segment.style = style;
+      std::size_t filledSpans = 0;
+      if (!this->append(buffer, 0, segment, 0, filledSpans))
+        return;
+      if (this->length_ != this->characters_.size() || filledSpans != this->spans_.size())
+        return;
       this->valid_ = true;
     }
-    void SyntheticTextWidthSource::append(const core::StringBuffer &buffer, const TextStyle &style, std::size_t segment)
+    bool SyntheticTextWidthSource::append(const core::StringBuffer &buffer,
+                                          const AttributedString::Segment *previous,
+                                          const AttributedString::Segment &segment,
+                                          std::size_t segmentIndex,
+                                          std::size_t &filledSpans)
     {
       if (buffer.length() == 0)
-        return;
-      std::size_t span = this->length_ > 0 ? this->characters_[this->length_ - 1].span : 0;
-      if (startsSpan(this->length_ > 0 ? &this->spans_[span].style : 0, style))
+        return true;
+      const bool starts = TextSpanBreaks(previous, segment);
+      const std::size_t span = starts ? filledSpans : filledSpans - 1;
+      // Dominates all descriptor writes, including end on the continuation path.
+      if (span >= this->spans_.size())
+        return false;
+      if (starts)
       {
-        if (this->length_ > 0)
-          ++span;
         TextStyleSpan &descriptor = this->spans_[span];
-        descriptor.segment = segment;
+        descriptor.segment = segmentIndex;
         descriptor.start = this->length_;
-        descriptor.style = style;
+        descriptor.style = segment.style;
+        ++filledSpans;
       }
       for (std::size_t i = 0; i < buffer.length(); ++i)
       {
+        if (this->length_ >= this->characters_.size())
+          return false;
         TextBreakCharacter &row = this->characters_[this->length_];
         row.value = buffer.characterAt(i);
         row.offset = this->length_;
@@ -123,6 +139,7 @@ namespace loka
         ++this->length_;
       }
       this->spans_[span].end = this->length_;
+      return true;
     }
     SyntheticTextWidthSource::~SyntheticTextWidthSource() {}
     bool SyntheticTextWidthSource::valid() const

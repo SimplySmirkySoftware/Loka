@@ -286,3 +286,65 @@ documented behavior that no Loka probe has observed yet.
     body, and committed text is in the body when `WaitNextEvent` returns.
   - No commit door is reachable from the application: `FixTSMDocument`
     cannot name MLTE's TSM document.
+
+### Whole-body replacement (page 3)
+
+`document(doc)` declares the replacement request and reply alongside the fact and
+caret request. `doc.replace(value)` admits one validated `TextReplacement` at a
+time. `POST_QUEUE_FULL` means either a replacement is pending or the Scene's
+text-document publication is running; a direct fact or reply observer cannot
+reopen the slot. Use a deferred observer or a later command. `POST_INVALID`
+means NONE input or a severed declaration. A refused post changes neither box.
+Withdrawal, document destruction, and Scene replacement cancel pending work
+without a reply. Every taken replacement ends in a forced reply, even when an
+identical refusal follows the preceding one. The fact is written first, then
+the reply, in the same publication.
+
+Completion takes replacement before caret. Awaited stores retain requests;
+refused or unreadable stores answer UNAVAILABLE. Composition answers COMPOSING
+and keeps the caret request. Command refresh takes neither request. Successful
+replacement advances the revision once, even when the old store also reported
+an edit, and invalidates old positions and readers. Failed replacement preserves
+the old store while ordinary edits and eligible caret requests still publish.
+The QUEUE_FULL and COMPOSING refusals are the kernel's last net: an application's
+command entrance is expected to disable Open while pending and commit composition
+before opening. Native command API details belong to a later rally.
+
+Initial projection and replacement use the same store-birth door. The rail builds
+completely, transfers any views without allocation, places the selection, and
+consumes construction marks and baselines before returning BORN. The kernel then
+connects the fresh row and retires the old row. Refusal retires any partial row
+through its owner and leaves the old row untouched. As clarified after the page 3
+freeze, BORN's unchanged, unmarked reading must carry the full native-coordinate
+range `[0, new native end]`. The publisher uses that range directly, without a
+second traversal; ordinary change-note aggregation ignores unchanged readings.
+Null has no native views to transfer. Later rail store-row changes must run the
+shared birth conformance helper in `tests/support/TextStoreConformance.hpp`.
+
+`replaceReply()` exposes a read-only State. Its requested and applied receipts
+retain only stage, placement, and logical length: neither body bytes nor source.
+With no app-held copies, replacement bytes are released when the publisher's
+local value dies. START and END retain their meanings; an explicit UTF-8 offset
+beyond the body or within a scalar is clamped to the preceding canonical boundary
+and reported as CLAMPED.
+
+The fact's `origin()` is the source File and revision of the last landed
+replacement. Refusal, cancellation, edits, and caret movement preserve it.
+Equality compares both revision and `File::sharesRepresentation`, since separate
+documents can have different sources at the same revision. Only file reading
+attaches a source; Empty and memory replacements have no source. Whether a
+source-free replacement counts as unsaved is application policy.
+
+An application may keep `saved_ = {File, revision}`, initially `{none, 0}`, with
+the same lifetime as its document. After a successful save it records the target
+and current fact revision synchronously, before returning from the command.
+Destination (also used for the title) is `saved_.file` when
+`saved_.revision >= origin.revision()`, otherwise the origin's source. Dirty is
+`fact.textRevision() != max(saved_.revision, origin.revision())`. Reply observers
+report errors; they do not establish destination. Thus a deferred Open B after
+Open A cannot change destination before B lands, and a refused B leaves A.
+
+Revisions advance at most once per completion. Advancing from `ULONG_MAX` is a
+contract violation diagnosed by a debug assertion. Revision wrap is outside the
+v1 contract; release builds do not add a hot-path saturation check. Even a 32-bit
+revision takes over a year to exhaust at 100 advancing completions per second.
