@@ -11,33 +11,43 @@ namespace
   {
     return loka::core::LokaAllocationSite("Win32AttributedText", "Break");
   }
-  /** Restores the borrowed DC even on a failed partial measure. */
-  class FontSelection
-  {
-  public:
-    explicit FontSelection(HDC dc)
-        : dc_(dc),
-          original_(GetCurrentObject(dc, OBJ_FONT))
-    {
-    }
-    ~FontSelection()
-    {
-      if (this->original_)
-        SelectObject(this->dc_, this->original_);
-    }
-    bool select(HFONT font)
-    {
-      HGDIOBJ previous = font ? SelectObject(this->dc_, font) : 0;
-      return previous && previous != HGDI_ERROR;
-    }
-
-  private:
-    HDC dc_;
-    HGDIOBJ original_;
-    FontSelection(const FontSelection &);
-    FontSelection &operator=(const FontSelection &);
-  };
 } // namespace
+
+/** Restores the borrowed DC even on a failed partial measure. */
+class Win32AttributedTextTable::FontSelection
+{
+public:
+  explicit FontSelection(HDC dc)
+      : dc_(dc),
+        original_(GetCurrentObject(dc, OBJ_FONT))
+  {
+  }
+  ~FontSelection()
+  {
+    if (this->original_)
+      SelectObject(this->dc_, this->original_);
+  }
+  bool select(HFONT font)
+  {
+    HGDIOBJ previous = font ? SelectObject(this->dc_, font) : 0;
+    return previous && previous != HGDI_ERROR;
+  }
+
+  bool measureDots(HFONT font, int &width)
+  {
+    SIZE dots = {0, 0};
+    if (!this->select(font) || !GetTextExtentExPointW(this->dc_, L"...", 3, INT_MAX, NULL, NULL, &dots))
+      return false;
+    width = dots.cx;
+    return true;
+  }
+
+private:
+  HDC dc_;
+  HGDIOBJ original_;
+  FontSelection(const FontSelection &);
+  FontSelection &operator=(const FontSelection &);
+};
 
 class Win32AttributedTextTable::WidthSource : public TextWidthSource
 {
@@ -247,6 +257,74 @@ bool Win32AttributedTextTable::joinLines(std::wstring &out) const
   return true;
 }
 
+// Twin: apple/toolbox/src/context/ToolboxAttributedTextTable.cpp fitLine.
+// Win32 uses UTF-16/GDI, clips narrower-than-dots lines, scans from zero,
+// and cuts off on probe refusal; Toolbox uses bytes/TextWidth, omits those
+// lines, searches from a lower bound, and fails on probe refusal.
+bool Win32AttributedTextTable::fitLine(const TextLineRecord &line,
+                                       int seatWidth,
+                                       const BlockStyle &block,
+                                       const WidthSource &source,
+                                       FontSelection &measure,
+                                       FittedLine &out) const
+{
+  const bool ellipsis = (!block.hasWrap_ || block.wrap_ == TEXT_WRAP_NONE) && block.hasTruncation_
+                        && block.truncation_ == TEXT_TRUNCATION_ELLIPSIS && seatWidth > 0 && line.width > seatWidth
+                        && line.fragmentCount;
+  const std::size_t lastSpan =
+      line.fragmentCount ? this->lines_->fragment(line.firstFragment + line.fragmentCount - 1).span : 0;
+  int budget = seatWidth;
+  int dotsWidth = 0;
+  if (ellipsis)
+  {
+    if (!measure.measureDots(this->fonts_[lastSpan], dotsWidth))
+      return false;
+    budget = budget > dotsWidth ? budget - dotsWidth : 0;
+  }
+  std::size_t paintedEnd =
+      line.fragmentCount ? this->lines_->fragment(line.firstFragment + line.fragmentCount - 1).end : 0;
+  int paintedWidth = line.width;
+  if (ellipsis)
+  {
+    paintedWidth = dotsWidth;
+    for (std::size_t f = 0; f < line.fragmentCount; ++f)
+    {
+      const TextFragment &fragment = this->lines_->fragment(line.firstFragment + f);
+      std::size_t end = fragment.end;
+      if (fragment.width > budget)
+      {
+        end = fragment.start;
+        for (std::size_t c = 0; c < this->characters_.size(); ++c)
+        {
+          const TextBreakCharacter &character = this->characters_[c];
+          if (character.offset < fragment.start)
+            continue;
+          if (character.end > fragment.end)
+            break;
+          int width = 0;
+          if (!source.width(fragment.start, character.end, fragment.span, width) || width > budget)
+            break;
+          end = character.end;
+        }
+      }
+      int advance = 0;
+      if (!source.width(fragment.start, end, fragment.span, advance))
+        return false;
+      paintedWidth += advance;
+      budget -= advance;
+      paintedEnd = end;
+      if (end != fragment.end)
+        break;
+    }
+  }
+  out.paintedEnd = paintedEnd;
+  out.paintedWidth = paintedWidth;
+  out.offset = AlignedLineOffset(seatWidth, out.paintedWidth, block.hasAlign_ ? block.align_ : TEXT_ALIGN_LEFT);
+  out.ellipsis = ellipsis ? ELLIPSIS_DRAWN : ELLIPSIS_NONE;
+  out.dotsSpan = lastSpan;
+  return true;
+}
+
 bool Win32AttributedTextTable::draw(HDC dc, const RECT &clip, const BlockStyle &block) const
 {
   if (!this->valid())
@@ -262,77 +340,24 @@ bool Win32AttributedTextTable::draw(HDC dc, const RECT &clip, const BlockStyle &
   for (std::size_t i = 0; i < this->lines_->lineCount() && painted; ++i)
   {
     const TextLineRecord &line = this->lines_->line(i);
-    const int available = clip.right - clip.left;
-    const bool ellipsis = (!block.hasWrap_ || block.wrap_ == TEXT_WRAP_NONE) && block.hasTruncation_
-                          && block.truncation_ == TEXT_TRUNCATION_ELLIPSIS && available > 0 && line.width > available
-                          && line.fragmentCount;
-    const std::size_t lastSpan =
-        line.fragmentCount ? this->lines_->fragment(line.firstFragment + line.fragmentCount - 1).span : 0;
-    int budget = available;
-    int dotsWidth = 0;
-    if (ellipsis)
+    FittedLine fitted;
+    if (!this->fitLine(line, clip.right - clip.left, block, source, selection, fitted))
     {
-      SIZE dots = {0, 0};
-      painted =
-          selection.select(this->fonts_[lastSpan]) && GetTextExtentExPointW(dc, L"...", 3, INT_MAX, NULL, NULL, &dots);
-      if (!painted)
-        break;
-      dotsWidth = dots.cx;
-      budget = budget > dotsWidth ? budget - dotsWidth : 0;
+      painted = false;
+      break;
     }
-    std::size_t paintedEnd = line.fragmentCount
-        ? this->lines_->fragment(line.firstFragment + line.fragmentCount - 1).end : 0;
-    int paintedWidth = line.width;
-    if (ellipsis)
-    {
-      paintedWidth = dotsWidth;
-      for (std::size_t f = 0; f < line.fragmentCount; ++f)
-      {
-        const TextFragment &fragment = this->lines_->fragment(line.firstFragment + f);
-        std::size_t end = fragment.end;
-        if (fragment.width > budget)
-        {
-          end = fragment.start;
-          for (std::size_t c = 0; c < this->characters_.size(); ++c)
-          {
-            const TextBreakCharacter &character = this->characters_[c];
-            if (character.offset < fragment.start)
-              continue;
-            if (character.end > fragment.end)
-              break;
-            int width = 0;
-            if (!source.width(fragment.start, character.end, fragment.span, width) || width > budget)
-              break;
-            end = character.end;
-          }
-        }
-        int advance = 0;
-        if (!source.width(fragment.start, end, fragment.span, advance))
-        {
-          painted = false;
-          break;
-        }
-        paintedWidth += advance;
-        budget -= advance;
-        paintedEnd = end;
-        if (end != fragment.end)
-          break;
-      }
-    }
-    // Twin of ToolboxAttributedTextTable::draw: fit once from cached widths
-    // before placing the line; no extra GDI measurement for alignment.
-    int x = clip.left + AlignedLineOffset(available, paintedWidth,
-        block.hasAlign_ ? block.align_ : TEXT_ALIGN_LEFT);
+    int x = clip.left + fitted.offset;
     for (std::size_t f = 0; f < line.fragmentCount && painted; ++f)
     {
       const TextFragment &fragment = this->lines_->fragment(line.firstFragment + f);
-      const std::size_t end = fragment.end < paintedEnd ? fragment.end : paintedEnd;
+      const std::size_t end = fragment.end < fitted.paintedEnd ? fragment.end : fitted.paintedEnd;
       SetTextColor(dc, loka::win32::Win32PaintTextInk(this->spans_[fragment.span].style.color_, SURFACE_GROUND_WINDOW));
       painted = selection.select(this->fonts_[fragment.span]);
       std::size_t start = fragment.start;
       while (painted && start < end)
       {
-        // ExtTextOutW accepts at most 8192 UTF-16 units per call.
+        // Twin: ToolboxAttributedTextTable::draw batches bounded bytes;
+        // ExtTextOutW instead accepts at most 8192 UTF-16 units per call.
         std::size_t next = end - start > 8192 ? start + 8192 : end;
         if (next < end && this->units_[next] >= 0xdc00 && this->units_[next] <= 0xdfff)
           --next;
@@ -352,10 +377,11 @@ bool Win32AttributedTextTable::draw(HDC dc, const RECT &clip, const BlockStyle &
       if (end != fragment.end)
         break;
     }
-    if (painted && ellipsis)
+    if (painted && fitted.ellipsis == ELLIPSIS_DRAWN)
     {
-      SetTextColor(dc, loka::win32::Win32PaintTextInk(this->spans_[lastSpan].style.color_, SURFACE_GROUND_WINDOW));
-      painted = selection.select(this->fonts_[lastSpan])
+      SetTextColor(dc,
+                   loka::win32::Win32PaintTextInk(this->spans_[fitted.dotsSpan].style.color_, SURFACE_GROUND_WINDOW));
+      painted = selection.select(this->fonts_[fitted.dotsSpan])
                 && ExtTextOutW(dc, x, y + line.metrics.ascent, ETO_CLIPPED, &clip, L"...", 3, NULL);
     }
     y += line.metrics.ascent + line.metrics.descent + line.metrics.leading;

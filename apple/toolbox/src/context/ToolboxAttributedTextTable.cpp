@@ -306,6 +306,10 @@ std::size_t ToolboxAttributedTextTable::rangeEnd(std::size_t start, std::size_t 
   return low && this->characters_[low - 1].end > start ? this->characters_[low - 1].end : start;
 }
 
+// Twin: win32/src/context/Win32AttributedTextTable.cpp fitLine.
+// Toolbox uses bytes/TextWidth, omits narrower-than-dots lines, searches from
+// a lower bound, and fails on probe refusal; Win32 uses UTF-16/GDI, clips those
+// dots, scans from zero, and treats probe refusal as a cutoff.
 bool ToolboxAttributedTextTable::fitLine(const TextLineRecord &line,
                                          short seatWidth,
                                          const BlockStyle &block,
@@ -418,6 +422,8 @@ bool ToolboxAttributedTextTable::draw(short x,
       std::size_t start = fragment.start;
       while (start < end)
       {
+        // Twin: Win32AttributedTextTable::draw batches 8192 UTF-16 units;
+        // this byte path bounds both the native count and measured advance.
         const std::size_t next = this->rangeEnd(start, end, fragment.span);
         int width = fragment.width;
         if (next == start)
