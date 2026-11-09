@@ -634,6 +634,10 @@ namespace loka
       {
         context.draw(dc, rect);
       }
+      static bool constraint(const Win32AttributedTextTable &table, int &out)
+      {
+        return table.measurement_.queryConstraint(out);
+      }
       static std::size_t fontCount(const Win32AttributedTextTable &table)
       {
         return table.fonts_.size();
@@ -1227,7 +1231,9 @@ void testWin32AttributedTextPaintRouting()
   {
     Win32ScenePlatformController controller(rootWindow, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
     const LinkTarget targetX(loka::core::String("x")), targetY(loka::core::String("y"));
+    const LinkTarget targetZ(loka::core::String("z"));
     const AttributedString joined = Linked("ab", Bold, targetX) + Linked("cd", Bold, targetX);
+    const AttributedString settled = Linked("ab", Bold, targetZ) + Linked("cd", Bold, targetZ);
     const AttributedString split = Linked("ab", Bold, targetX) + Linked("cd", Bold, targetY);
     loka::core::MutableState<AttributedString> live(joined);
     loka::core::PushStateTracker tracker;
@@ -1262,12 +1268,20 @@ void testWin32AttributedTextPaintRouting()
     controller.onBoundaryApply(boundary, boundary, info, plan);
     LOKA_VERIFY(Access::queuedPaintInvalidates(controller) == 1);
     // Target-only live input reaches normal Scene invalidation at the same seat.
+    // The Scene's own layout seat differs from the explicit relayout above, so a
+    // first joined-to-joined target change settles the table at that seat; the
+    // second change must then rebuild through the dirty input alone.
     const Win32AttributedTextTable &liveTable = AttributedAccess::table(*context);
-    RECT liveSeat;
-    LOKA_VERIFY(GetClientRect(context->paintHwnd(), &liveSeat));
-    const int liveWidth = liveSeat.right - liveSeat.left;
-    LOKA_VERIFY(liveTable.reusable(liveWidth) && liveTable.lines().line(0).fragmentCount == 1);
-    LOKA_VERIFY(AttributedAccess::fontCount(liveTable) == 1 && node->props.text_ == &live);
+    LOKA_VERIFY(node->props.text_ == &live);
+    {
+      loka::core::StateTrackerGuard guard(&tracker);
+      live.set(settled);
+    }
+    LOKA_VERIFY(scene.hasPendingInvalidation());
+    scene.flushInvalidation();
+    int liveWidth = -1;
+    LOKA_VERIFY(AttributedAccess::constraint(liveTable, liveWidth) && liveTable.reusable(liveWidth));
+    LOKA_VERIFY(liveTable.lines().line(0).fragmentCount == 1 && AttributedAccess::fontCount(liveTable) == 1);
     {
       loka::core::StateTrackerGuard guard(&tracker);
       live.set(split);
