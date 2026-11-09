@@ -72,7 +72,7 @@ EditText, TextEditor, PopupMenu, ImageView, RectSurface, ScrollBar, Cell and Car
 
 Build `LokaWebTests` with the existing testing and testing-asan presets and run `ctest --test-dir <build> -R '^webRail$' --output-on-failure`. The fake boundary implements the same imports as the real adapter. `LOKA_WEB_CAPTURE_GOLDEN=1` prints the initial instruction sequence; ordinary runs compare the committed golden.
 
-After sourcing emsdk, use `emcmake cmake --preset testing-web`, then build `build/wasm/testing`. The node fixture alone links NODERAWFS. The browser fixture links production Web/common libraries without TEST_BUILD and keeps EXIT_RUNTIME disabled. Run `node tests/web/driver/run.mjs build/wasm/testing/web`; absence of Chromium is an explicit skip. No npm installation is needed.
+After sourcing emsdk, use `emcmake cmake --preset testing-web`, then build `build/wasm/testing`. The node fixture alone links NODERAWFS. The browser fixture links production Web/common libraries without TEST_BUILD and keeps EXIT_RUNTIME disabled. Run `node tests/web/driver/run.mjs build/wasm/testing/web`; absence of Chromium is an explicit skip, and `CHROMIUM=<executable>` names a browser outside PATH. No npm installation is needed.
 
 Each `tests/web/mutations/NN.sh <worktree>` builds and verifies a baseline, patches one behavior, requires the mutant to compile, runs the fixture, restores exact source bytes, rebuilds, and reports dirty counts. A compilation failure is never a killed mutation. Generated build/log artifacts stay under build/.
 
