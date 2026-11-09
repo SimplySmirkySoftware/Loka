@@ -1305,13 +1305,29 @@ bool NullScenePlatformController::handleEditCommand(loka::app::EditVerb verb)
   return false;
 }
 
-bool NullScenePlatformController::createTextStore(loka::app::scene::TextDocumentRegistration &registration)
+loka::app::scene::TextStoreBirth
+NullScenePlatformController::createTextStore(loka::app::TextStoreSource &source,
+                                             loka::app::scene::TextStoreRow *old,
+                                             loka::app::scene::TextStoreRow *&fresh,
+                                             loka::app::scene::TextStoreReading &reading)
 {
+  using namespace loka::app::scene;
+  fresh = 0;
   if (loka::app::testing::consumeTextStoreCreationFailure())
-    return false;
+    return TEXT_STORE_REFUSED_ALLOCATION;
   NullTextStore *row = new (std::nothrow) NullTextStore(this->textStores_, *this);
   if (!row)
-    return false;
-  registration.connectStore(*row);
-  return true;
+    return TEXT_STORE_REFUSED_ALLOCATION;
+  const TextStoreBirth failure = loka::app::testing::consumeTextStoreBirthFailure();
+  if (failure != TEXT_STORE_BORN)
+  {
+    row->retire();
+    return failure;
+  }
+  // Null has no attached native views. Page 4 rails must transfer views here,
+  // before selection and construction marks are finalized, without allocation.
+  (void)old;
+  reading = row->build(source);
+  fresh = row;
+  return TEXT_STORE_BORN;
 }

@@ -107,7 +107,20 @@ var LokaWebText = (() => {
         if (!Number.isFinite(metrics.fontBoundingBoxAscent) || !Number.isFinite(metrics.fontBoundingBoxDescent))
           return refuse('canvas');
         const environments = new Map();
+        const fontMetrics = new Map();
         return Object.freeze({canvas, ctx, lang,
+          /** Cost: metrics query once; one own font-key lookup, canvas probe only on a miss. */
+          metrics(key) {
+            if (ctx.isContextLost()) return null;
+            if (fontMetrics.has(key)) return fontMetrics.get(key);
+            this.environment(key).applyToCanvas(ctx);
+            const m=ctx.measureText('x'), a=m.fontBoundingBoxAscent, d=m.fontBoundingBoxDescent;
+            if (!Number.isFinite(a) || !Number.isFinite(d) || a<0 || d<0) return null;
+            const ascent=Math.ceil(a), descent=Math.ceil(d), height=ascent+descent;
+            if (height<1 || height>32767) return null;
+            const value=Object.freeze({ascent,descent});
+            fontMetrics.set(key,value); return value;
+          },
           /** Cost: style caller once per render; one lookup in this service's <=48 Env rows. */
           environment(key) {
             if (!Number.isInteger(key) || key < 0 || key >= LokaWebStyle.sizes.length * 8)

@@ -1,4 +1,12 @@
 #include "TextDocumentKernelTests.hpp"
+#include "support/TextStoreConformance.hpp"
+#include "support/BlobAllocationProbe.hpp"
+#include "app/TextDocumentFile.hpp"
+#include "core/State.hpp"
+#ifdef __linux__
+#include <unistd.h>
+#endif
+#include <climits>
 #include "support/TextDocumentAccess.hpp"
 #include "testing/app/TextPositionTestAccess.hpp"
 #include "support/WindowAdmissionTestApp.hpp"
@@ -28,6 +36,34 @@ namespace
   {
   public:
     TextDocument text;
+    struct Saved
+    {
+      loka::file::File file;
+      unsigned long revision;
+      Saved()
+          : revision(0)
+      {
+      }
+    } saved_;
+    loka::file::File destination() const
+    {
+      const TextDocumentOrigin &origin = this->text.fact()->get().origin();
+      if (this->saved_.revision >= origin.revision())
+        return this->saved_.file;
+      loka::file::File result;
+      origin.querySource(result);
+      return result;
+    }
+    bool dirty() const
+    {
+      const TextDocumentFact &fact = this->text.fact()->get();
+      return fact.textRevision() != std::max(this->saved_.revision, fact.origin().revision());
+    }
+    void saved(const loka::file::File &file)
+    {
+      this->saved_.file = file;
+      this->saved_.revision = this->text.fact()->get().textRevision();
+    }
     explicit Root(const BoundaryPropsFor<Root> &p)
         : BoundaryNodeFor<Root>(p)
     {
@@ -74,10 +110,11 @@ namespace
           refuseApply(false)
     {
     }
-    virtual bool createTextStore(TextDocumentRegistration &registration)
+    virtual TextStoreBirth
+    createTextStore(TextStoreSource &source, TextStoreRow *old, TextStoreRow *&fresh, TextStoreReading &reading)
     {
       ++this->creates;
-      return NullScenePlatformController::createTextStore(registration);
+      return NullScenePlatformController::createTextStore(source, old, fresh, reading);
     }
     virtual bool readTextStore(TextStoreRow &row, TextStoreReading &out)
     {
@@ -746,11 +783,12 @@ namespace
           result(TEXT_INPUT_SETTLED)
     {
     }
-    virtual bool createTextStore(TextDocumentRegistration &registration)
+    virtual TextStoreBirth
+    createTextStore(TextStoreSource &source, TextStoreRow *old, TextStoreRow *&fresh, TextStoreReading &reading)
     {
       if (this->app)
         this->result = this->app->commitTextInput();
-      return Controller::createTextStore(registration);
+      return Controller::createTextStore(source, old, fresh, reading);
     }
   };
 } // namespace
@@ -951,4 +989,536 @@ void testTextPublicationContinuesAfterWithdrawal()
     }
     LOKA_VERIFY(first.calls == 1 && second.calls == 1);
   }
+}
+
+namespace
+{
+  TextReplacement bodyReplacement(const std::string &body, TextPlacement placement = TextPlacement::Start())
+  {
+    loka::core::resource::Blob bytes = loka::core::resource::Blob::Create();
+    LOKA_VERIFY(bytes.tryAssign(reinterpret_cast<const unsigned char *>(body.data()), body.size()));
+    bytes.sealBytes();
+    TextReplacement replacement;
+    LOKA_VERIFY(TextReplacement::FromUtf8(bytes, placement, replacement) == TEXT_DOCUMENT_OK);
+    return replacement;
+  }
+  class BirthController : public Controller
+  {
+  public:
+    TextStoreReading birthReading;
+    TextStoreRow *fresh;
+    bool refuseReads;
+    bool refuseAfterBirth;
+    BirthController()
+        : fresh(0),
+          refuseReads(false),
+          refuseAfterBirth(false)
+    {
+    }
+    virtual TextStoreBirth
+    createTextStore(TextStoreSource &source, TextStoreRow *old, TextStoreRow *&out, TextStoreReading &reading)
+    {
+      const TextStoreBirth result = Controller::createTextStore(source, old, out, reading);
+      if (result == TEXT_STORE_BORN)
+      {
+        this->fresh = out;
+        this->birthReading = reading;
+        if (old && this->refuseAfterBirth)
+          this->refuseReads = true;
+      }
+      return result;
+    }
+    virtual bool readTextStore(TextStoreRow &row, TextStoreReading &out)
+    {
+      return !this->refuseReads && Controller::readTextStore(row, out);
+    }
+  };
+  struct BirthFixture
+  {
+    BirthController controller;
+    NullPlatformContext context;
+    TestWindow window;
+    TextTestApp app;
+    BirthFixture()
+        : window(&context, props(), &controller),
+          app(window)
+    {
+      app.flush();
+      app.reconcileAtCompletion();
+    }
+    TextDocument &text()
+    {
+      return static_cast<Root *>(SceneAccess::rootBoundary(*window.scene()))->text;
+    }
+  };
+  struct ReplyObserver
+  {
+    TextDocument &document;
+    unsigned calls;
+    unsigned long expectedRevision;
+    explicit ReplyObserver(TextDocument &doc, unsigned long revision)
+        : document(doc),
+          calls(0),
+          expectedRevision(revision)
+    {
+    }
+    static void run(void *data)
+    {
+      ReplyObserver &self = *static_cast<ReplyObserver *>(data);
+      ++self.calls;
+      LOKA_VERIFY(self.document.fact()->get().textRevision() == self.expectedRevision);
+      LOKA_VERIFY(self.document.replace(TextReplacement::Empty()) == POST_QUEUE_FULL);
+    }
+  };
+  void replacementBirthPins()
+  {
+    BlobAllocationProbe allocation;
+    BirthFixture f;
+    TextDocument &doc = f.text();
+    TextStoreRow *old = TextDocumentAccess::store(doc);
+    unsigned replies = 0;
+    doc.replaceReply()->bind(&count, &replies, false);
+    const int baseline = allocation.live;
+    {
+      const TextReplacement replacement = bodyReplacement("abc", TextPlacement::End());
+      doc.post(doc.fact()->get().caret());
+      checkTextStoreConformance(f.controller, f.app, doc, *old, replacement, 3, 3);
+      LOKA_VERIFY(f.controller.applies == 0);
+      f.controller.drainNativeRetirements();
+      LOKA_VERIFY(TextStoreTestAccess::retiredCount(*f.controller.fresh) == 0);
+      LOKA_VERIFY(!TextStoreTestAccess::retired(*f.controller.fresh));
+    }
+    LOKA_VERIFY(allocation.live == baseline && allocation.byteFrees == 1);
+    LOKA_VERIFY(replies == 1 && doc.replaceReply()->get().kind() == Reply<TextReplacement>::GRANTED);
+    LOKA_VERIFY(doc.fact()->get().textRevision() == 1);
+    TextPosition start, end;
+    LOKA_VERIFY(doc.fact()->get().queryChangedRange(start, end));
+    LOKA_VERIFY(start == TextPositionTestAccess::make(1, 0) && end == TextPositionTestAccess::make(1, 3));
+    TextReader reader(doc);
+    doc.post(doc.fact()->get().caret());
+    TextDocumentAccess::edit(doc, TextChangedRange(0, 0, 2));
+    f.controller.refuseAfterBirth = true;
+    LOKA_VERIFY(doc.replace(bodyReplacement("hello", TextPlacement::AtUtf8Offset(2))) == POST_ACCEPTED);
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(doc.fact()->get().textRevision() == 2 && f.controller.applies == 0);
+    LOKA_VERIFY(doc.fact()->get().caret() == TextPositionTestAccess::make(2, 2));
+    LOKA_VERIFY(!TextDocumentAccess::pending(doc));
+    char scratch[4];
+    unsigned long n = 0;
+    LOKA_VERIFY(reader.read(scratch, sizeof scratch, n) == TEXT_READ_REFUSED);
+    f.controller.refuseReads = false;
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(doc.fact()->get().textRevision() == 2);
+    doc.replaceReply()->unbind(&count, &replies);
+  }
+  void replacementRefusalPins()
+  {
+    Fixture f;
+    TextDocument &doc = f.text();
+    LOKA_VERIFY(doc.replace(bodyReplacement("body")) == POST_ACCEPTED);
+    f.app.reconcileAtCompletion();
+    TextStoreRow *old = TextDocumentAccess::store(doc);
+    const TextDocumentOrigin origin = doc.fact()->get().origin();
+    const TextStoreBirth births[] = {TEXT_STORE_REFUSED_ALLOCATION,
+                                     TEXT_STORE_REFUSED_NOT_REPRESENTABLE,
+                                     TEXT_STORE_REFUSED_CAPACITY,
+                                     TEXT_STORE_REFUSED_UNSUPPORTED};
+    const TextReplaceResult reasons[] = {
+        TEXT_REPLACE_ALLOCATION, TEXT_REPLACE_NOT_REPRESENTABLE, TEXT_REPLACE_CAPACITY, TEXT_REPLACE_UNAVAILABLE};
+    unsigned replies = 0;
+    doc.replaceReply()->bind(&count, &replies, false);
+    for (unsigned i = 0; i < 4; ++i)
+    {
+      failTextStoreBirths(births[i], 2);
+      for (unsigned repeat = 0; repeat < 2; ++repeat)
+      {
+        const unsigned retired = TextStoreTestAccess::retiredCount(*old);
+        LOKA_VERIFY(doc.replace(TextReplacement::Empty()) == POST_ACCEPTED);
+        f.app.reconcileAtCompletion();
+        LOKA_VERIFY(doc.replaceReply()->get().kind() == Reply<TextReplacement>::REFUSED);
+        LOKA_VERIFY(doc.replaceReply()->get().reason() == reasons[i]);
+        LOKA_VERIFY(doc.fact()->get().origin() == origin);
+        LOKA_VERIFY(TextDocumentAccess::store(doc) == old && TextDocumentAccess::committedText(doc) == "body");
+        LOKA_VERIFY(!TextStoreTestAccess::retired(*old));
+        LOKA_VERIFY(TextStoreTestAccess::retiredCount(*old) == retired + 1);
+      }
+    }
+    LOKA_VERIFY(replies == 8);
+    f.controller.drainNativeRetirements();
+    LOKA_VERIFY(TextStoreTestAccess::retiredCount(*old) == 0);
+    doc.replaceReply()->unbind(&count, &replies);
+    for (unsigned edit = 0; edit < 2; ++edit)
+    {
+      doc.post(TextPositionTestAccess::make(1, 2));
+      if (edit)
+        TextDocumentAccess::edit(doc, TextChangedRange(0, 0, 1));
+      failTextStoreBirths(TEXT_STORE_REFUSED_ALLOCATION, 1);
+      LOKA_VERIFY(doc.replace(TextReplacement::Empty()) == POST_ACCEPTED);
+      f.app.reconcileAtCompletion();
+      LOKA_VERIFY(doc.fact()->get().textRevision() == 1 + edit);
+      LOKA_VERIFY(f.controller.applies == 1 && !TextDocumentAccess::pending(doc));
+    }
+    LOKA_VERIFY(doc.fact()->get().origin() == origin);
+    BirthFixture unreadable;
+    unreadable.controller.refuseReads = true;
+    LOKA_VERIFY(unreadable.text().replace(TextReplacement::Empty()) == POST_ACCEPTED);
+    unreadable.app.reconcileAtCompletion();
+    LOKA_VERIFY(unreadable.text().replaceReply()->get().reason() == TEXT_REPLACE_UNAVAILABLE);
+    failTextStoreCreations(1);
+    Fixture refused;
+    LOKA_VERIFY(refused.text().replace(TextReplacement::Empty()) == POST_ACCEPTED);
+    refused.app.reconcileAtCompletion();
+    LOKA_VERIFY(refused.text().replaceReply()->get().reason() == TEXT_REPLACE_UNAVAILABLE);
+    LOKA_VERIFY(refused.controller.creates == 1);
+  }
+  void replacementAdmissionPins()
+  {
+    Fixture f;
+    TextDocument &doc = f.text();
+    TextDocument undeclared;
+    LOKA_VERIFY(undeclared.replace(TextReplacement::Empty()) == POST_INVALID);
+    LOKA_VERIFY(doc.replace(TextReplacement()) == POST_INVALID);
+    LOKA_VERIFY(doc.replace(bodyReplacement("first")) == POST_ACCEPTED);
+    LOKA_VERIFY(doc.replace(TextReplacement::Empty()) == POST_QUEUE_FULL);
+    ReplyObserver observer(doc, 1);
+    doc.fact()->bind(&ReplyObserver::run, &observer, false);
+    doc.replaceReply()->bind(&ReplyObserver::run, &observer, false);
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(observer.calls == 2 && TextDocumentAccess::committedText(doc) == "first");
+    doc.fact()->unbind(&ReplyObserver::run, &observer);
+    doc.replaceReply()->unbind(&ReplyObserver::run, &observer);
+    doc.post(doc.fact()->get().caret());
+    TextDocumentAccess::uncommitted(doc, "marked");
+    LOKA_VERIFY(doc.replace(TextReplacement::Empty()) == POST_ACCEPTED);
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(doc.replaceReply()->get().reason() == TEXT_REPLACE_COMPOSING);
+    LOKA_VERIFY(TextDocumentAccess::pending(doc));
+    LOKA_VERIFY(doc.replace(TextReplacement::Empty()) == POST_ACCEPTED);
+    unsigned replies = 0;
+    doc.replaceReply()->bind(&count, &replies, false);
+    LOKA_VERIFY(f.app.commitTextInput() == TEXT_INPUT_SETTLED);
+    LOKA_VERIFY(f.app.commitTextInput() == TEXT_INPUT_SETTLED);
+    LOKA_VERIFY(replies == 0 && doc.replace(TextReplacement::Empty()) == POST_QUEUE_FULL);
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(replies == 1 && doc.replaceReply()->get().kind() == Reply<TextReplacement>::GRANTED);
+    doc.replaceReply()->unbind(&count, &replies);
+  }
+  void replacementPlacementPins()
+  {
+    const std::string bodies[] = {"",
+                                  "abc",
+                                  "a\xf0\x9f\x98\x80z",
+                                  "a\r\nb\r\r\nc",
+                                  "\xe2\x80\xa8\xe2\x80\xa9\xc2\x85",
+                                  std::string(255, 'x') + "\xf0\x9f\x98\x80"};
+    for (unsigned b = 0; b < sizeof bodies / sizeof *bodies; ++b)
+    {
+      const TextReplacement measured = bodyReplacement(bodies[b]);
+      const unsigned long offsets[] = {0, 2, measured.logicalLength() + 1, ULONG_MAX, 257};
+      for (unsigned i = 0; i < 7; ++i)
+      {
+        Fixture f;
+        TextDocument &doc = f.text();
+        const TextPlacement requested = i == 5   ? TextPlacement::Start()
+                                        : i == 6 ? TextPlacement::End()
+                                                 : TextPlacement::AtUtf8Offset(offsets[i]);
+        const TextReplacement replacement = bodyReplacement(bodies[b], requested);
+        TextStoreSource source(replacement);
+        unsigned int scalar;
+        bool separator;
+        while (source.next(scalar, separator))
+        {
+        }
+        const TextPlacement applied = source.appliedPlacement();
+        LOKA_VERIFY(doc.replace(replacement) == POST_ACCEPTED);
+        f.app.reconcileAtCompletion();
+        const Reply<TextReplacement> &reply = doc.replaceReply()->get();
+        LOKA_VERIFY(reply.kind()
+                    == (source.clamped() ? Reply<TextReplacement>::CLAMPED : Reply<TextReplacement>::GRANTED));
+        LOKA_VERIFY(reply.applied().placement() == applied);
+        unsigned long offset = ULONG_MAX;
+        LOKA_VERIFY(doc.queryUtf8Offset(doc.fact()->get().caret(), offset));
+        LOKA_VERIFY(offset == (i == 5 ? 0 : i == 6 ? replacement.logicalLength() : applied.utf8Offset()));
+        LOKA_VERIFY(doc.fact()->get().origin().revision() == 1);
+        loka::file::File absent;
+        LOKA_VERIFY(!doc.fact()->get().origin().querySource(absent));
+      }
+    }
+  }
+  void replacementExhaustionPins()
+  {
+    Fixture f;
+    startTextDocumentRevision(f.text(), ULONG_MAX - 1);
+    LOKA_VERIFY(f.text().fact()->get().textRevision() == ULONG_MAX - 1);
+    LOKA_VERIFY(f.text().replace(TextReplacement::Empty()) == POST_ACCEPTED);
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(f.text().fact()->get().textRevision() == ULONG_MAX);
+#if defined(__linux__) && defined(LOKA_LIFECYCLE_AUDIT) && !defined(NDEBUG) && !defined(__SANITIZE_ADDRESS__)
+    const pid_t child = fork();
+    LOKA_VERIFY(child >= 0);
+    if (!child)
+    {
+      LOKA_VERIFY(f.text().replace(TextReplacement::Empty()) == POST_ACCEPTED);
+      f.app.reconcileAtCompletion();
+      _exit(0);
+    }
+    int status = 0;
+    LOKA_VERIFY(waitpid(child, &status, 0) == child);
+    LOKA_VERIFY(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
+#else
+    std::puts("[skip] revision exhaustion death pin needs Linux fork, lifecycle audit, asserts and no ASan.");
+#endif
+  }
+} // namespace
+
+namespace
+{
+  TextDocument *awaitedDocument = 0;
+  Scene *awaitedScene = 0;
+  class AwaitRoot : public BoundaryNodeFor<AwaitRoot>
+  {
+  public:
+    TextDocument text;
+    explicit AwaitRoot(const BoundaryPropsFor<AwaitRoot> &p)
+        : BoundaryNodeFor<AwaitRoot>(p)
+    {
+      this->document(this->text);
+      awaitedDocument = &this->text;
+    }
+    virtual void attachNode(NodeComposition &)
+    {
+      awaitedScene = this->scene();
+    }
+    virtual void composeNode(NodeComposition &) {}
+  };
+  class AwaitController : public Controller
+  {
+  public:
+    virtual TextStoreBirth
+    createTextStore(TextStoreSource &source, TextStoreRow *old, TextStoreRow *&fresh, TextStoreReading &reading)
+    {
+      if (!old)
+      {
+        LOKA_VERIFY(awaitedDocument->replace(bodyReplacement("awaited")) == POST_ACCEPTED);
+        TextDocumentAccess::complete(awaitedScene->textDocuments(), *this);
+        LOKA_VERIFY(awaitedDocument->replaceReply()->get().kind() == Reply<TextReplacement>::NO_REPLY);
+        LOKA_VERIFY(awaitedDocument->replace(TextReplacement::Empty()) == POST_QUEUE_FULL);
+        LOKA_VERIFY(awaitedDocument->fact()->get().state() == TEXT_DOCUMENT_AWAITING_STORE);
+      }
+      return Controller::createTextStore(source, old, fresh, reading);
+    }
+  };
+  void replacementAwaitedPin()
+  {
+    AwaitController controller;
+    NullPlatformContext context;
+    WindowProps p;
+    p.scene(new Scene(Boundary<AwaitRoot>()));
+    TestWindow window(&context, p, &controller);
+    TextTestApp app(window);
+    app.flush();
+    app.reconcileAtCompletion();
+    LOKA_VERIFY(awaitedDocument->replaceReply()->get().kind() == Reply<TextReplacement>::GRANTED);
+    LOKA_VERIFY(TextDocumentAccess::committedText(*awaitedDocument) == "awaited");
+    LOKA_VERIFY(controller.creates == 2);
+    awaitedDocument = 0;
+    awaitedScene = 0;
+  }
+  void replacementCancellationPins()
+  {
+    for (unsigned event = 0; event < 3; ++event)
+    {
+      unsigned replies = 0;
+      Fixture f;
+      TextDocument &doc = f.text();
+      LOKA_VERIFY(doc.replace(bodyReplacement("kept before cancellation")) == POST_ACCEPTED);
+      f.app.reconcileAtCompletion();
+      loka::core::State<Reply<TextReplacement> > *reply = doc.replaceReply();
+      reply->bind(&count, &replies, false);
+      LOKA_VERIFY(doc.replace(bodyReplacement("cancel")) == POST_ACCEPTED);
+      if (event == 0)
+      {
+        const TextDocumentOrigin origin = doc.fact()->get().origin();
+        TextDocumentAccess::withdraw(doc);
+        LOKA_VERIFY(doc.replace(TextReplacement::Empty()) == POST_INVALID);
+        f.app.reconcileAtCompletion();
+        LOKA_VERIFY(doc.fact()->get().origin() == origin);
+        reply->unbind(&count, &replies);
+      }
+      else if (event == 1)
+      {
+        doc.~TextDocument();
+        f.app.reconcileAtCompletion();
+        reply->unbind(&count, &replies);
+        new (&doc) TextDocument();
+      }
+      else
+      {
+        Scene *candidate = new Scene(Boundary<Root>());
+        LOKA_VERIFY(f.window.sceneManager()->commitTransaction(0, candidate));
+        f.app.flush();
+        f.app.reconcileAtCompletion();
+        LOKA_VERIFY(f.window.scene() == candidate);
+      }
+      LOKA_VERIFY(replies == 0);
+    }
+  }
+#ifdef __linux__
+  struct ReplacementFile
+  {
+    std::string path;
+    loka::file::File file;
+    ReplacementFile()
+    {
+      char pattern[] = "/tmp/loka-replacement-XXXXXX";
+      int fd = mkstemp(pattern);
+      LOKA_VERIFY(fd >= 0);
+      LOKA_VERIFY(write(fd, "body", 4) == 4);
+      LOKA_VERIFY(close(fd) == 0);
+      this->path = pattern;
+      this->file = loka::file::File(loka::core::String(this->path));
+    }
+    ~ReplacementFile()
+    {
+      std::remove(this->path.c_str());
+    }
+    TextReplacement read(PlatformContext &context) const
+    {
+      TextReplacement result;
+      LOKA_VERIFY(ReadTextReplacement(context, this->file, TextPlacement::Start(), result) == TEXT_DOCUMENT_OK);
+      return result;
+    }
+  };
+  struct OriginChoice : loka::core::DerivedState<TextDocumentOrigin>::EvalFn
+  {
+    loka::core::State<bool> &choose;
+    TextDocument &a, &b;
+    OriginChoice(loka::core::State<bool> &c, TextDocument &left, TextDocument &right)
+        : choose(c),
+          a(left),
+          b(right)
+    {
+    }
+    virtual TextDocumentOrigin operator()()
+    {
+      return (choose.get() ? b : a).fact()->get().origin();
+    }
+  };
+  struct DeferredOpen
+  {
+    loka::core::PushStateTracker tracker;
+    Root &root;
+    TextReplacement next;
+    loka::file::File expected;
+    unsigned posts, replies;
+    DeferredOpen(Root &r, const TextReplacement &replacement, const loka::file::File &file)
+        : root(r),
+          next(replacement),
+          expected(file),
+          posts(0),
+          replies(0)
+    {
+    }
+    static void queuePost(void *data)
+    {
+      DeferredOpen &self = *static_cast<DeferredOpen *>(data);
+      loka::core::StateTrackerGuard guard(&self.tracker);
+      loka::core::testing::PushStateTrackerTestAccess::defer(self.tracker, &post, data);
+    }
+    static void queueReply(void *data)
+    {
+      DeferredOpen &self = *static_cast<DeferredOpen *>(data);
+      loka::core::StateTrackerGuard guard(&self.tracker);
+      loka::core::testing::PushStateTrackerTestAccess::defer(self.tracker, &reply, data);
+    }
+    static void post(void *data)
+    {
+      DeferredOpen &self = *static_cast<DeferredOpen *>(data);
+      if (self.posts)
+        return;
+      ++self.posts;
+      LOKA_VERIFY(self.root.text.replace(self.next) == POST_ACCEPTED);
+      LOKA_VERIFY(self.root.destination().sharesRepresentation(self.expected));
+    }
+    static void reply(void *data)
+    {
+      DeferredOpen &self = *static_cast<DeferredOpen *>(data);
+      ++self.replies;
+      LOKA_VERIFY(self.posts == 1);
+      LOKA_VERIFY(self.root.destination().sharesRepresentation(self.expected));
+    }
+  };
+  void replacementOriginPins()
+  {
+    ReplacementFile a, b, c;
+    Fixture f, other;
+    LOKA_VERIFY(f.text().replace(a.read(f.context)) == POST_ACCEPTED);
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(f.root().destination().sharesRepresentation(a.file) && !f.root().dirty());
+    LOKA_VERIFY(other.text().replace(b.read(other.context)) == POST_ACCEPTED);
+    other.app.reconcileAtCompletion();
+    LOKA_VERIFY(f.text().fact()->get().origin() != other.text().fact()->get().origin());
+    loka::core::MutableState<bool> choose(false);
+    loka::core::DerivedState<TextDocumentOrigin> selected(&choose, new OriginChoice(choose, f.text(), other.text()));
+    unsigned selections = 0;
+    selected.bind(&count, &selections, false);
+    loka::core::PushStateTracker tracker;
+    tracker.addState(&choose);
+    tracker.addState(&selected);
+    tracker.begin();
+    choose.set(true);
+    tracker.end();
+    loka::file::File selectedFile;
+    LOKA_VERIFY(selected.get().querySource(selectedFile));
+    LOKA_VERIFY(selectedFile.sharesRepresentation(b.file) && selections == 1);
+    selected.unbind(&count, &selections);
+    const TextDocumentOrigin initial = f.text().fact()->get().origin();
+    TextDocumentAccess::edit(f.text(), TextChangedRange(0, 0, 1));
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(f.root().dirty() && f.text().fact()->get().origin() == initial);
+    f.root().saved(b.file);
+    LOKA_VERIFY(f.root().destination().sharesRepresentation(b.file) && !f.root().dirty());
+    LOKA_VERIFY(f.text().replace(c.read(f.context)) == POST_ACCEPTED);
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(f.root().destination().sharesRepresentation(c.file) && !f.root().dirty());
+    for (unsigned refuse = 0; refuse < 2; ++refuse)
+    {
+      Fixture ordering;
+      DeferredOpen observer(ordering.root(), b.read(ordering.context), a.file);
+      ordering.text().fact()->bind(&DeferredOpen::queuePost, &observer, false);
+      ordering.text().replaceReply()->bind(&DeferredOpen::queueReply, &observer, false);
+      {
+        // A native command turn settles deferred observers after publication.
+        loka::core::Operation turn;
+        LOKA_VERIFY(ordering.text().replace(a.read(ordering.context)) == POST_ACCEPTED);
+        ordering.app.reconcileAtCompletion();
+        turn.close();
+      }
+      LOKA_VERIFY(observer.posts == 1 && observer.replies == 1);
+      LOKA_VERIFY(ordering.root().destination().sharesRepresentation(a.file));
+      if (refuse)
+        failTextStoreBirths(TEXT_STORE_REFUSED_ALLOCATION, 1);
+      ordering.text().fact()->unbind(&DeferredOpen::queuePost, &observer);
+      ordering.text().replaceReply()->unbind(&DeferredOpen::queueReply, &observer);
+      ordering.app.reconcileAtCompletion();
+      LOKA_VERIFY(ordering.root().destination().sharesRepresentation(refuse ? a.file : b.file));
+    }
+  }
+#else
+  void replacementOriginPins()
+  {
+    std::puts("[skip] replacement file integration uses generic Linux IO.");
+  }
+#endif
+} // namespace
+void testTextWholeReplacementContracts()
+{
+  replacementBirthPins();
+  replacementRefusalPins();
+  replacementAdmissionPins();
+  replacementPlacementPins();
+  replacementExhaustionPins();
+  replacementCancellationPins();
+  replacementAwaitedPin();
+  replacementOriginPins();
 }

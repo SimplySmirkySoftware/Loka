@@ -172,7 +172,10 @@ public:
     out = row ? row->context() : 0;
     return true;
   }
-  virtual bool createTextStore(loka::app::scene::TextDocumentRegistration &registration);
+  virtual loka::app::scene::TextStoreBirth createTextStore(loka::app::TextStoreSource &source,
+                                                           loka::app::scene::TextStoreRow *old,
+                                                           loka::app::scene::TextStoreRow *&fresh,
+                                                           loka::app::scene::TextStoreReading &reading);
   virtual void commitMarkedText(loka::app::scene::TextStoreRow &row)
   {
     static_cast<NullTextStore &>(row).commit();

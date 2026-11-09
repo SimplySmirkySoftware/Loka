@@ -65,6 +65,10 @@ addToLibrary({
         root.element.appendChild(element);
         if (kind === 2) {
           element.type = 'button';
+          const g=LokaWebStyle.webButtonGeometry;
+          Object.assign(element.style,{appearance:'none',boxSizing:'border-box',
+            padding:g.insetY+'px '+g.insetX+'px',border:g.border+'px solid',
+            margin:'0',minWidth:'0',minHeight:'0',whiteSpace:'pre',overflow:'hidden'});
           row.listener = () => Module['web'].click(token);
           element.addEventListener('click', row.listener);
         }
@@ -85,8 +89,54 @@ addToLibrary({
     const row=WebDOM.row(token); if(!row) return;
     Object.assign(row.element.style,{left:x+'px',top:y+'px',width:w+'px',height:h+'px'});
   },
-  web_set_text__deps:['$WebDOM','$UTF8ToString'],
-  web_set_text(token,bytes,length) { const row=WebDOM.row(token); if(row) row.element.textContent=UTF8ToString(bytes,length); },
+  web_set_projected__deps:['$WebDOM'],
+  /** Cost: render once per visit, writes one owned element. */
+  web_set_projected(token,projected) { const row=WebDOM.row(token); if(row) row.element.style.visibility=projected ? 'visible' : 'hidden'; },
+  web_set_text__deps:['$WebDOM'],
+  web_set_text(token,bytes,length) { const row=WebDOM.row(token); if(row) row.element.textContent=new TextDecoder('utf-8',{ignoreBOM:true}).decode(HEAPU8.subarray(bytes>>>0,(bytes>>>0)+length)); },
+  web_set_line_height__deps:['$WebDOM'],
+  /** Cost: render once per visit, one element write after font. */
+  web_set_line_height(token,height) { const row=WebDOM.row(token); if(row) row.element.style.lineHeight=height+'px'; },
+  web_set_block__deps:['$WebDOM'],
+  /** Cost: render once per visit, three properties of its own element. */
+  web_set_block(token,align,truncation) {
+    const row=WebDOM.row(token); if(!row) return;
+    Object.assign(row.element.style,{textAlign:['left','center','right'][align],
+      textOverflow:truncation===LokaWebStyle.truncation.ELLIPSIS?'ellipsis':'clip',overflow:'hidden'});
+  },
+  web_measure__deps:['$WebDOM'],
+  /** Cost: range miss or natural query once; exact borrowed bytes, one canvas measure. */
+  web_measure(descriptor,ptr,len,out) {
+    const status=LokaWebStyle.webMeasureStatus;
+    try {
+      const d=LokaWebStyle.decodeTextDescriptor(HEAP32,descriptor>>>0,LokaWebStyle.wire.count);
+      if(!d) return status.PROTOCOL;
+      const service=WebDOM.text;
+      if(!service || service.ctx.isContextLost()) return status.REFUSED;
+      ptr>>>=0; len>>>=0;
+      if(ptr>HEAPU8.length || len>HEAPU8.length-ptr) return status.PROTOCOL;
+      service.environment(LokaWebStyle.fontKey(d)).applyToCanvas(service.ctx);
+      const raw=service.ctx.measureText(new TextDecoder('utf-8',{ignoreBOM:true}).decode(HEAPU8.subarray(ptr,ptr+len))).width;
+      const width=Math.ceil(raw);
+      if(!Number.isFinite(raw) || raw<0 || width>2147483647) return status.REFUSED;
+      HEAP32[out>>2]=width; return status.OK;
+    } catch (_) { return status.REFUSED; }
+  },
+  web_metrics__deps:['$WebDOM'],
+  /** Cost: build/query once; service memo measures at most once per font key. */
+  web_metrics(descriptor,ascent,descent) {
+    const status=LokaWebStyle.webMeasureStatus;
+    try {
+      const d=LokaWebStyle.decodeTextDescriptor(HEAP32,descriptor>>>0,LokaWebStyle.wire.count);
+      if(!d) return status.PROTOCOL;
+      const service=WebDOM.text;
+      if(!service || service.ctx.isContextLost()) return status.REFUSED;
+      const metrics=service.metrics(LokaWebStyle.fontKey(d));
+      if(!metrics) return status.REFUSED;
+      HEAP32[ascent>>2]=metrics.ascent; HEAP32[descent>>2]=metrics.descent;
+      return status.OK;
+    } catch (_) { return status.REFUSED; }
+  },
   web_text_admit__deps:['$WebDOM'],
   /** Cost: session start once; publish only a fully admitted private service. */
   web_text_admit(fingerprint,count) {

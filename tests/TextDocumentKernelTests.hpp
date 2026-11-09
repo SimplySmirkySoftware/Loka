@@ -26,4 +26,5 @@ void testTextCommitReplacesOtherScene();
 void testTextCommitSettlesBeforeQuitReservation();
 void testTextCommitObservationHook();
 void testTextPublicationContinuesAfterWithdrawal();
+void testTextWholeReplacementContracts();
 #endif
