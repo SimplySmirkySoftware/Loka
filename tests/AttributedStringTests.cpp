@@ -3,6 +3,7 @@
 // Include State first to pin equality lookup without an app include in core.
 #include "core/State.hpp"
 #include "app/style/AttributedString.hpp"
+#include "app/style/AttributedTextRead.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 #include "platform/String.hpp"
 #include "core/StringAccess.hpp"
@@ -607,4 +608,319 @@ void testAttributedStringStyleBoundaries()
   const AttributedString left = Styled("ab", Bold) + Styled("cd", Bold);
   const AttributedString right = Styled("a", Bold) + Styled("", Italic) + Styled("bcd", Bold);
   LOKA_VERIFY(left.compare(right) == 0);
+}
+
+namespace
+{
+  loka::core::String refusedText(int &calls)
+  {
+    return loka::core::String::FromPlatform(
+        loka::core::Managed<loka::platform::String>::Wrap(new RefusedString(&calls)));
+  }
+
+  class SwitchingString : public CollectedString
+  {
+  public:
+    SwitchingString(const std::string &bytes, int *calls, const bool *readable)
+        : CollectedString(bytes, calls),
+          readable_(readable)
+    {
+    }
+    virtual bool appendUtf8(std::string &out) const
+    {
+      return *this->readable_ && CollectedString::appendUtf8(out);
+    }
+
+  private:
+    const bool *readable_;
+  };
+} // namespace
+
+void testAttributedStringLinkTargets()
+{
+  using namespace loka::app;
+  using loka::core::String;
+  int calls = 0;
+  const LinkTarget none;
+  const LinkTarget empty(String(""));
+  LOKA_VERIFY(none.isNone());
+  LOKA_VERIFY(LinkTarget(String()).isNone());
+  LOKA_VERIFY(empty.isNone());
+  LOKA_VERIFY(none == empty);
+  LOKA_VERIFY(none.startsWith(""));
+  LOKA_VERIFY(!none.startsWith("a"));
+  LOKA_VERIFY(!none.startsWith(0));
+  const LinkTarget refused(refusedText(calls));
+  const LinkTarget otherRefused(refusedText(calls));
+  LOKA_VERIFY(!refused.isNone());
+  LOKA_VERIFY(refused != otherRefused);
+  LOKA_VERIFY(refused != none);
+  LOKA_VERIFY(refused == LinkTarget(refused));
+  LOKA_VERIFY(!refused.startsWith(""));
+  LOKA_VERIFY(!refused.startsWith("a"));
+  const std::string bytes = std::string("#") + std::string(2048, 'x') + std::string("\0\200", 2);
+  for (int left = 0; left < 2; ++left)
+  {
+    const LinkTarget a(countedString(bytes, left != 0, calls));
+    const LinkTarget zero(countedString("", left != 0, calls));
+    LOKA_VERIFY(zero.isNone());
+    LOKA_VERIFY(zero == none);
+    LOKA_VERIFY(zero.startsWith(""));
+    LOKA_VERIFY(!a.isNone());
+    LOKA_VERIFY(a.startsWith("#xxx"));
+    LOKA_VERIFY(LinkTarget(countedString(std::string("\200x", 2), left != 0, calls)).startsWith("\200"));
+    LOKA_VERIFY(!a.startsWith("#xxy"));
+    LOKA_VERIFY(!a.startsWith(0));
+    for (int right = 0; right < 2; ++right)
+    {
+      const LinkTarget b(countedString(bytes, right != 0, calls));
+      LOKA_VERIFY(a == b);
+      LOKA_VERIFY(a != LinkTarget(countedString(bytes + "z", right != 0, calls)));
+      LOKA_VERIFY(a != LinkTarget(countedString(bytes.substr(0, bytes.size() - 1) + "\177", right != 0, calls)));
+      const AttributedString x = Linked("a", Bold, a);
+      const AttributedString y = Linked("a", Bold, b);
+      LOKA_VERIFY(x == y);
+      LOKA_VERIFY(x.compare(Linked("a", Bold, LinkTarget(countedString(bytes + "z", right != 0, calls)))) < 0);
+      LOKA_VERIFY(
+          x.compare(Linked(
+              "a", Bold, LinkTarget(countedString(bytes.substr(0, bytes.size() - 1) + "\177", right != 0, calls))))
+          > 0);
+    }
+  }
+  bool readable = true;
+  const LinkTarget switching(String::FromPlatform(
+      loka::core::Managed<loka::platform::String>::Wrap(new SwitchingString("x", &calls, &readable))));
+  const LinkTarget x(String("x"));
+  LOKA_VERIFY(switching == x);
+  readable = false;
+  LOKA_VERIFY(switching != x);
+  LOKA_VERIFY(!switching.isNone());
+  readable = true;
+  LOKA_VERIFY(switching == x);
+
+  // Independently wrapped aliases must order by control block, not payload.
+  RefusedString payload(&calls);
+  const loka::core::Managed<loka::platform::String> h1 = loka::core::Managed<loka::platform::String>::Wrap(&payload, 0);
+  const loka::core::Managed<loka::platform::String> h2 = loka::core::Managed<loka::platform::String>::Wrap(&payload, 0);
+  const loka::core::Managed<loka::platform::String> noHandle;
+  LOKA_VERIFY(h1 != h2);
+  LOKA_VERIFY(h1.identityBefore(h2) != h2.identityBefore(h1));
+  LOKA_VERIFY(!h1.identityBefore(h1));
+  LOKA_VERIFY(noHandle.identityBefore(h1));
+  LOKA_VERIFY(!h1.identityBefore(noHandle));
+  LOKA_VERIFY(!noHandle.identityBefore(noHandle));
+  const AttributedString alias1 = Linked("a", Bold, LinkTarget(String::FromPlatform(h1)));
+  const AttributedString alias2 = Linked("a", Bold, LinkTarget(String::FromPlatform(h2)));
+  LOKA_VERIFY(alias1.compare(alias2) == -alias2.compare(alias1));
+}
+
+void testAttributedStringLinkConstruction()
+{
+  using namespace loka::app;
+  using loka::core::String;
+  const LinkTarget target(String("#target"));
+  const AttributedString a = Linked("a", Bold, target);
+  LOKA_VERIFY(a.segment(0).link == target);
+  LOKA_VERIFY(a.segment(0).style == Bold);
+  LOKA_VERIFY(Styled("a", Bold).segment(0).link.isNone());
+  LOKA_VERIFY(AttributedString::Segment().link.isNone());
+  const AttributedString joined = a + Linked(String("b"), Italic, target);
+  LOKA_VERIFY(joined.segment(0).link == target);
+  LOKA_VERIFY(joined.segment(1).link == target);
+  LOKA_VERIFY((Underline + joined).segment(0).link == target);
+  LOKA_VERIFY((joined + Underline).segment(1).link == target);
+  LOKA_VERIFY(Link == Underline + TextStyle().color(TEXT_COLOR_BLUE));
+  AttributedString::Builder mixed(1);
+  LOKA_VERIFY(mixed.appendLink(String("a"), Bold, target));
+  LOKA_VERIFY(mixed.append(String("b"), Bold));
+  const AttributedString mixedValue = mixed.build();
+  LOKA_VERIFY(mixedValue.segment(0).link == target);
+  LOKA_VERIFY(mixedValue.segment(1).link.isNone());
+  AttributedString::Builder builder(1);
+  for (int i = 0; i < 9; ++i)
+    LOKA_VERIFY(builder.appendLink(String("a"), Bold, target));
+  LOKA_VERIFY(builder.append(String("z"), Italic));
+  const AttributedString grown = builder.build();
+  for (std::size_t i = 0; i < 9; ++i)
+    LOKA_VERIFY(grown.segment(i).link == target);
+  LOKA_VERIFY(grown.segment(9).link.isNone());
+#if __cplusplus >= 201103L
+  static_assert((sizeof(void *) == 8 && sizeof(AttributedString::Segment) == 32)
+                    || (sizeof(void *) == 4 && sizeof(AttributedString::Segment) == 20),
+                "Segment size");
+#endif
+  LOKA_VERIFY((sizeof(void *) == 8 && sizeof(AttributedString::Segment) == 32)
+              || (sizeof(void *) == 4 && sizeof(AttributedString::Segment) == 20));
+}
+
+void testAttributedStringLinkRefusals()
+{
+  using namespace loka::app;
+  using namespace loka::core::testing;
+  const loka::core::String text("a");
+  const LinkTarget target(loka::core::String("#target"));
+  AllocationFailures failures;
+  const loka::core::LokaAllocationSite sites[] = {loka::core::LokaAllocationSite("AttributedString", "Segments"),
+                                                  loka::core::ManagedControlBlockSite()};
+  for (int site = 0; site < 2; ++site)
+  {
+    failLokaAllocRaw(sites[site].ownerTag, sites[site].typeTag, 1);
+    LOKA_VERIFY(!Linked(text, Bold, target).valid());
+    LOKA_VERIFY(lokaAllocRawLive() == 0);
+    failLokaAllocRaw("AttributedString", "Segments", 0);
+    {
+      AttributedString::Builder builder(1);
+      LOKA_VERIFY(builder.appendLink(text, Bold, target));
+      failLokaAllocRaw(sites[site].ownerTag, sites[site].typeTag, 1);
+      LOKA_VERIFY(!builder.appendLink(text, Bold, target));
+      const AttributedString prefix = builder.build();
+      LOKA_VERIFY(prefix.valid());
+      LOKA_VERIFY(prefix.segmentCount() == 1);
+      LOKA_VERIFY(prefix.segment(0).link == target);
+    }
+    LOKA_VERIFY(lokaAllocRawLive() == 0);
+  }
+}
+
+void testAttributedStringLinkOrdering()
+{
+  using namespace loka::app;
+  using loka::core::String;
+  const LinkTarget a(String("a")), z(String("z"));
+  LOKA_VERIFY(Linked("ab", Bold, a) == Linked("a", Bold, a) + Linked("b", Bold, a));
+  LOKA_VERIFY(Linked("a", Bold, a).compare(Linked("a", Bold, z)) < 0);
+  const TextStyle low = Bold < Italic ? Bold : Italic;
+  const TextStyle high = Bold < Italic ? Italic : Bold;
+  LOKA_VERIFY(Linked("a", low, z).compare(Linked("a", high, a)) < 0);
+  LOKA_VERIFY((Linked("", high, z) + Linked("a", low, a)) == Linked("a", low, a));
+  int calls = 0;
+  for (int order = 0; order < 2; ++order)
+  {
+    const LinkTarget first(refusedText(calls)), second(refusedText(calls));
+    const LinkTarget x = order ? second : first;
+    const LinkTarget y = order ? first : second;
+    const AttributedString A = Linked("a", Bold, x);
+    const AttributedString B = Linked("a", Bold, y);
+    const AttributedString C = Linked("a", Bold, x);
+    LOKA_VERIFY(A == C);
+    LOKA_VERIFY(A.compare(B) == -B.compare(A));
+    LOKA_VERIFY(A.compare(B) == C.compare(B));
+    LOKA_VERIFY(Linked("a", Bold, LinkTarget()).compare(A) < 0);
+    LOKA_VERIFY(Linked("a", Bold, LinkTarget(String(""))).compare(A) < 0);
+    LOKA_VERIFY(A.compare(Linked("a", Bold, a)) < 0);
+    const AttributedString values[] = {Linked("az", Bold, x), Linked("am", Bold, y), Linked("aa", Bold, x)};
+    for (int i = 0; i < 3; ++i)
+      for (int j = 0; j < 3; ++j)
+        for (int k = 0; k < 3; ++k)
+          if (values[i].compare(values[j]) < 0 && values[j].compare(values[k]) < 0)
+            LOKA_VERIFY(values[i].compare(values[k]) < 0);
+  }
+}
+
+void testAttributedStringLinkRuns()
+{
+  using namespace loka::app;
+  using loka::core::String;
+  int calls = 0;
+  for (int route = 0; route < 2; ++route)
+  {
+    const LinkTarget t(countedString(std::string(2048, 't'), route != 0, calls));
+    const LinkTarget equal(countedString(std::string(2048, 't'), route == 0, calls));
+    const LinkTarget u(String("u"));
+    const String body = countedString(std::string(2048, 'b'), route != 0, calls);
+    const AttributedString value = Linked(String(), Bold, u) + Linked(body, Bold, t)
+                                   + Linked(countedString("", route != 0, calls), Bold, u) + Linked(body, Italic, equal)
+                                   + Styled("", Bold);
+    AttributedString::LinkRun run;
+    run.first = 99;
+    run.last = 100;
+    run.target = u;
+    LOKA_VERIFY(!value.queryLinkRun(0, run));
+    LOKA_VERIFY(!value.queryLinkRun(2, run));
+    LOKA_VERIFY(!value.queryLinkRun(5, run));
+    LOKA_VERIFY(!Styled("a", Bold).queryLinkRun(0, run));
+    LOKA_VERIFY(run.first == 99 && run.last == 100 && run.target == u);
+    for (std::size_t i = 1; i <= 3; i += 2)
+    {
+      LOKA_VERIFY(value.queryLinkRun(i, run));
+      LOKA_VERIFY(run.first == 1 && run.last == 3 && run.target == t);
+    }
+    for (int separator = 0; separator < 5; ++separator)
+    {
+      const LinkTarget middle = separator == 0 ? LinkTarget() : (separator == 1 || separator == 4) ? u : t;
+      const String middleBody = (separator >= 1 && separator < 4) ? refusedText(calls) : String("x");
+      const AttributedString split =
+          Linked(body, Bold, t) + Linked(middleBody, Bold, middle) + Linked(body, Bold, equal);
+      LOKA_VERIFY(split.queryLinkRun(0, run));
+      LOKA_VERIFY(run.first == 0 && run.last == ((separator < 2 || separator == 4) ? 0u : 2u));
+      LOKA_VERIFY(split.queryLinkRun(2, run));
+      LOKA_VERIFY(run.first == ((separator < 2 || separator == 4) ? 2u : 0u) && run.last == 2);
+    }
+    const LinkTarget refused(refusedText(calls)), other(refusedText(calls));
+    const AttributedString opaque =
+        Linked("a", Bold, refused) + Linked("b", Italic, refused) + Linked("c", Bold, other);
+    LOKA_VERIFY(opaque.queryLinkRun(1, run));
+    LOKA_VERIFY(run.first == 0 && run.last == 1 && run.target == refused);
+  }
+  LinkTarget saved;
+  AttributedString::LinkRun savedRun;
+  {
+    const AttributedString source = Linked("a", Bold, LinkTarget(countedString(std::string(2048, 'x'), false, calls)));
+    saved = source.segment(0).link;
+    LOKA_VERIFY(source.queryLinkRun(0, savedRun));
+  }
+  LOKA_VERIFY(saved.startsWith("xxx"));
+  LOKA_VERIFY(savedRun.target == saved);
+  LOKA_VERIFY(savedRun.first == 0 && savedRun.last == 0);
+}
+
+void testAttributedStringReadClassifier()
+{
+  using namespace loka::app;
+  using namespace loka::app::style_internal;
+  using loka::core::String;
+  int leftCalls = 0, rightCalls = 0;
+  loka::core::StringBuffer scratch;
+  loka::platform::Utf8View view;
+  view.bytes = "stale";
+  view.length = 5;
+  LOKA_VERIFY(ReadAttributedText(String(), scratch, view) == TEXT_EMPTY);
+  LOKA_VERIFY(view.bytes == 0 && view.length == 0);
+  for (int route = 0; route < 2; ++route)
+  {
+    const String text = countedString(std::string(2048, 'x'), route != 0, leftCalls);
+    leftCalls = 0;
+    LOKA_VERIFY(ReadAttributedText(text, scratch, view) == TEXT_READABLE);
+    LOKA_VERIFY(view.length == 2048 && view.bytes[2047] == 'x');
+    LOKA_VERIFY(leftCalls == (route ? 0 : 1));
+    const String empty = countedString("", route != 0, leftCalls);
+    LOKA_VERIFY(ReadAttributedText(empty, scratch, view) == TEXT_EMPTY);
+    LOKA_VERIFY(view.length == 0);
+    LinkTarget saved;
+    AttributedString::LinkRun run;
+    {
+      const AttributedString source =
+          Linked("a", Bold, LinkTarget(countedString(std::string(2048, 'x'), route != 0, leftCalls)));
+      saved = source.segment(0).link;
+      LOKA_VERIFY(source.queryLinkRun(0, run));
+    }
+    LOKA_VERIFY(saved.startsWith("xxx") && run.target == saved);
+  }
+  view.bytes = "stale";
+  view.length = 5;
+  LOKA_VERIFY(ReadAttributedText(refusedText(leftCalls), scratch, view) == TEXT_REFUSED);
+  LOKA_VERIFY(view.bytes == 0 && view.length == 0);
+  const LinkTarget left(countedString(std::string(2048, 'x'), false, leftCalls));
+  const LinkTarget right(countedString(std::string(2048, 'x'), false, rightCalls));
+  leftCalls = rightCalls = 0;
+  LOKA_VERIFY(left == right);
+  LOKA_VERIFY(leftCalls == 1 && rightCalls == 1);
+  leftCalls = 0;
+  LOKA_VERIFY(left == left);
+  LOKA_VERIFY(leftCalls == 0);
+  // No-handle, unlinked empty bodies bridge the same run as readable empty bodies.
+  const AttributedString bridged = Linked("a", Bold, left) + Styled(String(), Italic) + Linked("b", Bold, right);
+  AttributedString::LinkRun run;
+  LOKA_VERIFY(bridged.queryLinkRun(0, run));
+  LOKA_VERIFY(run.first == 0 && run.last == 2 && run.target == left);
 }

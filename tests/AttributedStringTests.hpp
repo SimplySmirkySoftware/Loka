@@ -19,4 +19,12 @@ void testAttributedStringAllocationFailures();
 void testAttributedStringRefusedBuffersAndSharedFastPath();
 void testManagedTryWrapFailureAndRelease();
 
+void testAttributedStringLinkTargets();
+void testAttributedStringLinkConstruction();
+void testAttributedStringLinkRefusals();
+void testAttributedStringLinkOrdering();
+void testAttributedStringLinkRuns();
+
+void testAttributedStringReadClassifier();
+
 #endif

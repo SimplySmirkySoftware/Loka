@@ -27,6 +27,9 @@ namespace loka
         static void
         visitRow(scene::TextDocumentRegistration &row, scene::IPlatformController &controller, Requests requests);
         friend class ::Window;
+#ifdef TEST_BUILD
+        friend struct ::loka::app::testing::TextDocumentAccess;
+#endif
       };
     } // namespace detail
   } // namespace app

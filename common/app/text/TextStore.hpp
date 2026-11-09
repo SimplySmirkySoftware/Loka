@@ -44,8 +44,20 @@ namespace loka
       unsigned long insertedLength_;
     };
 
+    namespace testing
+    {
+      struct TextStoreTestAccess;
+    }
     namespace scene
     {
+      enum TextStoreBirth
+      {
+        TEXT_STORE_BORN,
+        TEXT_STORE_REFUSED_ALLOCATION,
+        TEXT_STORE_REFUSED_NOT_REPRESENTABLE,
+        TEXT_STORE_REFUSED_CAPACITY,
+        TEXT_STORE_REFUSED_UNSUPPORTED
+      };
       class IPlatformController;
       class TextStoreRow;
       class TextStoreLedger;
@@ -142,6 +154,7 @@ namespace loka
         };
         Phase phase_;
         friend class TextStoreLedger;
+        friend struct ::loka::app::testing::TextStoreTestAccess;
       };
       /** Owns both lifetime lines; destruction is a callback-free final drain. */
       class TextStoreLedger
@@ -184,6 +197,7 @@ namespace loka
         }
         TextStoreRow *live_, *retired_;
         friend class TextStoreRow;
+        friend struct ::loka::app::testing::TextStoreTestAccess;
       };
       inline TextStoreRow::TextStoreRow(TextStoreLedger &owner, IPlatformController &controller)
           : owner_(owner),

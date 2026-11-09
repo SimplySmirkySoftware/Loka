@@ -2,6 +2,7 @@
 #define LOKA_APP_TEXT_TEXT_DOCUMENT_VALUES_HPP
 
 #include "app/scene/state/Request.hpp"
+#include "app/text/TextDocumentOrigin.hpp"
 
 namespace loka
 {
@@ -16,6 +17,9 @@ namespace loka
     {
       struct TextPositionTestAccess;
       struct TextDocumentFactTestAccess;
+#ifdef TEST_BUILD
+      void startTextDocumentRevision(TextDocument &, unsigned long);
+#endif
     } // namespace testing
 
     /** Whether every visited window admitted the command refresh; not document availability. */
@@ -148,6 +152,11 @@ namespace loka
             insertedEnd_()
       {
       }
+      /** Source and revision of the last landed replacement, unchanged by edits. */
+      TextDocumentOrigin origin() const
+      {
+        return this->origin_;
+      }
       TextDocumentState state() const
       {
         return this->state_;
@@ -177,7 +186,8 @@ namespace loka
       {
         return this->state_ == other.state_ && this->textRevision_ == other.textRevision_
                && this->caret_ == other.caret_ && this->selectionAnchor_ == other.selectionAnchor_
-               && this->changedStart_ == other.changedStart_ && this->insertedEnd_ == other.insertedEnd_;
+               && this->changedStart_ == other.changedStart_ && this->insertedEnd_ == other.insertedEnd_
+               && this->origin_ == other.origin_;
       }
       bool operator!=(const TextDocumentFact &other) const
       {
@@ -190,13 +200,15 @@ namespace loka
                        const TextPosition &caret,
                        const TextPosition &selectionAnchor,
                        const TextPosition &changedStart,
-                       const TextPosition &insertedEnd)
+                       const TextPosition &insertedEnd,
+                       const TextDocumentOrigin &origin = TextDocumentOrigin())
           : state_(state),
             textRevision_(revision),
             caret_(caret),
             selectionAnchor_(selectionAnchor),
             changedStart_(changedStart),
-            insertedEnd_(insertedEnd)
+            insertedEnd_(insertedEnd),
+            origin_(origin)
       {
       }
       TextDocumentState state_;
@@ -205,8 +217,12 @@ namespace loka
       TextPosition selectionAnchor_;
       TextPosition changedStart_;
       TextPosition insertedEnd_;
+      TextDocumentOrigin origin_;
       friend class detail::TextDocumentPublisher;
       friend struct testing::TextDocumentFactTestAccess;
+#ifdef TEST_BUILD
+      friend void testing::startTextDocumentRevision(TextDocument &, unsigned long);
+#endif
     };
 
     namespace scene

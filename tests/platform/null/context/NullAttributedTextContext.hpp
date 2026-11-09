@@ -27,6 +27,8 @@ public:
   void invalidatePresentation();
 
 private:
+  friend class NullInputDoor;
+  bool activateLink(std::size_t segmentIndex);
   friend struct loka::app::testing::NullTextMeasurementAccess;
   unsigned measurementBuilds_;
   loka::app::AttributedTextNode *node_;

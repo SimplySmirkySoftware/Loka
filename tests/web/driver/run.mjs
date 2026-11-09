@@ -13,6 +13,12 @@ const chromium=process.env.CHROMIUM || ['chromium','chromium-browser','google-ch
   .find(name=>spawnSync('which',[name],{stdio:'ignore'}).status===0);
 if(!chromium) { console.log('[skip] browser driver: no chromium'); process.exit(0); }
 if(typeof WebSocket==='undefined') throw new Error('This Node has no built-in WebSocket client; use the emsdk Node.');
+// Emscripten routes wasm stderr to console.error. The debug build's educational
+// diagnostic (common/platform/debug/DebugLog.hpp) about unobserved private state is
+// expected from the counter fixture's count_ and is not a browser error.
+const isEducationalDiagnostic=message=>message.params.args.length===1
+  && typeof message.params.args[0].value==='string'
+  && message.params.args[0].value.startsWith('[scene-update] committed StateBase ');
 /** Minimal raw CDP client. Every request has a bounded response deadline. */
 class CDP {
   constructor(socket) {
@@ -25,7 +31,8 @@ class CDP {
         if(message.error) pending.reject(new Error(JSON.stringify(message.error)));
         else pending.resolve(message.result);
       } else if(message.method==='Runtime.exceptionThrown'
-          || (message.method==='Runtime.consoleAPICalled' && message.params.type==='error'))
+          || (message.method==='Runtime.consoleAPICalled' && message.params.type==='error'
+              && !isEducationalDiagnostic(message)))
         this.errors.push(message);
     };
   }
@@ -122,9 +129,10 @@ try {
   assert.equal(await client.evaluate('document.activeElement.tagName'),'BUTTON');
   assert.equal(await client.evaluate(`(() => {const el=document.activeElement,s=getComputedStyle(el);
     return el.matches(':focus-visible') && s.outlineStyle!=='none' && parseFloat(s.outlineWidth)>0;})()`),true);
-  for(const [key,code,vk] of [[' ','Space',32],['Enter','Enter',13]]) {
+  // Enter activates on keypress, so the keyDown must carry text; Space activates on keyUp.
+  for(const [key,code,vk,text] of [[' ','Space',32,' '],['Enter','Enter',13,'\r']]) {
     const before=await client.evaluate('clickExports');
-    await client.send('Input.dispatchKeyEvent',{type:'keyDown',key,code,windowsVirtualKeyCode:vk});
+    await client.send('Input.dispatchKeyEvent',{type:'keyDown',key,code,windowsVirtualKeyCode:vk,text});
     await client.send('Input.dispatchKeyEvent',{type:'keyUp',key,code,windowsVirtualKeyCode:vk});
     assert.equal(await client.evaluate('clickExports'),before+1);
   }
@@ -181,5 +189,7 @@ try {
 } finally {
   if(client) client.socket.close(); child.kill();
   await new Promise(resolve=>server.close(resolve));
-  await rm(profile,{recursive:true,force:true});
+  // Chromium still writes its profile for a moment after SIGTERM; a leftover file is not a failure.
+  if(child.exitCode===null && child.signalCode===null) await new Promise(resolve=>child.on('exit',resolve));
+  await rm(profile,{recursive:true,force:true}).catch(error=>console.warn('profile cleanup:',error.message));
 }

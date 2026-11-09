@@ -3,10 +3,22 @@
 #include "app/text/TextDocumentPublisher.hpp"
 #include "app/text/TextChangeNote.hpp"
 #include "app/text/TextReader.hpp"
+#include <climits>
+#include "app/scene/state/RequestSettlement.hpp"
 namespace loka
 {
   namespace app
   {
+    scene::PostResult TextDocument::replace(const TextReplacement &replacement)
+    {
+      scene::TextDocumentRegistration *row = this->registration_.remote();
+      if (!row || !this->replacement_.isValid() || replacement.stage() == TextReplacement::NONE)
+        return scene::POST_INVALID;
+      if (row->isPublishing() || this->replacement_.get().stage() != TextReplacement::NONE)
+        return scene::POST_QUEUE_FULL;
+      this->replacement_.set(replacement);
+      return scene::POST_ACCEPTED;
+    }
     bool TextDocument::canQuery() const
     {
       if (!this->registration_.remote() || !this->fact() || this->fact()->get().state() != TEXT_DOCUMENT_READY)
@@ -289,6 +301,7 @@ namespace loka
         }
         this->state(out.fact_, TextDocumentFact());
         this->state(out.request_, TextPosition::None());
+        this->state(out.replacement_, TextReplacement());
         TextDocumentRegistration *row = new TextDocumentRegistration(out);
         this->enrollParticipant(*row);
       }
@@ -329,15 +342,15 @@ namespace loka
       void SceneTextDocuments::disconnectAll()
       {
         Withdrawer visitor;
-        this->members_.visit(visitor);
+        MemberList<TextDocumentRegistration>::visit(visitor);
       }
       void SceneTextDocuments::join(TextDocumentRegistration &row)
       {
-        this->members_.join(row.membership_);
+        MemberList<TextDocumentRegistration>::join(row.membership_);
       }
       void SceneTextDocuments::visit(Visitor &visitor)
       {
-        this->members_.visit(visitor);
+        MemberList<TextDocumentRegistration>::visit(visitor);
       }
       /** Initial projection policy applied once to each live declaration. */
       class SceneTextDocuments::StoreCreator
@@ -351,14 +364,17 @@ namespace loka
         {
           if (!row.document_.remote() || row.phase_.value() != TextStorePhase::STORE_AWAITED)
             return;
-          if (this->controller_.createTextStore(row) && row.store())
-            row.phase_.link();
-          else
+          TextStoreSource source(TextReplacement::Empty());
+          TextStoreRow *fresh = 0;
+          TextStoreReading reading;
+          if (this->controller_.createTextStore(source, 0, fresh, reading) == TEXT_STORE_BORN)
           {
-            if (row.store())
-              row.store()->retire();
-            row.phase_.refuse();
+            assert(fresh);
+            row.connectStore(*fresh);
+            row.phase_.link();
           }
+          else
+            row.phase_.refuse();
         }
 
       private:
@@ -367,11 +383,45 @@ namespace loka
       void SceneTextDocuments::createStores(IPlatformController &controller)
       {
         StoreCreator visitor(controller);
-        this->members_.visit(visitor);
+        MemberList<TextDocumentRegistration>::visit(visitor);
       }
     } // namespace scene
     namespace detail
     {
+      /** Publish-local reply authority; no seat survives the document link. */
+      class TextDocumentReplyAccess
+      {
+        static scene::WriteSeat<scene::Reply<TextReplacement> > seat(scene::RequestWithReply<TextReplacement> &request)
+        {
+          return scene::ComposableNode::textDocumentReplySeat(request);
+        }
+        friend class TextDocumentPublisher;
+      };
+      namespace
+      {
+        unsigned long advanceRevision(unsigned long previous, bool changed)
+        {
+          assert(!changed || previous != ULONG_MAX);
+          return previous + (changed ? 1 : 0);
+        }
+        TextReplaceResult replacementRefusal(scene::TextStoreBirth birth)
+        {
+          switch (birth)
+          {
+          case scene::TEXT_STORE_BORN:
+            return TEXT_REPLACE_OK;
+          case scene::TEXT_STORE_REFUSED_ALLOCATION:
+            return TEXT_REPLACE_ALLOCATION;
+          case scene::TEXT_STORE_REFUSED_NOT_REPRESENTABLE:
+            return TEXT_REPLACE_NOT_REPRESENTABLE;
+          case scene::TEXT_STORE_REFUSED_CAPACITY:
+            return TEXT_REPLACE_CAPACITY;
+          case scene::TEXT_STORE_REFUSED_UNSUPPORTED:
+            return TEXT_REPLACE_UNAVAILABLE;
+          }
+          return TEXT_REPLACE_UNAVAILABLE;
+        }
+      } // namespace
       class TextDocumentPublisher::Visitor : public scene::SceneTextDocuments::Visitor
       {
       public:
@@ -428,14 +478,50 @@ namespace loka
         if (!linked)
           return;
         TextDocument &document = *linked;
-        if (!document.fact_.isValid() || !document.request_.isValid())
+        if (!document.fact_.isValid() || !document.request_.isValid() || !document.replacement_.isValid())
           return;
         const TextDocumentFact previous = document.fact_.get();
         const scene::WriteSeat<TextDocumentFact> fact = document.fact_.writeSeat();
         scene::TextStoreReading first, second;
         scene::TextStoreRow *store = row.store();
         const bool read = store && controller.readTextStore(*store, first);
-        const unsigned long revision = previous.textRevision() + (read && first.changed() ? 1 : 0);
+        TextReplacement pending;
+        scene::Reply<TextReplacement> reply;
+        bool replaced = false;
+        if (requests == TAKE_REQUESTS && row.phase_.value() != scene::TextStorePhase::STORE_AWAITED)
+        {
+          pending = document.replacement_.get();
+          if (pending.stage() != TextReplacement::NONE)
+          {
+            document.replacement_.set(TextReplacement());
+            TextReplaceResult reason = TEXT_REPLACE_UNAVAILABLE;
+            if (row.phase_.value() == scene::TextStorePhase::STORE_LINKED && read)
+            {
+              if (first.marked())
+                reason = TEXT_REPLACE_COMPOSING;
+              else
+              {
+                TextStoreSource source(pending);
+                scene::TextStoreRow *fresh = 0;
+                const scene::TextStoreBirth birth = controller.createTextStore(source, store, fresh, second);
+                reason = replacementRefusal(birth);
+                if (birth == scene::TEXT_STORE_BORN)
+                {
+                  assert(fresh);
+                  row.connectStore(*fresh);
+                  store->retire();
+                  replaced = true;
+                  TextReplacement applied(pending);
+                  applied.placement_ = source.appliedPlacement();
+                  reply = scene::formReply(pending, applied, reason);
+                }
+              }
+            }
+            if (!replaced)
+              reply = scene::Reply<TextReplacement>::Refused(pending, reason);
+          }
+        }
+        const unsigned long revision = advanceRevision(previous.textRevision(), (read && first.changed()) || replaced);
         // No gate or early return after consuming the first reading.
         if (requests == TAKE_REQUESTS && !(read && first.marked())
             && row.phase_.value() != scene::TextStorePhase::STORE_AWAITED)
@@ -452,14 +538,15 @@ namespace loka
           }
         }
         store = row.store();
-        const bool reread = store && controller.readTextStore(*store, second);
+        const bool reread = replaced || (store && controller.readTextStore(*store, second));
         scene::TextChangeNote changes;
         if (read)
           changes.note(first);
         if (reread)
           changes.note(second);
         const scene::TextStoreReading combined = changes.take();
-        const unsigned long finalRevision = previous.textRevision() + (combined.changed() ? 1 : 0);
+        const unsigned long finalRevision = advanceRevision(
+            previous.textRevision(), (read && first.changed()) || replaced || (reread && second.changed()));
         TextDocumentState state = TEXT_DOCUMENT_AWAITING_STORE;
         switch (row.phase_.value())
         {
@@ -469,7 +556,9 @@ namespace loka
           state = TEXT_DOCUMENT_UNAVAILABLE;
           break;
         case scene::TextStorePhase::STORE_LINKED:
-          state = store ? (combined.marked() ? TEXT_DOCUMENT_MARKED : TEXT_DOCUMENT_READY) : TEXT_DOCUMENT_UNAVAILABLE;
+          state = replaced ? TEXT_DOCUMENT_READY
+                  : store  ? (combined.marked() ? TEXT_DOCUMENT_MARKED : TEXT_DOCUMENT_READY)
+                           : TEXT_DOCUMENT_UNAVAILABLE;
           break;
         }
         const scene::TextStoreReading &last = reread ? second : first;
@@ -480,15 +569,23 @@ namespace loka
                                         ? TextDocument::position(finalRevision, last.anchor())
                                         : TextPosition::None();
         TextChangedRange range;
-        const bool reported = combined.queryRange(range);
+        // Birth carries the whole native range even though it reports no pending edit.
+        const bool reported = replaced ? second.queryRange(range) : combined.queryRange(range);
+        assert(!replaced || (reported && range.start() == 0));
         const TextPosition changedStart =
             reported ? TextDocument::position(finalRevision, range.start()) : TextPosition::None();
         const TextPosition insertedEnd =
             reported ? TextDocument::position(finalRevision, range.start() + range.insertedLength())
                      : TextPosition::None();
-        const TextDocumentFact next(state, finalRevision, caret, anchor, changedStart, insertedEnd);
+        file::File source;
+        if (replaced)
+          pending.querySource(source);
+        const TextDocumentOrigin origin = replaced ? TextDocumentOrigin(source, finalRevision) : previous.origin();
+        const TextDocumentFact next(state, finalRevision, caret, anchor, changedStart, insertedEnd, origin);
         if (next != previous)
           fact.set(next);
+        if (pending.stage() != TextReplacement::NONE && row.document_.remote())
+          TextDocumentReplyAccess::seat(row.document_.remote()->replacement_).set(reply, true);
       }
     } // namespace detail
   } // namespace app

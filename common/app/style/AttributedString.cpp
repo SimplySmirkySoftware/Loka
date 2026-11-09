@@ -1,6 +1,6 @@
 #include "app/style/AttributedString.hpp"
 #include "app/layout/TextLineBreaker.hpp"
-#include "core/StringAccess.hpp"
+#include "app/style/AttributedTextRead.hpp"
 #include "platform/String.hpp"
 
 #include <cassert>
@@ -11,6 +11,11 @@ namespace loka
 {
   namespace app
   {
+    typedef char SegmentSizePin[((sizeof(void *) == 8 && sizeof(AttributedString::Segment) == 32)
+                                 || (sizeof(void *) == 4 && sizeof(AttributedString::Segment) == 20))
+                                    ? 1
+                                    : -1];
+
     bool AttributedString::estimateExtent(short availableWidth, const BlockStyle &block, core::Frame &out) const
     {
       const SyntheticTextWidthSource source(*this);
@@ -49,15 +54,8 @@ namespace loka
             const core::String &text = this->value_.segment(this->segment_).text;
             if (this->offset_ == 0)
             {
-              const core::Managed<platform::String> &handle = core::StringAccess::handle(text);
-              if (!handle.isValid() || !handle->queryUtf8(this->view_))
-              {
-                this->buffer_ = text.bufferWithEncoding(core::StringEncodingUtf8);
-                if (!text.empty() && !this->buffer_.platformHandle().isValid())
-                  return REFUSED;
-                this->view_.bytes = static_cast<const char *>(this->buffer_.data());
-                this->view_.length = this->buffer_.length();
-              }
+              if (style_internal::ReadAttributedText(text, this->buffer_, this->view_) == style_internal::TEXT_REFUSED)
+                return REFUSED;
             }
             if (this->offset_ < this->view_.length)
               return BYTE;
@@ -179,6 +177,12 @@ namespace loka
 
     bool AttributedString::Builder::append(const core::String &text, const TextStyle &style)
     {
+      return this->appendLink(text, style, LinkTarget());
+    }
+
+    bool
+    AttributedString::Builder::appendLink(const core::String &text, const TextStyle &style, const LinkTarget &target)
+    {
       if (!this->storage_.isValid())
         return false;
       const std::size_t capacity = this->storage_->header.count;
@@ -201,6 +205,7 @@ namespace loka
       Segment &segment = this->storage_->segments()[this->used_];
       segment.text = text;
       segment.style = style;
+      segment.link = target;
       ++this->used_;
       return true;
     }
@@ -222,15 +227,26 @@ namespace loka
       return result;
     }
 
-    AttributedString Styled(const core::String &text, const TextStyle &style)
+    AttributedString Linked(const core::String &text, const TextStyle &style, const LinkTarget &target)
     {
       AttributedString result = AttributedString::Allocate(1);
       if (result.valid())
       {
         result.storage_->segments()[0].text = text;
         result.storage_->segments()[0].style = style;
+        result.storage_->segments()[0].link = target;
       }
       return result;
+    }
+
+    AttributedString Linked(const char *text, const TextStyle &style, const LinkTarget &target)
+    {
+      return Linked(core::String::Literal(text), style, target);
+    }
+
+    AttributedString Styled(const core::String &text, const TextStyle &style)
+    {
+      return Linked(text, style, LinkTarget());
     }
 
     AttributedString Styled(const char *text, const TextStyle &style)
@@ -269,7 +285,7 @@ namespace loka
         return result;
       for (std::size_t i = 0; i < this->segmentCount(); ++i)
       {
-        result.storage_->segments()[i].text = this->segment(i).text;
+        result.storage_->segments()[i] = this->segment(i);
         result.storage_->segments()[i].style = defaults + this->segment(i).style + overrides;
       }
       return result;
@@ -314,10 +330,49 @@ namespace loka
         {
           if (left.segment().style != right.segment().style)
             return left.segment().style < right.segment().style ? -1 : 1;
+          const int linkOrder = style_internal::CompareLinkTargets(left.segment().link, right.segment().link);
+          if (linkOrder)
+            return linkOrder;
         }
         left.advance();
         right.advance();
       }
+    }
+
+    bool AttributedString::queryLinkRun(std::size_t segmentIndex, LinkRun &out) const
+    {
+      if (segmentIndex >= this->segmentCount())
+        return false;
+      core::StringBuffer scratch;
+      platform::Utf8View view;
+      const Segment &selected = this->segment(segmentIndex);
+      if (style_internal::ReadAttributedText(selected.text, scratch, view) == style_internal::TEXT_EMPTY
+          || selected.link.isNone())
+        return false;
+      LinkRun result;
+      result.first = segmentIndex;
+      result.last = segmentIndex;
+      result.target = selected.link;
+      // Both directions share the same participant rule; only the cursor moves differently.
+      for (int direction = 0; direction < 2; ++direction)
+      {
+        std::size_t cursor = segmentIndex;
+        while (direction == 0 ? cursor > 0 : cursor + 1 < this->segmentCount())
+        {
+          cursor = direction == 0 ? cursor - 1 : cursor + 1;
+          const Segment &candidate = this->segment(cursor);
+          if (style_internal::ReadAttributedText(candidate.text, scratch, view) == style_internal::TEXT_EMPTY)
+            continue;
+          if (candidate.link != result.target)
+            break;
+          if (direction == 0)
+            result.first = cursor;
+          else
+            result.last = cursor;
+        }
+      }
+      out = result;
+      return true;
     }
 
     bool AttributedString::equals(const AttributedString &other) const
