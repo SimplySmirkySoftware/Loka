@@ -22,6 +22,7 @@ option(LOKA_TOOLBOX_MULTIVERSAL_INTERFACES
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/LokaWarnings.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/LokaStandalonePerformance.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/LokaWebApp.cmake)
 
 macro(loka_suppress_arclite_link)
   if(LOKA_MACOS_SUPPRESS_ARCLITE_LINK)
@@ -168,6 +169,7 @@ endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   add_subdirectory(web)
+  add_subdirectory(example/HelloWorld)
   loka_verify_warning_floor()
   return()
 endif()

@@ -1,6 +1,6 @@
 # Web Rail
 
-> **Status:** Normative; frozen Web rally pages 1, 2, 3a and 3b, with the delegator's applied-root-visibility clarification.
+> **Status:** Normative; frozen Web rally pages 1, 2, 3a, 3b and 4, with the delegator's applied-root-visibility clarification.
 >
 > **Owns:** DOM resource ownership, browser entries, completion, shutdown, text wire and typography environment.
 >
@@ -33,6 +33,8 @@ Root creation precedes mount. The adapter establishes actual content-box dimensi
 Window teardown unmounts the Scene and drains children before extracting the root route, disconnecting its observer, and releasing it. A close-queued root is refused before borrowing its controller.
 
 ## Entries and completion
+
+Page 4 replaces page 2's fixture-specific `start(config)` spelling with `start()`; bootstrap lifetime is unchanged.
 
 Execution is IDLE, BOOTSTRAP, DISPATCHING or COMPLETING. Lifecycle is STARTING, RUNNING, QUITTING or DISPOSED. These answer different questions. `Operation::hasActive()` cannot identify export execution: close clears it before reclaim finishes.
 
@@ -68,11 +70,64 @@ Buttons are native `<button type="button">` elements. Mouse, Space and Enter use
 
 EditText, TextEditor, PopupMenu, ImageView, RectSurface, ScrollBar, Cell and CardBand are explicit refused handlers. A ScrollView visit settles refusal without publishing a viewport or projecting children. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. Examples, IME, pointer input, scrolling, skins and hot reload are outside this PR.
 
+## Host contract
+
+Load `<EXPORT_NAME>.js` as a classic script, then await its module factory with
+`{locateFile}` to map the wasm asset name to the host's URL. This mapping grants
+neither fetch permission nor a MIME type. The module's `main()` creates one
+heap-resident WebSession for the module lifetime; it is never deleted. Only the
+shutdown task destroys its App chain, independently of EXIT_RUNTIME.
+
+Call `module.web.start()` once: 0 means STARTED, 1 WINDOWLESS, 2 FAILED. A second
+start returns FAILED without changing the running session. The app supplies
+[`CreateAppConfig`](../web/entry/WebAppEntry.hpp), called at most once after
+admission succeeds. The session owns the returned config and deletes it at
+shutdown; null fails startup, and a missing definition fails linking.
+
+Before discarding or replacing a page, call `web.dispose()` and await
+`web.completed` with a host-owned timeout/error channel. Dispose forces shutdown;
+`web.quit()` instead asks the roster, which may decline. Completion resolves only
+if the document remains alive and teardown finishes. If resources remain,
+`web_completed` throws and the Promise stays pending, not rejected. Load failure,
+abort and callback exceptions are separate failures, not completion signals.
+
+`click`, `resize` and `wake` are adapter-only exports, not host entry points. The
+adapter's listeners and ResizeObserver deliver input; timers use the wasm
+function table callback. The host must not run a wake loop.
+
+The current host profile appends roots to `document.body` and constrains requested
+size by the measured content box (including the adapter's `maxWidth:100%`).
+HelloWorld requests 420×330. Container selection and panel filling belong to
+page 5. Before page 4b projects ScrollView, HelloWorld has one root and zero child
+elements; this smoke test verifies production boot and teardown, not its controls.
+
+For CSP, put the same nonce on both the external classic script and inline
+bootstrap. Allow `'wasm-unsafe-eval'` in `script-src` and the wasm fetch origin in
+`connect-src`; `default-src 'none'` alone blocks fetching. The driver tests both
+with and without wasm compilation permission. Extension URI handling is page 5.
+
+[`loka_add_web_app`](../cmake/LokaWebApp.cmake) owns the pinned link settings:
+classic modularized output, web environment, dynamic execution disabled, runtime
+exit disabled, automatic main invocation, asynchronous wasm compilation, 8 MB
+stack, growing memory, and the `locateFile` incoming module API. It also owns the
+entry TU, C++98 warning floor and JS link dependencies. The `web` configure/build
+preset is the Release production profile; `testing-web` remains the Debug fixture
+profile. Both HelloWeb and counter use this same function.
+
 ## Reproduction
 
 Build `LokaWebTests` with the existing testing and testing-asan presets and run `ctest --test-dir <build> -R '^webRail$' --output-on-failure`. The fake boundary implements the same imports as the real adapter. `LOKA_WEB_CAPTURE_GOLDEN=1` prints the initial instruction sequence; ordinary runs compare the committed golden.
 
-After sourcing emsdk, use `emcmake cmake --preset testing-web`, then build `build/wasm/testing`. The node fixture alone links NODERAWFS. The browser fixture links production Web/common libraries without TEST_BUILD and keeps EXIT_RUNTIME disabled. Run `node tests/web/driver/run.mjs build/wasm/testing/web`; absence of Chromium is an explicit skip. No npm installation is needed.
+With emsdk 7.0.0 sourced, use `emcmake cmake --preset testing-web`, then build `build/wasm/testing`. The node fixture alone links NODERAWFS. The browser fixture links production Web/common libraries without TEST_BUILD and keeps EXIT_RUNTIME disabled. Run `node tests/web/driver/run.mjs build/wasm/testing/web`; absence of Chromium is an explicit skip, and `CHROMIUM=<executable>` names a browser outside PATH. No npm installation is needed.
+
+Production build: `emcmake cmake --preset web && cmake --build --preset web
+--target LokaHelloWeb LokaWebCounter`. Run
+`CHROMIUM=/path/to/chrome node tests/web/driver/run.mjs build/wasm/testing/web`.
+The same driver serves HelloWeb from `build/wasm/web/example/HelloWorld` and checks
+its content box, pre-4b empty root, completion and zero resources, plus staged
+fixture configuration, second-start refusal and both CSP branches.
+`tests/web/mutations/entry-{1,2}.py <worktree>` exercise factory dispatch and staging;
+entry placement and fixture leakage are separate expected compile refusals.
 
 Each `tests/web/mutations/NN.sh <worktree>` builds and verifies a baseline, patches one behavior, requires the mutant to compile, runs the fixture, restores exact source bytes, rebuilds, and reports dirty counts. A compilation failure is never a killed mutation. Generated build/log artifacts stay under build/.
 

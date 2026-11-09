@@ -12,6 +12,11 @@ namespace loka
     {
       struct Access
       {
+        /** Cost: fixture factory once per module; borrows one existing reference. */
+        static WebSession &session(WebPlatformContext &platform)
+        {
+          return platform.session_;
+        }
 #ifdef TEST_BUILD
         /** Deliberately slow alternative used only by mutation 4. */
         static bool scanNode(loka::app::scene::Node *node, Token token)
