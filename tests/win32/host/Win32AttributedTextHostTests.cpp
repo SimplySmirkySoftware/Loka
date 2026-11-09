@@ -14,12 +14,21 @@ namespace win32_host
 {
   int selections = 0, measures = 0, metrics = 0;
   bool failMeasure = false;
+  int refuseSelection = 0, refuseOutput = 0, outputAttempts = 0;
+  std::vector<Event> events;
+  void event(char kind, HGDIOBJ object = 0, COLORREF value = 0)
+  {
+    const Event entry = {kind, object, value};
+    events.push_back(entry);
+  }
   std::vector<Draw> draws;
   void reset()
   {
     selections = measures = metrics = 0;
     failMeasure = false;
     draws.clear();
+    events.clear();
+    refuseSelection = refuseOutput = outputAttempts = 0;
   }
 } // namespace win32_host
 HGDIOBJ GetCurrentObject(HDC dc, UINT)
@@ -28,7 +37,9 @@ HGDIOBJ GetCurrentObject(HDC dc, UINT)
 }
 HGDIOBJ SelectObject(HDC dc, HGDIOBJ font)
 {
-  ++win32_host::selections;
+  win32_host::event('S', font);
+  if (++win32_host::selections == win32_host::refuseSelection)
+    return HGDI_ERROR;
   HFONT old = dc->font;
   dc->font = static_cast<HFONT>(font);
   return old;
@@ -46,6 +57,7 @@ BOOL GetTextMetricsW(HDC dc, TEXTMETRICW *out)
 BOOL GetTextExtentExPointW(HDC dc, const WCHAR *text, int count, int maximum, int *fit, int *dx, SIZE *size)
 {
   LOKA_VERIFY(maximum == INT_MAX && !fit);
+  win32_host::event('M', dc->font, count);
   ++win32_host::measures;
   if (win32_host::failMeasure)
     return FALSE;
@@ -67,12 +79,14 @@ UINT GetTextAlign(HDC dc)
 }
 UINT SetTextAlign(HDC dc, UINT align)
 {
+  win32_host::event('A', 0, align);
   UINT old = dc->alignment;
   dc->alignment = align;
   return old;
 }
 int SetBkMode(HDC dc, int mode)
 {
+  win32_host::event('B', 0, mode);
   int old = dc->background;
   dc->background = mode;
   return old;
@@ -85,17 +99,22 @@ COLORREF GetSysColor(int index)
 }
 COLORREF SetTextColor(HDC dc, COLORREF color)
 {
+  win32_host::event('C', 0, color);
   const COLORREF old = dc->textColor;
   dc->textColor = color;
   return old;
 }
-BOOL ExtTextOutW(HDC dc, int x, int y, UINT flags, const RECT *, const WCHAR *text, UINT count, const int *dx)
+BOOL ExtTextOutW(HDC dc, int x, int y, UINT flags, const RECT *clip, const WCHAR *text, UINT count, const int *dx)
 {
   LOKA_VERIFY(flags == ETO_CLIPPED && !dx && count <= 8192);
   LOKA_VERIFY(dc->alignment == (TA_BASELINE | TA_LEFT) && dc->background == TRANSPARENT);
   LOKA_VERIFY(!count || text[0] < 0xdc00 || text[0] > 0xdfff);
   LOKA_VERIFY(!count || text[count - 1] < 0xd800 || text[count - 1] > 0xdbff);
+  win32_host::event('O', dc->font, count);
+  if (++win32_host::outputAttempts == win32_host::refuseOutput)
+    return FALSE;
   win32_host::Draw draw;
+  draw.clip = *clip;
   draw.x = x;
   draw.y = y;
   draw.font = dc->font;
@@ -104,6 +123,7 @@ BOOL ExtTextOutW(HDC dc, int x, int y, UINT flags, const RECT *, const WCHAR *te
   win32_host::draws.push_back(draw);
   return TRUE;
 }
+#include "Win32FittingPins.inc"
 #include "Win32MeasurementPins.inc"
 namespace loka
 {
@@ -316,6 +336,7 @@ static void pinStaticTextColor()
 
 int main(int argc, char **)
 {
+  pinFitting();
   pinStaticTextColor();
   pinPlainWrappedLines();
   pinAttributedTextGroundText();
