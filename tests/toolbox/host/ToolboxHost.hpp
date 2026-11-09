@@ -1118,7 +1118,9 @@ namespace toolbox_host
     int length;
     std::string bytes;
     long ink;
+    short family;
   };
+  extern std::string textTrace;
   struct Fill
   {
     Rect rect;
