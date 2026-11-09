@@ -250,6 +250,7 @@ measure() {
     HOME="$work/hfs-home" "$humount" >/dev/null 2>&1 || true
   fi
   cp "$SCRIPT_DIR/mame-measure-heap.lua" "$work/mame-measure-heap.lua"
+  cp "$SCRIPT_DIR/mame-keys.lua" "$work/mame-keys.lua"
   local args=(
     "${MAME_MACHINE:-maciix}" -ramsize "${MAME_RAMSIZE:-8M}"
     -homepath "$(winpath "$work/home")" -cfg_directory "$(winpath "$work/cfg")"

@@ -96,6 +96,7 @@ MAME_EXECUTABLE="$(normalize_host_path "$MAME_EXECUTABLE")"
 MAME_HDA="$(normalize_host_path "$MAME_HDA")"
 
 cp -f "$SCRIPT_DIR/mame-find-base.lua" "$WORK/mame-find-base.lua"
+cp -f "$PROJECT_DIR/tests/toolbox/mame-keys.lua" "$WORK/mame-keys.lua"
 
 # A scenario-local copy of the boot disk; the configured one stays an input.
 BOOT="$WORK/Boot.hd"

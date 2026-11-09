@@ -699,9 +699,11 @@ Take the first eight bytes of a clean function and pass them, with its link
 address, to `scripts/mame-find-base.lua` as the autoboot script:
 
 ```sh
+mkdir -p build/mame-manual
+cp scripts/mame-find-base.lua tests/toolbox/mame-keys.lua build/mame-manual/
 LOKA_PATTERN_WORD0=4feffefc LOKA_PATTERN_WORD1=48e71e30 \
 LOKA_PATTERN_LINK=00029372 LOKA_STAY_ALIVE=1 \
-  ...  -autoboot_script scripts/mame-find-base.lua
+  ...  -autoboot_script build/mame-manual/mame-find-base.lua
 ```
 
 It bounds the search with `ApplZone` and `ApplLimit`, so it covers the
@@ -785,6 +787,18 @@ gdb-multiarch -ex "set architecture m68k" -ex "set endian big" \
 ```
 
 ### 7. Forward the script's variables into the Windows process
+
+All four keyboard drivers (`mame-launch.lua`, `mame-loop-record.lua`,
+`mame-measure-heap.lua`, and `mame-find-base.lua`) load `mame-keys.lua` beside
+their own file. When staging one by hand, copy `tests/toolbox/mame-keys.lua`
+into the same directory. The scenario, heap and debug runners do this;
+`run-standalone.sh` uses the launcher in place with its existing sibling.
+The shared layer waits for the guest's KeyMap only when CurApName reads Finder
+at launch; otherwise it reports one `[skip] key waits` line.
+`LOKA_KEY_RELEASE_HOLD=0` is a diagnostic for the release up-wait, not a timing
+tuning parameter. The default is 0.20 emulated seconds; values must be finite
+and non-negative. The scenario and standalone runners forward it through
+WSLENV only when set. Manual Windows launches must also forward it explicitly.
 
 `scripts/mame-find-base.lua` is configured through environment variables. WSL
 does not pass its environment to a Windows executable unless the names are
