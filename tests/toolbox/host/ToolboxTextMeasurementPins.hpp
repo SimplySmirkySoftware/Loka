@@ -259,6 +259,93 @@ namespace
     PlainEllipsisCase("abcdefgh", -1, TEXT_WRAP_NONE, 14, refuseClip, "abcdefgh");
   }
 
+  bool AttributedEllipsisCase(short width, bool multiSpan, bool refuseClip, const char *expected)
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
+    const AttributedString source =
+        multiSpan ? Styled("abcd", TextStyle()) + Styled("efgh", Italic) : Styled("abcdefgh", TextStyle());
+    AttributedTextDefinitionWithAttr definition =
+        AttributedText(source) + BlockStyle().wrap(TEXT_WRAP_NONE).truncation(TEXT_TRUNCATION_ELLIPSIS);
+    AttributedTextNode *node = static_cast<AttributedTextNode *>(definition.create());
+    LOKA_VERIFY(node);
+    LayoutState seat = Seat(width);
+    NodeContext *installed = controller.nodeHandlerRegistry_.find(node)->ensureContext(node, &controller, seat);
+    LOKA_VERIFY(installed);
+    ToolboxAttributedTextContext &context = *static_cast<ToolboxAttributedTextContext *>(installed);
+    node->layout(&controller, seat);
+    const Rect rect = MeasurementRect(context);
+    toolbox_host::reset();
+    const Rect callerClip = toolbox_host::currentClip();
+    toolbox_host::failRegions = refuseClip ? 2 : 0;
+    context.render(&controller);
+    LOKA_VERIFY(toolbox_host::regions == 2);
+    LOKA_VERIFY(toolbox_host::failRegions == 0);
+    const Rect expectedClip = refuseClip ? callerClip : MeasurementClip(context);
+    std::string drawn;
+    int advance = 0;
+    for (std::size_t i = 0; i < toolbox_host::draws.size(); ++i)
+    {
+      const toolbox_host::Draw &draw = toolbox_host::draws[i];
+      LOKA_VERIFY(EqualRect(&draw.clip, &expectedClip));
+      LOKA_VERIFY(draw.x == rect.left + advance);
+      LOKA_VERIFY(draw.y == rect.top + 12);
+      if (draw.bytes == "...")
+        LOKA_VERIFY(draw.face == static_cast<unsigned short>(multiSpan ? italic : 0));
+      drawn += draw.bytes;
+      advance += draw.length * (draw.size / 3 + ((draw.face & bold) ? 1 : 0));
+    }
+    std::printf("attributed ellipsis width=%d multi=%d refused=%d text='%s' advance=%d\n",
+                width,
+                multiSpan,
+                refuseClip,
+                drawn.c_str(),
+                advance);
+    std::fflush(stdout);
+    const bool matches = (width <= 0 || advance <= width) && drawn == expected;
+    DestroyHeapNode(node);
+    return matches;
+  }
+
+  void AttributedEllipsisPins(bool refuseClip)
+  {
+    // Italic keeps the host's four-pixel advance while distinguishing the terminal face.
+    bool matches = true;
+    for (int multi = 0; multi != 2; ++multi)
+    {
+      for (short width = 1; width <= 16; ++width)
+        matches = AttributedEllipsisCase(width,
+                                         multi != 0,
+                                         refuseClip,
+                                         width < 12   ? ""
+                                         : width < 16 ? "..."
+                                                      : "a...")
+                  && matches;
+      matches = AttributedEllipsisCase(0, multi != 0, refuseClip, "abcdefgh") && matches;
+      matches = AttributedEllipsisCase(-1, multi != 0, refuseClip, "abcdefgh") && matches;
+      matches = AttributedEllipsisCase(32, multi != 0, refuseClip, "abcdefgh") && matches;
+    }
+    LOKA_VERIFY(matches);
+
+    // An omitted first line must still advance the next line's baseline.
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    ToolboxAttributedTextTable table;
+    const BlockStyle block = BlockStyle().wrap(TEXT_WRAP_NONE).truncation(TEXT_TRUNCATION_ELLIPSIS);
+    LOKA_VERIFY(table.build(Styled("abcdefgh\nz", TextStyle()), block, static_cast<short>(4), controller));
+    LOKA_VERIFY(table.lines().lineCount() == 2);
+    const TextLineMetrics &first = table.lines().line(0).metrics;
+    const TextLineMetrics &second = table.lines().line(1).metrics;
+    toolbox_host::reset();
+    LOKA_VERIFY(table.draw(10, 20, controller, block, static_cast<short>(4)));
+    LOKA_VERIFY(toolbox_host::draws.size() == 1);
+    LOKA_VERIFY(toolbox_host::draws[0].bytes == "z");
+    LOKA_VERIFY(toolbox_host::draws[0].y == 20 + first.ascent + first.descent + first.leading + second.ascent);
+  }
+
   void PlainWrappedPaintPins()
   {
     Pin("PlainWrappedPaintSharesMeasurement");

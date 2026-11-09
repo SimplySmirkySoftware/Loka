@@ -189,6 +189,8 @@ namespace
       out[0] = static_cast<unsigned char>(out[0] + 3);
       if (StringWidth(out) <= maxWidth)
         return;
+      // Twin: ToolboxAttributedTextTable::draw omits a line when even dots
+      // exceed a positive width.
       if (!end)
       {
         out[0] = 0;

@@ -39,10 +39,16 @@ def font():
     tables['hhea'] = (u32(0x10000) + s16(800, -200, 0) + u16(800)
                       + s16(0, 100, 400, 1, 0, 0) + b'\0'*8 + s16(0) + u16(5))
     tables['maxp'] = u32(0x10000) + u16(5, 4, 1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0)
-    # format 4: a and x map to glyph 1, sentinel maps to zero.
-    cmap = u16(4, 40, 0, 6, 4, 1, 2, 97, 120, 65535, 0, 97, 120, 65535)
-    cmap += u16((1-97)&65535, (1-120)&65535, 1, 0, 0, 0)
+    # A/V kerning is a controlled range-measurement discriminator; x is narrow.
+    mappings = [(65, 1), (86, 2), (97, 1), (120, 3), (65535, 0)]
+    ends = [cp for cp, _ in mappings]
+    cmap = u16(4, 16+8*len(mappings), 0, 2*len(mappings), 8, 2, 2)
+    cmap += u16(*ends) + u16(0) + u16(*ends)
+    cmap += u16(*((glyph-cp)&65535 for cp, glyph in mappings)) + u16(*([0]*len(mappings)))
     tables['cmap'] = u16(0, 1, 3, 1) + u32(12) + cmap
+    tables['hmtx'] = b''.join(u16(w, 0) for w in [500, 500, 600, 200, 800])
+    # Microsoft/OpenType legacy horizontal kern format 0: glyph A(1), V(2).
+    tables['kern'] = u16(0, 1, 0, 20, 1, 1, 6, 0, 0, 1, 2) + s16(-300)
     names = [(1, 'Loka Text Probe'), (2, 'Regular'), (4, 'Loka Text Probe Regular'),
              (6, 'LokaTextProbe-Regular'), (0, 'CC0; original Loka test font')]
     strings = b''; records = b''

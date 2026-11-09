@@ -117,7 +117,17 @@ namespace
       loka::core::Operation turn;
       fixture.nodes[0]->show(true);
     }
+    webtest::calls.clear();
     session.wake(IMMEDIATE, 5);
+    unsigned styles = 0, lineHeights = 0, blocks = 0, texts = 0;
+    for (unsigned i = 0; i < webtest::calls.size(); ++i)
+    {
+      styles += webtest::calls[i].find("style:") == 0;
+      lineHeights += webtest::calls[i].find("line-height:") == 0;
+      blocks += webtest::calls[i].find("block:") == 0;
+      texts += webtest::calls[i].find("text:") == 0;
+    }
+    LOKA_VERIFY(styles == 2 && lineHeights == 2 && blocks == 2 && texts == 2);
     LOKA_VERIFY(webtest::token(BUTTON) == button && !webtest::resources[button].hidden);
     LOKA_VERIFY(session.click(button, 6) == WebSession::ACCEPTED);
     Shutdown(session);
@@ -756,8 +766,15 @@ namespace
     LOKA_VERIFY(session.resize(roots[0], 10, 10, 3) == WebSession::REFUSED_CLOSED);
   }
 } // namespace
+void WebTextProjectionTests();
+void WebTextProtocolDeath();
 int main(int argc, char **argv)
 {
+  if (argc == 2 && std::strcmp(argv[1], "text-protocol-death") == 0)
+  {
+    WebTextProtocolDeath();
+    return 0;
+  }
   if (argc == 2 && std::strcmp(argv[1], "dispose-input") == 0)
   {
     DisposeInputOnlyTest();
@@ -770,6 +787,7 @@ int main(int argc, char **argv)
     std::fflush(stdout);                                                                                               \
     name();                                                                                                            \
   } while (0)
+  RUN(WebTextProjectionTests);
   RUN(CounterTest);
   RUN(ParkTest);
   RUN(RetirementTest);
@@ -791,6 +809,6 @@ int main(int argc, char **argv)
   RUN(RootVisibilityTest);
   RUN(TwoRootTest);
 #undef RUN
-  std::puts("20 Web tests passed");
+  std::puts("26 Web test groups passed (20 legacy, 6 projection)");
   return 0;
 }

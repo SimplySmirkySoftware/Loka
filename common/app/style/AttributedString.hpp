@@ -2,6 +2,7 @@
 #define LOKA_APP_STYLE_ATTRIBUTED_STRING_HPP
 
 #include "app/style/Style.hpp"
+#include "app/style/LinkTarget.hpp"
 #include "core/String.hpp"
 #include "core/Frame.hpp"
 
@@ -15,12 +16,25 @@ namespace loka
     public:
       class Builder;
 
-      /** One text contribution and its declared character style. */
+      /** One text contribution, its declared character style and optional link. */
       struct Segment
       {
         core::String text;
         TextStyle style;
+        LinkTarget link;
       };
+
+      /** Inclusive endpoints of nonempty participants in one link run. */
+      struct LinkRun
+      {
+        std::size_t first;
+        std::size_t last;
+        LinkTarget target;
+      };
+      /** Finds the maximal run of equal, non-none targets containing segmentIndex.
+          Bridges empty segments regardless of target or style; refused bodies
+          participate. Out of range, empty body or none target leaves out untouched. */
+      bool queryLinkRun(std::size_t segmentIndex, LinkRun &out) const;
 
       /** Constructs a valid, empty value without allocating. */
       AttributedString();
@@ -42,6 +56,8 @@ namespace loka
       bool operator!=(const AttributedString &other) const;
       /**
        * Lexicographic styled UTF-8 ordering, independent of segmentation.
+       * Equal body bytes compare style then link at either segment start.
+       * Targets order empty, refused (by handle identity), then readable bytes.
        * Invalid values precede valid ones. A refused buffer is an opaque token
        * before readable bytes, ordered by segment identity among refusals.
        * Distinct refused segments never compare equal; shared storage does.
@@ -55,7 +71,7 @@ namespace loka
 
       static AttributedString Allocate(std::size_t count);
       AttributedString fold(const TextStyle &defaults, const TextStyle &overrides) const;
-      friend AttributedString Styled(const core::String &, const TextStyle &);
+      friend AttributedString Linked(const core::String &, const TextStyle &, const LinkTarget &);
       friend AttributedString operator+(const AttributedString &, const AttributedString &);
       friend AttributedString operator+(const TextStyle &, const AttributedString &);
       friend AttributedString operator+(const AttributedString &, const TextStyle &);
@@ -73,6 +89,8 @@ namespace loka
       /** Appends a shared String handle and copied style. Allocation refusal
           preserves the successful prefix; a consumed builder also refuses. */
       bool append(const core::String &text, const TextStyle &style);
+      /** Appends a target without changing style; same refusal contract as append. */
+      bool appendLink(const core::String &text, const TextStyle &style, const LinkTarget &target);
       /** Transfers the prefix, including a valid empty prefix, and consumes
           this builder. An invalid/consumed builder returns an invalid value. */
       AttributedString build();
@@ -92,6 +110,10 @@ namespace loka
     AttributedString Styled(const core::String &text, const TextStyle &style);
     /** Literal convenience form with the same storage-refusal contract. */
     AttributedString Styled(const char *text, const TextStyle &style);
+    /** One linked segment; the same storage-refusal contract as Styled. */
+    AttributedString Linked(const core::String &text, const TextStyle &style, const LinkTarget &target);
+    /** Literal convenience form with the same storage-refusal contract. */
+    AttributedString Linked(const char *text, const TextStyle &style, const LinkTarget &target);
     /** Concatenates segments atomically; an invalid operand propagates refusal. */
     AttributedString operator+(const AttributedString &left, const AttributedString &right);
     /** Supplies defaults; each segment's declared style wins. */

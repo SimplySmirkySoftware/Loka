@@ -1,3 +1,4 @@
+// Deliberate platform twin: web/src/WebUtf8Bytes.cpp owns the Web scratch-copy path.
 #include "platform/ToolboxUtf8Bytes.hpp"
 #include "core/StringAccess.hpp"
 #include "platform/StringUTF8.hpp"

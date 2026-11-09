@@ -1,17 +1,20 @@
-/* Force-included into the QuickJS-ng build only when the configured Apple
-   SDK declares no CLOCK_MONOTONIC (cmake/QuickJS.cmake), which is every SDK
-   before 10.12 and here the 10.4u SDK of the Tiger UB1 profile, whichever
-   compiler targets it. QuickJS reads a monotonic nanosecond clock through
-   clock_gettime (cutils.h, js__hrtime_ns); mach_absolute_time is the
-   monotonic clock those systems provide. */
+/* Force-included into the QuickJS-ng build when the configured Apple SDK
+   declares no CLOCK_MONOTONIC (every SDK before 10.12, here the 10.4u SDK of
+   the Tiger UB1 profile) or when the deployment target is below 10.12, where
+   libSystem does not export clock_gettime even if the SDK declares it
+   (cmake/QuickJS.cmake, #1563). QuickJS reads a monotonic nanosecond clock
+   through clock_gettime(CLOCK_MONOTONIC) (cutils.h, js__hrtime_ns) and reads
+   no other clock; mach_absolute_time is the monotonic clock those systems
+   provide. Whenever this header is included it replaces clock_gettime. */
 #ifndef LOKA_SMIRKYCARD_QUICKJS_MACH_CLOCK_H
 #define LOKA_SMIRKYCARD_QUICKJS_MACH_CLOCK_H
 
 #include <stdint.h>
 #include <time.h>
-#if !defined(CLOCK_MONOTONIC)
 #include <mach/mach_time.h>
+#if !defined(CLOCK_MONOTONIC)
 #define CLOCK_MONOTONIC 1
+#endif
 static inline int loka_smirkycard_clock_gettime(int clock, struct timespec *t)
 {
   static mach_timebase_info_data_t timebase;
@@ -29,6 +32,5 @@ static inline int loka_smirkycard_clock_gettime(int clock, struct timespec *t)
   return 0;
 }
 #define clock_gettime loka_smirkycard_clock_gettime
-#endif
 
 #endif

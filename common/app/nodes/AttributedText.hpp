@@ -2,6 +2,7 @@
 #define LOKA_APP_ATTRIBUTED_TEXT_HPP
 
 #include "core/State.hpp"
+#include "app/scene/state/NodeState.hpp"
 #include "app/scene/Node.hpp"
 #include "app/style/Style.hpp"
 #include "app/style/AttributedString.hpp"
@@ -26,6 +27,7 @@ namespace loka
       loka::core::MutableState<AttributedString> ownedText;
       bool ownsText;
       BlockStyle blockStyle_;
+      scene::NodeState<LinkTarget> activatedLink_;
       AttributedTextProps()
           : text_(0),
             ownedText(),
@@ -53,7 +55,8 @@ namespace loka
             text_(other.text_),
             ownedText(other.ownedText),
             ownsText(other.ownsText),
-            blockStyle_(other.blockStyle_)
+            blockStyle_(other.blockStyle_),
+            activatedLink_(other.activatedLink_)
       {
         if (this->ownsText)
         {
@@ -68,6 +71,7 @@ namespace loka
           this->ownedText = other.ownedText;
           this->ownsText = other.ownsText;
           this->blockStyle_ = other.blockStyle_;
+          this->activatedLink_ = other.activatedLink_;
           if (this->ownsText)
           {
             this->text_ = &this->ownedText;
@@ -89,6 +93,13 @@ namespace loka
         return *this;
       }
 
+      /** Borrows the app-owned result box; repeated activations notify. */
+      AttributedTextProps &activatedLink(const scene::NodeState<LinkTarget> &box)
+      {
+        this->activatedLink_ = box;
+        return *this;
+      }
+
       bool operator<(const scene::PropsBase &rhs) const
       {
         if (rhs.propsTypeId() != this->propsTypeId())
@@ -106,7 +117,7 @@ namespace loka
           return this->text_ < other.text_;
         if (!(this->blockStyle_ == other.blockStyle_))
           return this->blockStyle_ < other.blockStyle_;
-        return false;
+        return this->activatedLink_.state() < other.activatedLink_.state();
       }
     };
 
@@ -118,6 +129,24 @@ namespace loka
       AttributedTextNode(const AttributedTextProps &p)
           : props(p)
       {
+      }
+      /** Called only from an accepted rail input inside the turn's Operation.
+          The caller proves the index addresses the current exact segment
+          representation and eligible presentation, without intervening work.
+          Returns whether the app box was written; never opens a turn. */
+      bool writeActivatedLink(std::size_t segmentIndex)
+      {
+        if (this->lifecycleFact() != scene::NODE_FACT_ATTACHED)
+          return false;
+        if (!this->props.activatedLink_.state() || !this->props.text_)
+          return false;
+        AttributedString::LinkRun run;
+        if (!this->props.text_->get().queryLinkRun(segmentIndex, run))
+          return false;
+        const LinkTarget target = run.target;
+        scene::NodeState<LinkTarget> box = this->props.activatedLink_;
+        box.set(target, true);
+        return true;
       }
       virtual scene::NodeKind kind() const
       {
@@ -161,6 +190,12 @@ namespace loka
     struct AttributedTextDefinition : public scene::NodeDefinition<AttributedTextProps, AttributedTextNode>,
                                       public scene::TestIdDslMixin<AttributedTextDefinition>
     {
+      /** Borrows the app-owned activation result box. */
+      AttributedTextDefinition &activatedLink(const scene::NodeState<LinkTarget> &box)
+      {
+        this->props.activatedLink(box);
+        return *this;
+      }
       AttributedTextDefinition()
           : loka::app::scene::NodeDefinition<AttributedTextProps, AttributedTextNode>()
       {
@@ -182,6 +217,12 @@ namespace loka
     struct AttributedTextDefinitionWithAttr : public scene::NodeDefinition<AttributedTextProps, AttributedTextNode>,
                                               public scene::TestIdDslMixin<AttributedTextDefinitionWithAttr>
     {
+      /** Borrows the app-owned activation result box. */
+      AttributedTextDefinitionWithAttr &activatedLink(const scene::NodeState<LinkTarget> &box)
+      {
+        this->props.activatedLink(box);
+        return *this;
+      }
       AttributedTextDefinitionWithAttr()
           : loka::app::scene::NodeDefinition<AttributedTextProps, AttributedTextNode>()
       {
