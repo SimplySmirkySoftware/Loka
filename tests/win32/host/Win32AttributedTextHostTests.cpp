@@ -336,6 +336,7 @@ static void pinStaticTextColor()
 
 int main(int argc, char **)
 {
+  pinTargetOnlyRebuild();
   pinFitting();
   pinStaticTextColor();
   pinPlainWrappedLines();

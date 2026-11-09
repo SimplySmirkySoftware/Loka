@@ -1226,7 +1226,13 @@ void testWin32AttributedTextPaintRouting()
   loka::core::testing::failLokaAllocRaw("Win32AttributedText", "Break", 0);
   {
     Win32ScenePlatformController controller(rootWindow, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
-    AttributedText declaration(Styled("var x = ", Bold) + Styled("1;", Italic));
+    const LinkTarget targetX(loka::core::String("x")), targetY(loka::core::String("y"));
+    const AttributedString joined = Linked("ab", Bold, targetX) + Linked("cd", Bold, targetX);
+    const AttributedString split = Linked("ab", Bold, targetX) + Linked("cd", Bold, targetY);
+    loka::core::MutableState<AttributedString> live(joined);
+    loka::core::PushStateTracker tracker;
+    tracker.addState(&live);
+    AttributedText declaration(&live);
     Scene scene((Boundary<Tree<AttributedText> >(Props<AttributedText>(&declaration))));
     scene.mount(&controller);
     loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
@@ -1255,6 +1261,24 @@ void testWin32AttributedTextPaintRouting()
     SendMessageW(context->paintHwnd(), WM_SIZE, 0, 0);
     controller.onBoundaryApply(boundary, boundary, info, plan);
     LOKA_VERIFY(Access::queuedPaintInvalidates(controller) == 1);
+    // Target-only live input reaches normal Scene invalidation at the same seat.
+    const Win32AttributedTextTable &liveTable = AttributedAccess::table(*context);
+    RECT liveSeat;
+    LOKA_VERIFY(GetClientRect(context->paintHwnd(), &liveSeat));
+    const int liveWidth = liveSeat.right - liveSeat.left;
+    LOKA_VERIFY(liveTable.reusable(liveWidth) && liveTable.lines().line(0).fragmentCount == 1);
+    LOKA_VERIFY(AttributedAccess::fontCount(liveTable) == 1 && node->props.text_ == &live);
+    {
+      loka::core::StateTrackerGuard guard(&tracker);
+      live.set(split);
+    }
+    LOKA_VERIFY(live.get() == split && live.get() != joined);
+    LOKA_VERIFY(scene.hasPendingInvalidation());
+    scene.flushInvalidation();
+    LOKA_VERIFY(liveTable.reusable(liveWidth) && liveTable.lines().line(0).fragmentCount == 2);
+    LOKA_VERIFY(AttributedAccess::fontCount(liveTable) == 2 && liveTable.value().segment(1).link == targetY);
+    LOKA_VERIFY(liveTable.value() == split);
+    LOKA_VERIFY(!scene.hasPendingInvalidation());
     // A props-only update schedules layout; it must not remain an empty cache.
     MSG message;
     while (PeekMessageW(&message, rootWindow, WM_SIZE, WM_SIZE, PM_REMOVE))
