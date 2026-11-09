@@ -27,6 +27,7 @@ namespace toolbox_host
   std::vector<std::string> controlTitles, menuTitles, menuAppends, menuInserts, menuSets, disposedMenuItems;
   std::vector<Fill> fills;
   std::vector<Draw> draws;
+  std::string textTrace;
   std::vector<std::string> pascalDraws, windowTitles, widthPayloads, measurePayloads;
   std::vector<long> backgroundColors, foregroundColors;
   int erases = 0, widths = 0, measures = 0, fonts = 0, metrics = 0;
@@ -43,6 +44,7 @@ namespace toolbox_host
   {
     fills.clear();
     draws.clear();
+    textTrace.clear();
     foregroundColors.clear();
     pascalDraws.clear();
     widthPayloads.clear();
@@ -263,15 +265,18 @@ void SetPort(GrafPtr value)
 }
 void TextFont(short value)
 {
+  toolbox_host::textTrace += "F";
   port->txFont = value;
   ++toolbox_host::fonts;
 }
 void TextSize(short value)
 {
+  toolbox_host::textTrace += "S";
   port->txSize = value;
 }
 void TextFace(Style value)
 {
+  toolbox_host::textTrace += "T";
   port->txFace = value;
 }
 short GetDefFontSize()
@@ -324,6 +329,7 @@ void MeasureText(short count, const void *bytes, void *charLocs)
 }
 short TextWidth(const void *bytes, short offset, short length)
 {
+  toolbox_host::textTrace += "W";
   assert(offset >= 0 && length >= 0);
   toolbox_host::widthPayloads.push_back(std::string(static_cast<const char *>(bytes) + offset, length));
   ++toolbox_host::widths;
@@ -335,11 +341,13 @@ short StringWidth(const unsigned char *text)
 }
 void MoveTo(short x, short y)
 {
+  toolbox_host::textTrace += "M";
   penX = x;
   penY = y;
 }
 void DrawText(const void *bytes, short offset, short length)
 {
+  toolbox_host::textTrace += "D";
   const toolbox_host::Draw draw = {toolbox_host::currentClip(),
                                    penX,
                                    penY,
@@ -347,7 +355,8 @@ void DrawText(const void *bytes, short offset, short length)
                                    port->txFace,
                                    length,
                                    std::string(static_cast<const char *>(bytes) + offset, length),
-                                   port->fgColor};
+                                   port->fgColor,
+                                   port->txFont};
   toolbox_host::draws.push_back(draw);
 }
 void SetRect(Rect *out, short l, short t, short r, short b)
@@ -871,6 +880,7 @@ short ToolboxScenePlatformController::measureTextWidth(const loka::core::String 
 
 void ForeColor(long ink)
 {
+  toolbox_host::textTrace += "I";
   port->fgColor = ink;
   toolbox_host::foregroundColors.push_back(ink);
 }

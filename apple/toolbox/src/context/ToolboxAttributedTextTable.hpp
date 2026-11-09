@@ -5,6 +5,7 @@ namespace loka
 {
   namespace testing
   {
+    class ToolboxAttributedTextTableAccess;
     void failToolboxAttributedDraws(unsigned count);
     bool refuseToolboxAttributedDraw();
   } // namespace testing
@@ -70,6 +71,9 @@ public:
             short availableWidth) const;
 
 private:
+#ifdef TEST_BUILD
+  friend class loka::testing::ToolboxAttributedTextTableAccess;
+#endif
   /** Completed scalar geometry; line/fragment geometry remains in lines_. */
   struct Extent
   {
