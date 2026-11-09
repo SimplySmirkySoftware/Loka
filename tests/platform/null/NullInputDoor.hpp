@@ -2,6 +2,7 @@
 #define LOKA_NULL_INPUT_DOOR_HPP
 
 #include "platform/null/context/NullScrollBarContext.hpp"
+#include "platform/null/context/NullAttributedTextContext.hpp"
 #include "platform/null/context/NullTextEditorContext.hpp"
 
 /** Synchronous Null input operations. The invocation restores the previous
@@ -13,6 +14,11 @@ private:
   typedef loka::app::scene::detail::InputInvocation Invocation;
 
 public:
+  /** Injects an accepted press against the current value inside a turn. */
+  static bool activateLink(NullAttributedTextContext &c, std::size_t segmentIndex)
+  {
+    return Invocation(c.controller_)(c, &NullAttributedTextContext::activateLink, segmentIndex);
+  }
   static void simulatePress(NullScrollBarContext &c, NullScrollBarContext::Part part, int repeats)
   { Invocation(*c.controller_)(c, &NullScrollBarContext::simulatePress, part, repeats); }
   static void simulateThumbDragTo(NullScrollBarContext &c, int value)
