@@ -154,6 +154,8 @@ unless a follow-up on the same issue still needs it.
 
 ## Build
 
+The scenario runner requires `cmake --build --preset win32-tests` for the current tracked source tree; target-only builds do not refresh its source stamp.
+
 `build.bat` (the two builds are both required — neither implies the other,
 see `.github/workflows/windows.yml`). The first two lines resolve the toolchain, so
 the same file works on any rig:

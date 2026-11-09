@@ -291,6 +291,26 @@ try {
     if (-not (Test-Path -LiteralPath $BuiltExecutable -PathType Leaf)) {
         Fail-Stage "build" "missing $BuiltExecutable; enter vcvarsall.bat for this machine's architecture, run cmake --preset win32-debug, then cmake --build --preset win32-tests"
     }
+    . (Join-Path $PSScriptRoot "SourceTreeStamp.ps1")
+    $SourceStamp = Join-Path $ProjectDirectory "build/win32/Debug/scenario-source-stamp.txt"
+    # A single-vehicle build cannot certify the complete scenario set.
+    $StampRemedy = "run cmake --build --preset win32-tests; target-only builds do not refresh the source stamp"
+    if (-not (Test-Path -LiteralPath $SourceStamp -PathType Leaf)) {
+        Fail-Stage "build" "no source stamp; $StampRemedy"
+    }
+    try {
+        $CurrentSourceTree = Get-SourceTreeId $ProjectDirectory
+        $BuiltSourceTree = ([System.IO.File]::ReadAllText($SourceStamp)).Trim()
+        $HeadIdentity = & git -C $ProjectDirectory rev-parse HEAD 'HEAD^{tree}' 2>&1
+        if ($LASTEXITCODE -ne 0) { throw "git rev-parse failed: $HeadIdentity" }
+    } catch {
+        Fail-Stage "build" "cannot read source identity: $($_.Exception.Message); $StampRemedy"
+    }
+    if ($BuiltSourceTree -cne $CurrentSourceTree) {
+        Fail-Stage "build" "vehicles were built from source tree $BuiltSourceTree, this tree is $CurrentSourceTree; $StampRemedy"
+    }
+    $SourceHead = $HeadIdentity[0]
+    $TrackedChanges = if ($CurrentSourceTree -cne $HeadIdentity[1]) { ", tracked changes" } else { "" }
     if ($Example -eq "scrapbook") {
         if (-not (Test-Path -LiteralPath $Lrpc -PathType Leaf)) {
             if (Test-Path -LiteralPath $MultiConfigLrpc -PathType Leaf) {
@@ -313,7 +333,8 @@ try {
     }
     New-Item -ItemType Directory -Path $Stage, $Settle -Force | Out-Null
     [System.IO.File]::WriteAllText($RunnerLog, "", (New-Object System.Text.UTF8Encoding($false)))
-    Write-Runner "stage: build artifact $BuiltExecutable"
+    Write-Runner "stage: build source tree $CurrentSourceTree (HEAD $SourceHead$TrackedChanges)"
+    Write-Runner "stage: build artifact $BuiltExecutable written $((Get-Item -LiteralPath $BuiltExecutable).LastWriteTime.ToString('o'))"
     Write-Runner "stage: native directory (no development disk)"
 
     $StagedExecutable = Join-Path $Stage $VehicleExecutableName
