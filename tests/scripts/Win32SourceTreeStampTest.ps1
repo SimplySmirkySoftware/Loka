@@ -86,24 +86,42 @@ try {
     }
 
     $Stamp = Join-Path $TestRoot 'stamp.txt'
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Support -Write $Stamp -SourceDirectory $Repo
-    Assert-Equal $LASTEXITCODE 0 'writer succeeds'
-    Assert-Equal ([IO.File]::ReadAllText($Stamp).Trim()) $Clean 'stamp round-trip'
-    [IO.File]::WriteAllText($Tracked, "edited`n")
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Support -Write $Stamp -SourceDirectory $Repo
-    Assert-Equal $LASTEXITCODE 0 'dirty writer succeeds'
-    Assert-Equal ([IO.File]::ReadAllText($Stamp).Trim()) $Dirty 'dirty stamp round-trip'
-    [IO.File]::WriteAllText($Tracked, "initial`n")
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Support -Write $Stamp -SourceDirectory $TestRoot
-    Assert-Equal $LASTEXITCODE 0 'archive build succeeds'
-    Assert-Equal (Test-Path -LiteralPath $Stamp) $false 'failed write removes stale stamp'
+    $Before = "$Stamp.before"
     $PowerShell = (Get-Command powershell.exe -CommandType Application).Source
+    function Invoke-Stamp([string]$Mode, [string]$Directory) {
+        & $PowerShell -NoProfile -ExecutionPolicy Bypass -File $Support "-$Mode" $Stamp -SourceDirectory $Directory | Out-Null
+        Assert-Equal $LASTEXITCODE 0 "$Mode never fails the build"
+    }
+    function Invoke-Build([string]$Directory) { Invoke-Stamp Withdraw $Directory; Invoke-Stamp Write $Directory }
+
+    Invoke-Build $Repo
+    Assert-Equal ([IO.File]::ReadAllText($Stamp).Trim()) $Clean 'stamp round-trip'
+    Assert-Equal (Test-Path -LiteralPath $Before) $false 'publish removes the starting record'
+    [IO.File]::WriteAllText($Tracked, "edited`n")
+    Invoke-Build $Repo
+    Assert-Equal ([IO.File]::ReadAllText($Stamp).Trim()) $Dirty 'dirty stamp round-trip'
+
+    # Withdraw removes the stamp before any vehicle builds.
+    Invoke-Stamp Withdraw $Repo
+    Assert-Equal (Test-Path -LiteralPath $Stamp) $false 'withdraw removes the stamp'
+    Assert-Equal ([IO.File]::ReadAllText($Before).Trim()) $Dirty 'withdraw records the starting tree'
+    # An edit between the two steps (during compilation) publishes nothing.
+    [IO.File]::WriteAllText($Tracked, "initial`n")
+    Invoke-Stamp Write $Repo
+    Assert-Equal (Test-Path -LiteralPath $Stamp) $false 'edit during the build publishes no stamp'
+    Assert-Equal (Test-Path -LiteralPath $Before) $false 'refused publish removes the starting record'
+    # A write with no recorded start (the withdraw step never ran) publishes nothing.
+    Invoke-Stamp Write $Repo
+    Assert-Equal (Test-Path -LiteralPath $Stamp) $false 'write without withdraw publishes no stamp'
+
+    Invoke-Build $Repo
+    Invoke-Build $TestRoot
+    Assert-Equal (Test-Path -LiteralPath $Stamp) $false 'archive build removes stale stamp'
     $SavedPath = $env:PATH
     try {
-        [IO.File]::WriteAllText($Stamp, $Clean)
+        Invoke-Build $Repo
         $env:PATH = ''
-        & $PowerShell -NoProfile -ExecutionPolicy Bypass -File $Support -Write $Stamp -SourceDirectory $Repo
-        Assert-Equal $LASTEXITCODE 0 'build without git succeeds'
+        Invoke-Build $Repo
         Assert-Equal (Test-Path -LiteralPath $Stamp) $false 'no git removes stale stamp'
     } finally {
         $env:PATH = $SavedPath

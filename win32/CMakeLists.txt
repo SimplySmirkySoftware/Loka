@@ -226,10 +226,11 @@ if(LOKA_WIN32_TOP_LEVEL_SOURCE_NORMALIZED STREQUAL
     COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
       ${CMAKE_CURRENT_SOURCE_DIR}/../tests/scripts/Win32SourceTreeStampTest.ps1)
 
-  # The source stamp the scenario runner compares (#1224). Only a complete
-  # scenario build publishes it, after every vehicle has linked. Every vehicle
-  # build first withdraws the old one, so a build that fails partway, or that
-  # builds one vehicle, leaves no stamp a later tree could match by accident.
+  # The source stamp the scenario runner compares (#1224). Every vehicle
+  # build first withdraws the old one and records the starting tree; only a
+  # complete scenario build publishes it again, after every vehicle has
+  # linked and only if the tree did not change meanwhile. A build that fails
+  # partway, builds one vehicle, or races an edit leaves no stamp.
   set(LOKA_WIN32_SCENARIO_VEHICLES
     LokaScrapbookScenarioWin32 LokaHelloWorldScenarioWin32
     LokaTutorialScenarioWin32 LokaMineSweeperScenarioWin32
@@ -237,7 +238,9 @@ if(LOKA_WIN32_TOP_LEVEL_SOURCE_NORMALIZED STREQUAL
   set(LOKA_WIN32_SCENARIO_SOURCE_STAMP
     "${CMAKE_BINARY_DIR}/scenario-source-stamp.txt")
   add_custom_target(LokaWin32ScenarioSourceStampWithdraw
-    COMMAND ${CMAKE_COMMAND} -E remove -f "${LOKA_WIN32_SCENARIO_SOURCE_STAMP}"
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+      "${CMAKE_CURRENT_SOURCE_DIR}/../tests/win32/SourceTreeStamp.ps1"
+      -Withdraw "${LOKA_WIN32_SCENARIO_SOURCE_STAMP}"
     VERBATIM)
   add_custom_target(LokaWin32ScenarioSourceStamp
     COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File

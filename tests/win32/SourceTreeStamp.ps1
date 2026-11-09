@@ -1,4 +1,5 @@
 param(
+    [string]$Withdraw,
     [string]$Write,
     [string]$SourceDirectory = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 )
@@ -41,26 +42,48 @@ function Get-SourceTreeId([string]$Directory) {
     }
 }
 
-if ($Write) {
-    $temporary = "$Write.$([Guid]::NewGuid()).tmp"
+# The build publishes a stamp in two steps around the vehicles (#1224):
+# -Withdraw <stamp> runs before any vehicle compiles; it removes the stamp and
+# records the tree it starts from in <stamp>.before. -Write <stamp> runs after
+# every vehicle has linked and publishes the stamp only when the tree is still
+# that one, so an edit made during the build leaves no stamp at all. Neither
+# step fails the build: a tree Git cannot describe simply gets no stamp.
+function Write-StampFile([string]$Path, [string]$Id) {
+    $temporary = "$Path.$([Guid]::NewGuid()).tmp"
+    try {
+        [System.IO.File]::WriteAllText($temporary, "$Id`n", (New-Object System.Text.UTF8Encoding($false)))
+        Move-Item -LiteralPath $temporary -Destination $Path -Force -ErrorAction Stop
+    } finally {
+        Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+    }
+}
+
+if ($Withdraw -or $Write) {
+    $Stamp = if ($Withdraw) { $Withdraw } else { $Write }
+    $Before = "$Stamp.before"
     try {
         # Invalidate first: a failed capture must never preserve an old baseline.
-        Remove-Item -LiteralPath $Write -Force -ErrorAction Stop
-    } catch [System.Management.Automation.ItemNotFoundException] {
-        # First build has no previous stamp.
-    } catch {
-        Write-Warning "No source stamp: $($_.Exception.Message)"
-        exit 0
-    }
-    try {
-        $id = Get-SourceTreeId $SourceDirectory
-        [System.IO.File]::WriteAllText($temporary, "$id`n", (New-Object System.Text.UTF8Encoding($false)))
-        Move-Item -LiteralPath $temporary -Destination $Write -Force -ErrorAction Stop
-        Write-Output "Scenario source tree $id"
+        Remove-Item -LiteralPath $Stamp -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $Stamp) { throw "cannot remove $Stamp" }
+        if ($Withdraw) {
+            Remove-Item -LiteralPath $Before -Force -ErrorAction SilentlyContinue
+            Write-StampFile $Before (Get-SourceTreeId $SourceDirectory)
+        } else {
+            if (-not (Test-Path -LiteralPath $Before -PathType Leaf)) {
+                throw "the build did not record the tree it started from"
+            }
+            $startId = ([System.IO.File]::ReadAllText($Before)).Trim()
+            $id = Get-SourceTreeId $SourceDirectory
+            if ($id -cne $startId) {
+                throw "tracked sources changed during the build ($startId -> $id); build again"
+            }
+            Write-StampFile $Stamp $id
+            Write-Output "Scenario source tree $id"
+        }
     } catch {
         Write-Warning "No source stamp: $($_.Exception.Message)"
     } finally {
-        Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+        if ($Write) { Remove-Item -LiteralPath $Before -Force -ErrorAction SilentlyContinue }
     }
     exit 0
 }
