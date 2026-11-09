@@ -875,3 +875,243 @@ void testTextBreakerCountingCapacityRefusal()
     LOKA_VERIFY(!result.valid() && result.lineCount() == 0 && result.width() == 0 && result.height() == 0);
   }
 }
+
+void testTextSpanUnlinkedCharacterization()
+{
+  const AttributedString value = Styled("", Italic) + Styled("", Red) + Styled("ab", Bold) + Styled("", Italic)
+                                 + Styled("", Red) + Styled("cd", Bold) + Styled("e", Italic) + Styled("f", Bold)
+                                 + Styled("", Italic) + Styled("", Red);
+  const SyntheticTextWidthSource source(value);
+  LOKA_VERIFY(source.valid() && source.length() == 6 && source.spanCount() == 3);
+  const std::size_t segments[] = {2, 6, 7};
+  const std::size_t starts[] = {0, 4, 5};
+  const std::size_t ends[] = {4, 5, 6};
+  for (std::size_t i = 0; i < 3; ++i)
+  {
+    LOKA_VERIFY(source.span(i).segment == segments[i]);
+    LOKA_VERIFY(source.span(i).start == starts[i] && source.span(i).end == ends[i]);
+    LOKA_VERIFY(source.span(i).style == (i == 1 ? Italic : Bold));
+  }
+  for (std::size_t i = 0; i < 6; ++i)
+  {
+    const TextBreakCharacter &row = source.character(i);
+    LOKA_VERIFY(row.value == static_cast<unsigned int>('a' + i));
+    LOKA_VERIFY(row.offset == i && row.end == i + 1 && row.span == (i < 4 ? 0 : i - 3));
+  }
+  const TextLineBreaker lines(source, BlockStyle().wrap(TEXT_WRAP_CHAR), 8);
+  LOKA_VERIFY(lines.valid() && lines.lineCount() == 3 && lines.width() == 8 && lines.height() == 36);
+  const std::size_t spans[] = {0, 0, 1, 2};
+  const std::size_t from[] = {0, 2, 4, 5};
+  const std::size_t to[] = {2, 4, 5, 6};
+  for (std::size_t i = 0; i < 4; ++i)
+  {
+    const TextFragment &fragment = lines.fragment(i);
+    LOKA_VERIFY(fragment.span == spans[i] && fragment.start == from[i] && fragment.end == to[i]);
+    LOKA_VERIFY(fragment.width == (i < 2 ? 8 : 4));
+  }
+}
+namespace
+{
+  /** Append-only fixture: successful body lengths can differ between walks. */
+  class SpanWalkString : public loka::platform::String
+  {
+  public:
+    SpanWalkString(const std::string &first,
+                   const std::string &second,
+                   unsigned &calls,
+                   bool firstReadable = true,
+                   bool secondReadable = true)
+        : first_(first),
+          second_(second),
+          calls_(calls),
+          firstReadable_(firstReadable),
+          secondReadable_(secondReadable)
+    {
+    }
+    virtual bool appendUtf8(std::string &out) const
+    {
+      const bool first = this->calls_++ == 0;
+      if (!(first ? this->firstReadable_ : this->secondReadable_))
+        return false;
+      out += first ? this->first_ : this->second_;
+      return true;
+    }
+
+  private:
+    const std::string first_, second_;
+    unsigned &calls_;
+    const bool firstReadable_, secondReadable_;
+  };
+
+  class SpanReadableString : public loka::platform::String
+  {
+  public:
+    explicit SpanReadableString(const bool &readable)
+        : readable_(readable)
+    {
+    }
+    virtual bool appendUtf8(std::string &out) const
+    {
+      if (!this->readable_)
+        return false;
+      out += "target";
+      return true;
+    }
+
+  private:
+    const bool &readable_;
+  };
+
+  /** Body decoding resets A before A/B and refuses A before B/C, on both walks. */
+  class SpanSwitchBody : public loka::platform::String
+  {
+  public:
+    SpanSwitchBody(bool &readable, bool next)
+        : readable_(readable),
+          next_(next)
+    {
+    }
+    virtual bool appendUtf8(std::string &out) const
+    {
+      this->readable_ = this->next_;
+      out += "x";
+      return true;
+    }
+
+  private:
+    bool &readable_;
+    const bool next_;
+  };
+
+  String spanString(loka::platform::String *value)
+  {
+    return String::FromPlatform(Managed<loka::platform::String>::Wrap(value));
+  }
+
+  void verifySpanPair(const LinkTarget &a, const LinkTarget &b, const TextStyle &secondStyle, std::size_t expected)
+  {
+    const AttributedString value = Linked("a", Bold, a) + Linked("b", secondStyle, b);
+    const SyntheticTextWidthSource source(value);
+    LOKA_VERIFY(source.valid() && source.spanCount() == expected && source.length() == 2);
+    LOKA_VERIFY(source.span(0).segment == 0 && source.span(0).start == 0);
+    LOKA_VERIFY(source.span(0).end == (expected == 1 ? 2 : 1));
+    LOKA_VERIFY(source.character(0).span == 0 && source.character(1).span == expected - 1);
+    if (expected == 2)
+      LOKA_VERIFY(source.span(1).segment == 1 && source.span(1).start == 1 && source.span(1).end == 2);
+    const TextLineBreaker lines(source, BlockStyle(), 100);
+    LOKA_VERIFY(lines.valid() && lines.lineCount() == 1 && lines.line(0).fragmentCount == expected);
+    for (std::size_t i = 0; i < expected; ++i)
+      LOKA_VERIFY(lines.fragment(i).span == i);
+    const NullTextMeasurement measurement = measured(value);
+    LOKA_VERIFY(measurement.width() == 8 && measurement.height() == 12);
+  }
+
+  /** Reset the conversion schedule for each independent consumer construction. */
+  void verifySpanRefusal(const AttributedString &value, unsigned &calls)
+  {
+    calls = 0;
+    const SyntheticTextWidthSource source(value);
+    LOKA_VERIFY(!source.valid() && source.length() == 0 && source.spanCount() == 0);
+    const TextLineBreaker lines(source, BlockStyle(), 100);
+    LOKA_VERIFY(!lines.valid() && lines.lineCount() == 0);
+    calls = 0;
+    Frame extent(7, 8, 9, 10);
+    LOKA_VERIFY(!value.estimateExtent(100, BlockStyle(), extent));
+    LOKA_VERIFY(extent == Frame(7, 8, 9, 10));
+    calls = 0;
+    const NullTextMeasurement measurement = measured(value);
+    LOKA_VERIFY(measurement.width() == 0 && measurement.height() == 12);
+  }
+
+  void spanLengthChange(std::size_t first, std::size_t second)
+  {
+    unsigned calls = 0;
+    const String body = spanString(new SpanWalkString(std::string(first, 'x'), std::string(second, 'x'), calls));
+    verifySpanRefusal(Styled(body, Bold), calls);
+  }
+
+  void spanTargetChange(unsigned count, bool firstReadable)
+  {
+    unsigned calls = 0;
+    const LinkTarget last(spanString(new SpanWalkString("last", "last", calls, firstReadable, !firstReadable)));
+    AttributedString::Builder builder(count);
+    for (unsigned i = 0; i < count; ++i)
+    {
+      char target[32];
+      ::snprintf(target, sizeof(target), "target-%u", i);
+      const LinkTarget link = i + 1 == count ? last : LinkTarget(String(i + 2 == count ? "last" : target));
+      LOKA_VERIFY(builder.appendLink(String("x"), Bold, link));
+    }
+    const AttributedString value = builder.build();
+    verifySpanRefusal(value, calls);
+  }
+} // namespace
+
+void testTextSpanLinkBoundaries()
+{
+  const LinkTarget x(String("x")), y(String("y"));
+  verifySpanPair(x, y, Bold, 2);
+  verifySpanPair(x, x, Italic, 2);
+  verifySpanPair(x, LinkTarget(String("x")), Bold, 1);
+  verifySpanPair(x, LinkTarget(), Bold, 2);
+  verifySpanPair(LinkTarget(), x, Bold, 2);
+  bool readable = false;
+  const LinkTarget refused(spanString(new SpanReadableString(readable)));
+  const LinkTarget otherRefused(spanString(new SpanReadableString(readable)));
+  verifySpanPair(refused, refused, Bold, 1);
+  verifySpanPair(refused, otherRefused, Bold, 2);
+
+  const AttributedString value = Linked("", Italic, y) + Linked("", Red, y) + Linked("a", Bold, x)
+                                 + Linked("", Italic, y) + Linked("", Red, y) + Linked("b", Bold, x)
+                                 + Linked("c", Bold, y) + Linked("", Italic, x) + Linked("", Red, x);
+  const SyntheticTextWidthSource source(value);
+  LOKA_VERIFY(source.valid() && source.spanCount() == 2 && source.length() == 3);
+  LOKA_VERIFY(source.span(0).segment == 2 && source.span(0).start == 0 && source.span(0).end == 2);
+  LOKA_VERIFY(source.span(1).segment == 6 && source.span(1).start == 2 && source.span(1).end == 3);
+  LOKA_VERIFY(source.character(0).span == 0 && source.character(1).span == 0 && source.character(2).span == 1);
+  const SyntheticTextWidthSource empty(Linked("", Italic, x) + Linked("", Bold, y));
+  LOKA_VERIFY(empty.valid() && empty.length() == 0 && empty.spanCount() == 0);
+}
+
+void testTextSpanPreviousNonempty()
+{
+  bool readable = false;
+  const LinkTarget a(spanString(new SpanReadableString(readable)));
+  const LinkTarget b(String("target")), c(String("target"));
+  const String first = spanString(new SpanSwitchBody(readable, true));
+  const String third = spanString(new SpanSwitchBody(readable, false));
+  const SyntheticTextWidthSource source(Linked(first, Bold, a) + Linked("x", Bold, b) + Linked(third, Bold, c));
+  LOKA_VERIFY(source.valid() && source.spanCount() == 1 && source.length() == 3);
+  LOKA_VERIFY(source.span(0).segment == 0 && source.span(0).start == 0 && source.span(0).end == 3);
+  for (std::size_t i = 0; i < 3; ++i)
+    LOKA_VERIFY(source.character(i).span == 0);
+}
+
+void testTextSpanDescriptorInlineGrowth()
+{
+  spanTargetChange(33, true);
+}
+void testTextSpanDescriptorHeapGrowth()
+{
+  spanTargetChange(34, true);
+}
+void testTextSpanDescriptorUnderfill()
+{
+  spanTargetChange(33, false);
+}
+void testTextSpanCharacterHeapGrowth()
+{
+  spanLengthChange(33, 34);
+}
+void testTextSpanCharacterUnderfill()
+{
+  spanLengthChange(2, 1);
+}
+void testTextSpanEmptyBecomesNonempty()
+{
+  spanLengthChange(0, 1);
+}
+void testTextSpanNonemptyBecomesEmpty()
+{
+  spanLengthChange(1, 0);
+}
