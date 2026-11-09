@@ -343,6 +343,9 @@ export LOKA_SCENARIO_CELL="$EXAMPLE/$SCENARIO"
 if ! cp -f "$SCRIPT_DIR/mame-launch.lua" "$LAUNCHER"; then
   fail_stage mame "could not stage mame-launch.lua"
 fi
+if ! cp -f "$SCRIPT_DIR/mame-keys.lua" "$WORK/mame-keys.lua"; then
+  fail_stage mame "could not stage mame-keys.lua"
+fi
 
 DEV_DISK_ARGUMENTS=("$APPL")
 if [ "$EXAMPLE" = smirkycard ]; then
@@ -467,6 +470,9 @@ if [ -n "${LOKA_LAUNCH_WAIT:-}" ]; then
 fi
 if [ -n "${LOKA_SETTLE_TIMEOUT:-}" ]; then
   FORWARD="$FORWARD:LOKA_SETTLE_TIMEOUT"
+fi
+if [ "${LOKA_KEY_RELEASE_HOLD+x}" ]; then
+  FORWARD="$FORWARD:LOKA_KEY_RELEASE_HOLD"
 fi
 # WSL hands nothing to a Windows process unless it is named here.
 export WSLENV="${WSLENV:+$WSLENV:}$FORWARD"

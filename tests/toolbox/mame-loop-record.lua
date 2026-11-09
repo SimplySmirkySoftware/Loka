@@ -7,12 +7,8 @@
 -- picks the newest PNG in the snapshot directory as the capture to compare
 -- against a golden, so a periodic-snapshot branch living there would put a
 -- second failure mode inside the golden path (#399) for a presentation-only
--- feature. The shared fact the two files both encode is the Finder
--- navigation prologue -- boot wait, type-select the volume, Cmd-O, Tab to the
--- application, Cmd-O -- and it is duplicated on purpose: if the boot disk's
--- System or the dev disk's file layout changes, BOTH scripts must be updated
--- together. Extracting the prologue into one shared Lua file is the right end
--- state and is recorded as follow-up work on #402.
+-- feature. Key handling and the identical Finder navigation steps live in
+-- mame-keys.lua; recording and rail evidence remain separate.
 --
 -- Unlike the rail driver there is no completion marker and no verdict: a
 -- presentation build never signals settle. Recording stops on a wall of
@@ -33,33 +29,8 @@ local function say(fmt, ...)
     log:flush()
 end
 
-local function field(portTag, name)
-    return assert(manager.machine.ioport.ports[portTag].fields[name])
-end
-
-local lKey = field(":macadb:KEY2", "l  L")
-local oKey = field(":macadb:KEY1", "o  O")
-local commandKey = field(":macadb:KEY3", "Command / Open Apple")
-
-local function keyByName(name)
-    for tag, port in pairs(manager.machine.ioport.ports) do
-        if tag:find("^:macadb:KEY") then
-            local found = port.fields[name]
-            if found then
-                return found
-            end
-        end
-    end
-    error("no key field named " .. name)
-end
-
-local function tap(key)
-    key:set_value(1)
-    emu.wait(0.10)
-    key:clear_value()
-    emu.wait(0.20)
-end
-
+local here = debug.getinfo(1, "S").source:match("^@(.*[/\\])") or ""
+local keys = dofile(here .. "mame-keys.lua")(say)
 local function findScreen()
     local screen = manager.machine.screens[":screen"]
     if not screen then
@@ -75,22 +46,13 @@ end
 
 say("booting (%s emulated seconds)", BOOT_WAIT)
 emu.wait(BOOT_WAIT)
-tap(lKey)
-commandKey:set_value(1); tap(oKey); commandKey:clear_value()
-emu.wait(5)
+keys.decideKeyMapReadable()
+keys.openVolume()
 
-local tabKey = keyByName("Tab")
-local tabCount = assert(tonumber(os.getenv("LOKA_TAB_COUNT")),
-    "LOKA_TAB_COUNT must be set by the caller")
-assert(tabCount > 0 and tabCount == math.floor(tabCount),
-    "LOKA_TAB_COUNT must be a positive integer")
-for _ = 1, tabCount do
-    tap(tabKey)
-end
-emu.wait(1)
+keys.selectApplication(tonumber(os.getenv("LOKA_TAB_COUNT")))
 
 local screen = findScreen()
-commandKey:set_value(1); tap(oKey); commandKey:clear_value()
+keys.commandTap(keys.field(":macadb:KEY1", "o  O"))
 say("opened application; recording %s emulated seconds every %s",
     RECORD_SECONDS, FRAME_INTERVAL)
 
