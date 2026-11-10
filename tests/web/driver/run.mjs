@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 const driverDir=fileURLToPath(new URL('.',import.meta.url));
 import assert from 'node:assert/strict';
+import {renderPreviewHtml} from '../../../tools/vscode-loka/src/previewHtml.ts';
 
 const build=resolve(process.argv[2] || 'build/wasm/testing/web');
 const helloBuild=resolve('build/wasm/web/example/HelloWorld');
@@ -62,7 +63,22 @@ const server=createServer(async(req,res)=>{
   try {
     const file=basename(new URL(req.url,'http://localhost').pathname) || 'index.html';
     let data;
-    if(file === 'csp-allow.html' || file === 'csp-deny.html') {
+    const mode = new URL(req.url, 'http://localhost').searchParams.get('cell');
+    if(file === 'preview.html') {
+      data = renderPreviewHtml({kind:'module', id:'preview-document', nonce:'preview-nonce',
+        cspSource: "'self'", exportName:'LokaHelloWeb',
+        jsUri: mode === 'script-fail' ? 'missing-preview.js' : 'preview-module.js',
+        wasmUri: mode === 'wasm-fail' ? 'missing-preview.wasm' : 'LokaHelloWeb.wasm'});
+      if(mode?.startsWith('nonce-')) {
+        let index = 0;
+        data = data.replace(/<script nonce="preview-nonce"/g, match =>
+          index++ === Number(mode.slice(6)) ? '<script' : match);
+      }
+      if(mode === 'wasm-csp') data = data.replace(' &#39;wasm-unsafe-eval&#39;', '');
+    } else if(file === 'missing-preview.js') {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      res.writeHead(404); res.end(); return;
+    } else if(file === 'csp-allow.html' || file === 'csp-deny.html') {
       const wasm=file === 'csp-allow.html' ? " 'wasm-unsafe-eval'" : '';
       res.setHeader('Content-Security-Policy',`script-src 'nonce-X'${wasm}; connect-src 'self'; default-src 'none'`);
       data=`<!doctype html><body><script nonce="X" src="LokaHelloWeb.js"></script>
@@ -75,8 +91,8 @@ const server=createServer(async(req,res)=>{
         </script>`;
     } else if(file === 'LokaHelloWeb.wasm') data=await readFile(join(helloBuild,file));
     else if(file === 'text-cells.js') data=await readFile(join(driverDir,file));
-    else if(file === 'skew.js' || file === 'LokaWebCounter.js' || file === 'LokaHelloWeb.js') {
-      data=await readFile(file === 'LokaHelloWeb.js' ? join(helloBuild,file) : join(build,'LokaWebCounter.js'),'utf8');
+    else if(file === 'skew.js' || file === 'LokaWebCounter.js' || file === 'LokaHelloWeb.js' || file === 'preview-module.js') {
+      data=await readFile((file === 'LokaHelloWeb.js' || file === 'preview-module.js') ? join(helloBuild,'LokaHelloWeb.js') : join(build,'LokaWebCounter.js'),'utf8');
       // Driver-only closure access, never a production export or a C++ test-shaped door.
       const hook=`Module['textTest']={
         service:()=>WebDOM.text,
@@ -91,6 +107,24 @@ const server=createServer(async(req,res)=>{
       const api=/Module\[['"]web['"]\]\s*=/g;
       assert.equal([...data.matchAll(api)].length,1,'one module API assignment');
       data=data.replace(api,match=>hook+match);
+      if(file === 'preview-module.js') data += `
+        // Driver-only observation of the real module; not a shipped shell API.
+        { const factory = LokaHelloWeb;
+          LokaHelloWeb = options => {
+            const cell = new URL(location.href).searchParams.get('cell');
+            if(cell === 'throw') throw new Error('driver factory throw');
+            return factory(options).then(async module => {
+              window.observedModule = module;
+              window.startCalls = 0;
+              const start = module.web.start;
+              module.web.start = () => { ++window.startCalls; return start(); };
+              module.web.completed.then(() => { window.railSettled = true; });
+              if(cell === 'pending') await new Promise(resolve => setTimeout(resolve, 100));
+              return module;
+            });
+          };
+        }
+      `;
       if(file === 'skew.js') data=data.replace(/"fingerprint":\d+/, '"fingerprint":0');
     } else data=await readFile(join(build,file));
     const type={'.html':'text/html','.js':'application/javascript','.wasm':'application/wasm'}[extname(file)];
@@ -123,6 +157,62 @@ try {
     for(let i=0;i<100 && !await client.evaluate('!!window.ready || !!window.loadError');++i)
       await new Promise(resolve=>setTimeout(resolve,50));
   }
+  const injection = await client.send('Page.addScriptToEvaluateOnNewDocument', {source: `
+    window.messages = [];
+    window.railSettled = false;
+    window.acquireVsCodeApi = () => {
+      const cell = new URL(location.href).searchParams.get('cell');
+      if(['pending','script-fail','throw'].includes(cell)) queueMicrotask(() =>
+        dispatchEvent(new MessageEvent('message', {data:{id:'preview-document',type:'dispose'}})));
+      return {postMessage: message => messages.push({...message, settled:railSettled})};
+    };
+  `});
+  async function previewWait(expression, expected = true) {
+    for(let i=0; i<100; ++i) {
+      if(await client.evaluate(expression) === expected) return;
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    assert.equal(await client.evaluate(expression), expected, expression);
+  }
+  const disposePreview = () => client.evaluate(`dispatchEvent(new MessageEvent('message',
+    {data:{id:'preview-document',type:'dispose'}}))`);
+  for(const cell of ['normal','pending','wasm-fail','script-fail','throw',
+      'nonce-0','nonce-1','nonce-2','wasm-csp']) {
+    client.errors.length = 0;
+    await client.send('Page.navigate', {url:'http://127.0.0.1:'+server.address().port+'/preview.html?cell='+cell});
+    await previewWait(`location.search === '?cell=${cell}' && Array.isArray(window.messages)`);
+    if(cell.startsWith('nonce-') || cell === 'wasm-csp') {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      assert.equal(await client.evaluate(`messages.filter(m=>m.type==='started').length`), 0);
+    } else if(['wasm-fail','script-fail','throw'].includes(cell)) {
+      await previewWait(`messages.some(m=>m.type==='error')`);
+      if(cell === 'wasm-fail') await disposePreview();
+      await previewWait(`messages.filter(m=>m.type==='absent').length === 1`);
+      await disposePreview();
+      assert.equal(await client.evaluate(`messages.filter(m=>m.type==='absent').length`), 1);
+      assert.equal(await client.evaluate(`messages.filter(m=>m.type==='completed').length`), 0);
+    } else {
+      if(cell === 'normal') {
+        await previewWait(`messages.some(m=>m.type==='started' && m.status===0)`);
+        assert.equal(await client.evaluate(`messages.filter(m=>m.type==='completed').length`), 0);
+        assert.equal(await client.evaluate('railSettled'), false);
+        assert.equal(await client.evaluate("document.body.textContent.includes('clicks: 0')"), true);
+        await client.evaluate("[...document.querySelectorAll('button')].find(e=>e.textContent==='Probe Button').click()");
+        await previewWait("document.body.textContent.includes('clicks: 1')");
+        await disposePreview();
+      }
+      await previewWait(`messages.filter(m=>m.type==='completed').length === 1`);
+      assert.equal(await client.evaluate('startCalls'), cell === 'normal' ? 1 : 0);
+      assert.equal(await client.evaluate('observedModule.textTest.resources()'), 0);
+      assert.deepEqual(client.errors, [], 'preview shell runtime errors');
+      assert.equal(await client.evaluate(`messages.filter(m=>m.type==='completed' && !m.settled).length`), 0);
+      await disposePreview();
+      assert.equal(await client.evaluate(`messages.filter(m=>m.type==='completed').length`), 1);
+    }
+    console.log('preview shell '+cell+': passed');
+  }
+  await client.send('Page.removeScriptToEvaluateOnNewDocument', {identifier:injection.identifier});
+  client.errors.length = 0; // Negative CSP/load cells deliberately produce errors.
   await navigate('index.html');
   await client.evaluate('document.body.style.direction="rtl";fixture._fixture_configure(-1,0);web.start()');
   const scrollInfo=await client.evaluate(`(() => {

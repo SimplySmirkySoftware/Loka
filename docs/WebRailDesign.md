@@ -119,7 +119,7 @@ profile. Both HelloWeb and counter use this same function.
 
 Build `LokaWebTests` with the existing testing, testing-release and testing-asan presets and run `ctest --test-dir <build> -R '^webRail$' --output-on-failure`. The fake boundary implements the same imports as the real adapter. `LOKA_WEB_CAPTURE_GOLDEN=1` prints the initial instruction sequence; ordinary runs compare the committed golden.
 
-With emsdk 7.0.0 sourced, use `emcmake cmake --preset testing-web`, then build `build/wasm/testing`. The node fixture alone links NODERAWFS. The browser fixture links production Web/common libraries without TEST_BUILD and keeps EXIT_RUNTIME disabled. Run `node tests/web/driver/run.mjs build/wasm/testing/web`; absence of Chromium is an explicit skip, and `CHROMIUM=<executable>` names a browser outside PATH. No npm installation is needed.
+The driver requires Node 22.x from 22.18, or Node 24 or newer (not Node 23). With emsdk 7.0.0 sourced, use `emcmake cmake --preset testing-web`, then build `build/wasm/testing`. The node fixture alone links NODERAWFS. The browser fixture links production Web/common libraries without TEST_BUILD and keeps EXIT_RUNTIME disabled. Run `node tests/web/driver/run.mjs build/wasm/testing/web`; absence of Chromium is an explicit skip, and `CHROMIUM=<executable>` names a browser outside PATH. No npm installation is needed.
 
 Production build: `emcmake cmake --preset web && cmake --build --preset web
 --target LokaHelloWeb LokaWebCounter`. Run
@@ -339,3 +339,11 @@ Scroll reproduction adds `LOKA_WEB_CAPTURE_SCROLL=1` for `scroll.golden`,
 `node tests/web/js/boundary.test.mjs` for deterministic adapter read-back and
 listener checks, and `tests/web/mutations/scroll-{1,2,3,4,5,6,7}.py <worktree>`.
 The counter golden includes the intended additional root-reveal projection pass.
+
+### VS Code shell (PR 5a)
+
+The shell procedures live in `tools/vscode-loka/src/previewHtml.ts` (documents),
+`src/preview.ts` (panel lifetime), and `src/build.ts` (task lifetime).
+PR 5b adds VS Code wiring, manifest contributions, and launch configuration.
+Externally destroyed documents (panel close or window reload) terminate abruptly:
+there is no host disposal call and no completion acknowledgement.

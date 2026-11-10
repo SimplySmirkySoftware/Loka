@@ -1,0 +1,13 @@
+{
+  "name": "loka-preview",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('out',{recursive:true,force:true})\" && tsc -p .",
+    "check": "tsc -p . --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "5.9.3"
+  }
+}
