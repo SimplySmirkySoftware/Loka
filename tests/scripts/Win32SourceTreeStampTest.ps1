@@ -77,6 +77,19 @@ try {
     } finally {
         $env:GIT_INDEX_FILE = $null
     }
+    # A second git.exe later on PATH must not turn the command into a list.
+    $Shadow = Join-Path $TestRoot 'shadow-git'
+    New-Item -ItemType Directory -Path $Shadow | Out-Null
+    [IO.File]::WriteAllText((Join-Path $Shadow 'git.exe'), '')
+    $SavedPath = $env:PATH
+    try {
+        $RealGit = Split-Path -Parent (Get-Command git -CommandType Application | Select-Object -First 1).Source
+        $env:PATH = "$RealGit;$Shadow;$SavedPath"
+        if (@(Get-Command git -CommandType Application).Count -lt 2) { throw "shadow git not on PATH" }
+        Assert-Equal (Get-SourceTreeId $Repo) $Clean 'several git.exe on PATH'
+    } finally {
+        $env:PATH = $SavedPath
+    }
     $SavedPath = $env:PATH
     try {
         $env:PATH = ''

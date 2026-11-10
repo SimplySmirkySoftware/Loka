@@ -11,7 +11,8 @@ param(
 function Get-SourceTreeId([string]$Directory) {
     # Native stderr is diagnostic text; Git's exit code decides success (PS 5.1).
     $ErrorActionPreference = "Continue"
-    $git = (Get-Command git -CommandType Application -ErrorAction Stop).Source
+    # PATH can hold several git.exe (hosted runners do); use the one a shell would run.
+    $git = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     $index = Join-Path ([System.IO.Path]::GetTempPath()) ("loka-source-index-" + [Guid]::NewGuid())
     $savedIndex = $env:GIT_INDEX_FILE
     try {
