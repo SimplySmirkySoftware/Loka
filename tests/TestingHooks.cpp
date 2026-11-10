@@ -1,5 +1,3 @@
-#include "platform/null/NullTextStore.hpp"
-#include "testing/app/TextDocumentFileTestHooks.hpp"
 // Implementations of TEST_BUILD-only failure-injection hooks declared in
 // library and scenario-test headers. They live in a test translation unit
 // on purpose: platform core libraries (LokaWin32Core etc.) are built without
@@ -8,6 +6,7 @@
 #include "app/Menu.hpp"
 #include "testing/app/URLReceiveTestHooks.hpp"
 #include "testing/app/TextInputCommitTestHooks.hpp"
+#include "testing/app/TextDocumentFileTestHooks.hpp"
 #include "core/LokaAlloc.hpp"
 #include "support/LokaAllocFailure.hpp"
 #include <cstring>
@@ -953,14 +952,14 @@ namespace loka
         unsigned textChunkReadFailures = 0;
         unsigned textChunkReadsBeforeFailure = 0;
       }
-      void failTextChunkReads(unsigned count)
-      {
-        failTextChunkReadsAfter(0, count);
-      }
       void failTextChunkReadsAfter(unsigned successes, unsigned failures)
       {
         textChunkReadsBeforeFailure = successes;
         textChunkReadFailures = failures;
+      }
+      void failTextChunkReads(unsigned count)
+      {
+        failTextChunkReadsAfter(0, count);
       }
       bool consumeTextChunkReadFailure()
       {
