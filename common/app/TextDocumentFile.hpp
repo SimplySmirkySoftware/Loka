@@ -12,6 +12,8 @@ namespace loka
 {
   namespace app
   {
+    class TextDocument;
+
     /** The rail's serialized separator; no separator follows the last row. */
 #if defined(LOKA_RETRO68)
     const char kTextDocumentNewline[] = "\r";
@@ -43,6 +45,12 @@ namespace loka
         discarded inside that runtime cannot be recovered here. */
     TextDocumentResult
     WriteTextDocument(PlatformContext *context, const loka::file::File &file, const TextBuffer &buffer);
+    /** Finish dialogs before calling; do not pump from call start to return.
+        Validate the entire body before filesystem work, then read again and
+        serialize in bounded chunks. Pass 2 can fail after truncation, including
+        allocation refusal, and returns WRITE_FAILED. No whole-body copy. */
+    TextDocumentResult
+    WriteTextDocument(PlatformContext *context, const loka::file::File &file, const TextDocument &document);
   } // namespace app
 } // namespace loka
 #endif

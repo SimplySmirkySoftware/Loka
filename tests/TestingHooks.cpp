@@ -1,3 +1,5 @@
+#include "platform/null/NullTextStore.hpp"
+#include "testing/app/TextDocumentFileTestHooks.hpp"
 // Implementations of TEST_BUILD-only failure-injection hooks declared in
 // library and scenario-test headers. They live in a test translation unit
 // on purpose: platform core libraries (LokaWin32Core etc.) are built without
@@ -949,13 +951,24 @@ namespace loka
       namespace
       {
         unsigned textChunkReadFailures = 0;
+        unsigned textChunkReadsBeforeFailure = 0;
       }
       void failTextChunkReads(unsigned count)
       {
-        textChunkReadFailures = count;
+        failTextChunkReadsAfter(0, count);
+      }
+      void failTextChunkReadsAfter(unsigned successes, unsigned failures)
+      {
+        textChunkReadsBeforeFailure = successes;
+        textChunkReadFailures = failures;
       }
       bool consumeTextChunkReadFailure()
       {
+        if (textChunkReadsBeforeFailure)
+        {
+          --textChunkReadsBeforeFailure;
+          return false;
+        }
         if (!textChunkReadFailures)
           return false;
         --textChunkReadFailures;
@@ -998,6 +1011,36 @@ namespace loka
         TextDocumentFact fact = document.fact_.get();
         fact.textRevision_ = revision;
         document.fact_.set(fact);
+      }
+    } // namespace testing
+  } // namespace app
+} // namespace loka
+#endif
+
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace app
+  {
+    namespace testing
+    {
+      namespace
+      {
+        void (*savePassProbe)(void *) = 0;
+        void *savePassData = 0;
+      } // namespace
+      void observeTextDocumentSavePasses(void (*probe)(void *), void *data)
+      {
+        savePassProbe = probe;
+        savePassData = data;
+      }
+      void betweenTextDocumentSavePasses()
+      {
+        void (*probe)(void *) = savePassProbe;
+        void *data = savePassData;
+        observeTextDocumentSavePasses(0, 0);
+        if (probe)
+          probe(data);
       }
     } // namespace testing
   } // namespace app
