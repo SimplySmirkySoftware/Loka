@@ -176,6 +176,8 @@ the other cells unchecked so the sample remains visible.
 
 ## How to re-run
 
+The Win32 scenario runner requires `cmake --build --preset win32-tests` for the current tracked source tree; target-only builds do not refresh its source stamp.
+
 Run commands from the repository root. The configure-and-build lines below are
 single shell invocations that reproduce each build leg available today; the
 host must satisfy that preset's toolchain requirements.
