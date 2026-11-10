@@ -1263,6 +1263,13 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   endfunction()
 
   if(NOT WIN32)
+    add_test(NAME scriptVscodeLoka
+      COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/VscodeLokaTest.sh)
+    set_tests_properties(scriptVscodeLoka PROPERTIES
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/tools/vscode-loka SKIP_RETURN_CODE 77)
+    add_test(NAME scriptVscodeLokaLauncher
+      COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/VscodeLokaLauncherTest.sh)
+    set_tests_properties(scriptVscodeLokaLauncher PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME scriptMameDebugLaunch
       COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/MameDebugLaunchTest.sh)
     add_test(NAME scriptMameRunLaunch
