@@ -33,11 +33,11 @@ source_id() (
       printf '%s\n' "$path"
     done <"$scratch/paths0" >"$scratch/paths" || exit 1
     LC_ALL=C sort "$scratch/paths" >"$scratch/sorted" || exit 1
-    while IFS= read -r path; do
-      digest="$(shasum -a 256 <"$path")" || exit 1
-      printf '%s  %s\n' "${digest%% *}" "$path"
-    done <"$scratch/sorted" >"$scratch/listing" || exit 1
-    digest="$(shasum -a 256 <"$scratch/listing")" || exit 1
+    # One shasum over the whole sorted list: one process per file took minutes
+    # on the Mavericks rig (2,553 files), the batch takes about a second.
+    # LC_ALL=C also keeps shasum's perl from warning about an unknown locale.
+    tr '\n' '\000' <"$scratch/sorted" | LC_ALL=C xargs -0 shasum -a 256 >"$scratch/listing" || exit 1
+    digest="$(LC_ALL=C shasum -a 256 <"$scratch/listing")" || exit 1
     printf 'content:%s\n' "${digest%% *}"
   fi
 )
