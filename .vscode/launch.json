@@ -2,6 +2,14 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Loka: Preview Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/tools/vscode-loka"],
+      "preLaunchTask": "Build: Loka Preview Extension",
+      "outFiles": ["${workspaceFolder}/tools/vscode-loka/out/**/*.js"]
+    },
+    {
       "name": "Run (macOS HelloWorld)",
       "type": "lldb-dap",
       "request": "launch",
