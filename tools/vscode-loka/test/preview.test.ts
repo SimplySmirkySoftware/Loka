@@ -6,15 +6,35 @@ import type {PreviewPanel, PreviewPorts} from '../src/preview.ts';
 
 function fixture(trusted = true, folder: string | null = '/workspace', present: boolean | '.js' | '.wasm' = true) {
   let serial = 0, directory = 'first', html = '', assignments = 0;
-  const errors: string[] = [];
+  const errors: string[] = [], faults: unknown[] = [];
+  let live: 'live' | 'closed' = 'live';
+  const hooks = {options: () => {}, html: () => {}};
+  let options = {enableScripts: false, localResourceRoots: [] as readonly string[]};
+  const nativeUse = () => assert.equal(live, 'live', 'native use after disposal');
   const posts: unknown[] = [], output: string[] = [], status: string[] = [], reads: string[] = [];
   const timers = new Set<() => void>(), history: (() => void)[] = [];
-  const panel: PreviewPanel = {
-    options: {enableScripts: false, localResourceRoots: []},
-    get html() { return html; },
-    set html(value) { html = value; ++assignments; },
-    postMessage(message) { posts.push(message); },
+  const panel = {
+    get options() { nativeUse(); return options; },
+    set options(value) { nativeUse(); options = value; hooks.options(); },
+    get html() { nativeUse(); return html; },
+    set html(value: string) { nativeUse(); html = value; ++assignments; hooks.html(); },
+    postMessage(message: unknown) { nativeUse(); posts.push(message); },
   };
+  const adapter: {-readonly [K in keyof PreviewPanel]: PreviewPanel[K]} = {
+    install(prepared) {
+      if (live === 'closed') return 'closed';
+      panel.options = prepared.options;
+      if (isClosed()) return 'closed';
+      panel.html = prepared.html;
+      return isClosed() ? 'closed' : 'installed';
+    },
+    postDispose(id) {
+      if (live === 'closed') return 'closed';
+      panel.postMessage({id, type: 'dispose'}); return 'posted';
+    },
+    revoke() { live = 'closed'; },
+  };
+  const isClosed = () => live === 'closed';
   const ports: {-readonly [K in keyof PreviewPorts<() => void>]: PreviewPorts<() => void>[K]} = {
     admitted: () => trusted, folder: () => folder ?? undefined,
     setting: name => { reads.push(name); return directory + '/Demo.js'; },
@@ -26,12 +46,13 @@ function fixture(trusted = true, folder: string | null = '/workspace', present: 
       after(ms, callback) { assert.equal(ms, 2000); timers.add(callback); history.push(callback); return callback; },
       cancel(timer) { timers.delete(timer); },
     },
+    fault: error => { faults.push(error); },
     error: message => errors.push(message), output: message => output.push(message), status: message => status.push(message),
   };
-  const preview = createPreview(panel, ports);
+  const preview = createPreview(adapter, ports);
   const state = () => Object.getOwnPropertyDescriptor(preview, 'state')!.value;
   const receive = (type: string, extra = {}, id = state().id) => preview.receive({id, type, ...extra});
-  return {preview, panel, ports, posts, output, errors, status, timers, history, reads, state, receive,
+  return {preview, panel, adapter, hooks, faults, nativeDispose: () => { adapter.revoke(); preview.close(); }, ports, posts, output, errors, status, timers, history, reads, state, receive,
     assignments: () => assignments, trust: () => { trusted = true; },
     directory: () => { directory = 'second'; }};
 }
@@ -135,7 +156,7 @@ test('Build lifetime spans Preview close and reopen; second starts stay refused'
   const {createBuild} = await import('../src/build.ts');
   const newBuild = () => createBuild({admitted: () => true,
     execute() { ++calls; return new Promise<object>(yes => { resolve = yes; }); },
-    reload: () => f.preview.reload(), report: () => {}});
+    reload: () => f.preview.reload(), report: () => {}, fault: () => {}});
   let build = newBuild();
   build.start(); build.start(); assert.equal(calls, 1);
   f.preview.close(); f = fixture(); build.start(); assert.equal(calls, 1);
@@ -162,40 +183,41 @@ for (const path of ['acknowledgement', 'timeout']) {
         if (action === 'close') f.preview.close(); else f.receive('completed');
       };
       if (path === 'timeout') f.history[0](); else f.receive('completed');
-      assert.equal(f.assignments(), action === 'close' ? 1 : 2);
+      assert.equal(f.assignments(), 2);
       assert.equal(f.state().phase.kind, action === 'close' ? 'CLOSED' : 'LOADING');
-      if (action === 'close') { assert.equal(f.panel.html, html); assert.equal(f.status.at(-1), 'CLOSED'); }
+      if (action === 'close') { assert.notEqual(f.panel.html, html); assert.equal(f.status.at(-1), 'CLOSED'); }
     });
   }
 }
-test('error callback close suppresses stale FAILED status', () => {
+test('error callback close follows FAILED status', () => {
   const f = fixture(); f.ports.error = () => f.preview.close();
   f.receive('error', {reason: 'failure'});
   assert.equal(f.state().phase.kind, 'CLOSED'); assert.equal(f.status.at(-1), 'CLOSED');
 });
-test('DISPOSING status callback close suppresses dispose post', () => {
+test('DISPOSING status callback close follows dispose post', () => {
   const f = fixture(), original = f.ports.status;
   f.ports.status = message => { original(message); if (message === 'DISPOSING') f.preview.close(); };
   f.preview.reload();
-  assert.equal(f.state().phase.kind, 'CLOSED'); assert.equal(f.posts.length, 0); assert.equal(f.timers.size, 0);
+  assert.equal(f.state().phase.kind, 'CLOSED'); assert.equal(f.posts.length, 1); assert.equal(f.timers.size, 0);
 });
 for (const port of ['admitted', 'folder', 'identity', 'setting', 'resolve', 'existsSync', 'directory', 'asWebviewUri', 'stem'] as const) {
-  test(`replacement ${port} callback close preserves CLOSED and html`, () => {
+  test(`replacement ${port} callback close follows installed document`, () => {
     const f = fixture(); f.receive('completed'); const html = f.panel.html, options = f.panel.options;
     const original = f.ports[port];
     Object.assign(f.ports, {[port]: (...args: never[]) => {
       f.preview.close(); return (original as (...args: never[]) => unknown)(...args);
     }});
     f.preview.reload();
-    assert.equal(f.state().phase.kind, 'CLOSED'); assert.equal(f.panel.html, html);
-    assert.equal(f.panel.options, options);
+    assert.equal(f.state().phase.kind, 'CLOSED'); assert.notEqual(f.panel.html, html);
+    assert.notEqual(f.panel.options, options);
+    assert.equal(f.assignments(), 2);
   });
 }
-test('timer creation callback close cancels uninstalled timer', () => {
+test('timer creation callback close follows disposal and cancels timer', () => {
   const f = fixture(), original = f.ports.clock.after;
   f.ports.clock.after = (ms, callback) => { f.preview.close(); return original(ms, callback); };
   f.preview.reload(); assert.equal(f.state().phase.kind, 'CLOSED');
-  assert.equal(f.timers.size, 0); assert.equal(f.posts.length, 0);
+  assert.equal(f.timers.size, 0); assert.equal(f.posts.length, 1);
 });
 test('timer cancellation callback close cannot be overwritten', () => {
   const f = fixture(); f.preview.reload(); const original = f.ports.clock.cancel;
@@ -205,9 +227,11 @@ test('timer cancellation callback close cannot be overwritten', () => {
 for (const property of ['options', 'html'] as const) {
   test(`panel ${property} setter close stops replacement`, () => {
     const f = fixture(); f.receive('completed'); const html = f.panel.html;
-    Object.defineProperty(f.panel, property, {set() { f.preview.close(); }});
+    f.hooks[property] = () => f.nativeDispose();
     f.preview.reload(); assert.equal(f.state().phase.kind, 'CLOSED');
-    if (property === 'options') assert.equal(f.panel.html, html);
+    assert.equal(f.assignments(), property === 'options' ? 1 : 2);
+    assert.equal(f.status.at(-1), 'CLOSED');
+    assert.throws(() => f.panel.html, /native use after disposal/);
   });
 }
 test('replacement status close preserves terminal timeout status', () => {
@@ -219,4 +243,181 @@ test('replacement status close preserves terminal timeout status', () => {
 test('status callback may close unconditionally without recursive close', () => {
   const f = fixture(); f.ports.status = () => f.preview.close();
   f.receive('started', {status: 0}); assert.equal(f.state().phase.kind, 'CLOSED');
+});
+
+test('reload retained for started, error, completed posted from clock.after', () => {
+  for (const type of ['started', 'error', 'completed']) {
+    const f = fixture(); const original = f.ports.clock.after;
+    f.ports.clock.after = (ms, callback) => {
+      f.receive(type, {status: 0, reason: 'failure'}); return original(ms, callback);
+    };
+    f.preview.reload();
+    assert.equal(f.posts.length, 1, type + ': reload must post disposal');
+  }
+});
+
+for (const door of ['OPEN', 'cancel', 'nested RELOAD']) {
+  test(`${door}: outer-before, outer-after, nested`, () => {
+    const f = fixture(), trace: string[] = [];
+    const queueClose = () => { trace.push('outer-before'); f.preview.close(); trace.push('outer-after'); };
+    const status = f.ports.status;
+    f.ports.status = message => { status(message); if (message === 'CLOSED') trace.push('nested'); };
+    if (door === 'OPEN') {
+      f.ports.admitted = () => { queueClose(); return true; };
+      f.preview.open();
+      assert.equal(f.assignments(), 2); assert.equal(f.posts.length, 0);
+    } else if (door === 'cancel') {
+      f.preview.reload();
+      const cancel = f.ports.clock.cancel;
+      f.ports.clock.cancel = timer => { cancel(timer); queueClose(); };
+      f.receive('completed');
+      assert.equal(f.assignments(), 2); assert.equal(f.posts.length, 1);
+    } else {
+      const install = f.adapter.install;
+      f.adapter.install = prepared => {
+        f.adapter.install = install;
+        trace.push('outer-before'); f.preview.reload(); trace.push('outer-after'); return install(prepared);
+      };
+      f.ports.status = message => { status(message); if (message === 'DISPOSING') trace.push('nested'); };
+      f.receive('completed'); f.preview.reload();
+      assert.equal(f.assignments(), 2); assert.equal(f.posts.length, 1);
+    }
+    assert.deepEqual(trace, ['outer-before', 'outer-after', 'nested']);
+    assert.equal(f.timers.size, door === 'nested RELOAD' ? 1 : 0);
+  });
+}
+
+test('Preview -> Build -> Preview: outer-before, outer-after, nested', async () => {
+  const {createBuild} = await import('../src/build.ts');
+  const f = fixture(), trace: string[] = []; let executions = 0;
+  const build = createBuild({
+    admitted() { f.receive('started', {status: 0}); return true; },
+    execute() { ++executions; return new Promise<object>(() => {}); },
+    reload() {}, report() {}, fault() {},
+  });
+  f.ports.output = () => trace.push('nested');
+  const status = f.ports.status;
+  f.ports.status = message => {
+    status(message);
+    if (message === 'Running') { trace.push('outer-before'); build.start(); trace.push('outer-after'); }
+  };
+  f.receive('started', {status: 0});
+  assert.deepEqual(trace, ['outer-before', 'outer-after', 'nested']);
+  assert.equal(executions, 1); assert.equal(f.assignments(), 1);
+  assert.equal(f.posts.length, 0); assert.equal(f.timers.size, 0);
+});
+
+test('install during DISPOSING replacement queues RELOAD for the new id', () => {
+  const f = fixture(); f.preview.reload(); const old = f.state().id;
+  const install = f.adapter.install;
+  f.adapter.install = page => { f.preview.reload(); return install(page); };
+  f.receive('completed');
+  assert.notEqual(f.state().id, old);
+  assert.deepEqual(f.posts, [{id: old, type: 'dispose'}, {id: f.state().id, type: 'dispose'}]);
+  assert.equal(f.assignments(), 2); assert.equal(f.timers.size, 1); assert.equal(f.history.length, 2);
+});
+
+for (const type of ['started', 'error', 'completed']) {
+  test(`clock.after ${type}: disposal precedes queued message and retains reload`, () => {
+    const f = fixture(), trace: string[] = [], id = f.state().id;
+    const after = f.ports.clock.after, post = f.adapter.postDispose, install = f.adapter.install;
+    f.ports.clock.after = (ms, callback) => { f.receive(type, {status: 0, reason: 'failure'}); return after(ms, callback); };
+    f.adapter.postDispose = id => { trace.push('postDispose'); return post(id); };
+    f.adapter.install = page => { trace.push('install'); return install(page); };
+    f.ports.output = message => trace.push(message);
+    f.preview.reload();
+    assert.deepEqual(f.posts, [{id, type: 'dispose'}]);
+    assert.deepEqual(trace, type === 'completed' ? ['postDispose', 'Previous document: completed', 'install']
+      : ['postDispose', 'Ignored ' + type + ' in DISPOSING']);
+    assert.equal(f.timers.size, type === 'completed' ? 0 : 1);
+    if (type !== 'completed') f.receive('completed');
+    assert.equal(f.assignments(), 2); assert.equal(f.timers.size, 0);
+  });
+}
+
+test('capability absent at install entry closes without success or timeout status', () => {
+  const f = fixture(); f.preview.reload(); f.adapter.revoke();
+  f.history[0]();
+  assert.equal(f.assignments(), 1); assert.equal(f.timers.size, 0);
+  assert.equal(f.status.at(-1), 'CLOSED'); assert.equal(f.state().phase.kind, 'CLOSED');
+  assert.deepEqual(f.faults, []);
+});
+
+test('queued RELOAD ahead of native CLOSE gets postDispose closed: zero native posts and timers', () => {
+  const f = fixture();
+  f.ports.status = message => {
+    if (message === 'Running') { f.preview.reload(); f.nativeDispose(); }
+  };
+  f.receive('started', {status: 0});
+  assert.equal(f.state().phase.kind, 'CLOSED');
+  assert.equal(f.posts.length, 0); assert.equal(f.timers.size, 0); assert.equal(f.assignments(), 1);
+  assert.deepEqual(f.faults, []);
+});
+
+test('postDispose closed ends current handler without waiting for a CLOSE event', () => {
+  const f = fixture(); f.adapter.revoke(); f.preview.reload();
+  assert.equal(f.state().phase.kind, 'CLOSED'); assert.equal(f.status.at(-1), 'CLOSED');
+  assert.equal(f.timers.size, 0); assert.equal(f.posts.length, 0);
+});
+
+for (const setter of ['options', 'html'] as const) {
+  test(`timeout destruction in ${setter} returns closed without installed or timeout status`, () => {
+    const f = fixture(); f.preview.reload(); const before = f.status.length;
+    f.hooks[setter] = () => f.nativeDispose();
+    f.history[0]();
+    assert.deepEqual(f.status.slice(before), ['CLOSED']);
+    assert.equal(f.assignments(), setter === 'options' ? 1 : 2);
+    assert.equal(f.timers.size, 0); assert.deepEqual(f.faults, []);
+  });
+}
+
+test('Preview terminal head ignores queued valid MESSAGE, RELOAD, CLOSE, OPEN and fresh doors', () => {
+  const f = fixture(); f.preview.reload();
+  const cancel = f.ports.clock.cancel;
+  f.ports.clock.cancel = timer => {
+    cancel(timer); f.receive('started', {status: 0}); f.preview.reload(); f.preview.close(); f.preview.open();
+  };
+  f.preview.close();
+  const effects = [f.assignments(), f.status.length, f.output.length, f.errors.length, f.history.length, f.posts.length];
+  f.receive('completed'); f.preview.reload(); f.preview.close(); f.preview.open(); f.history[0]();
+  assert.deepEqual([f.assignments(), f.status.length, f.output.length, f.errors.length, f.history.length, f.posts.length], effects);
+  assert.equal(f.output.length, 0); assert.equal(f.assignments(), 1); assert.equal(f.timers.size, 0);
+});
+
+for (const path of ['timeout output', 'CLOSE cancellation', 'CLOSED status', 'partial options']) {
+  test(`fault during ${path}: revoke, release once, cleanup reentry inert, preserve original`, () => {
+    const f = fixture(), original = {fault: path};
+    f.preview.reload(); let cancellations = 0, revocations = 0;
+    const cancel = f.ports.clock.cancel, revoke = f.adapter.revoke;
+    f.adapter.revoke = () => {
+      ++revocations; revoke(); f.preview.open(); f.preview.reload(); f.preview.close();
+      throw new Error('cleanup must not replace primary');
+    };
+    f.ports.clock.cancel = timer => {
+      ++cancellations;
+      if (path === 'CLOSE cancellation') throw original;
+      cancel(timer);
+    };
+    if (path === 'timeout output') f.ports.output = () => { f.preview.reload(); throw original; };
+    if (path === 'CLOSED status') f.ports.status = message => { if (message === 'CLOSED') throw original; };
+    if (path === 'partial options') f.hooks.options = () => { f.preview.reload(); throw original; };
+    if (path === 'timeout output' || path === 'partial options') {
+      f.history[0](); assert.deepEqual(f.faults, [original]); assert.equal(f.faults[0], original);
+    } else {
+      assert.throws(() => f.preview.close(), error => error === original);
+      assert.deepEqual(f.faults, []);
+    }
+    assert.equal(revocations, 1); assert.equal(cancellations, 1);
+    assert.equal(f.timers.size, path === 'CLOSE cancellation' ? 1 : 0);
+    const effects = [f.assignments(), f.status.length, f.output.length];
+    f.preview.open(); f.preview.reload(); f.receive('completed'); f.preview.close(); f.history[0]();
+    assert.deepEqual([f.assignments(), f.status.length, f.output.length], effects);
+    assert.equal(cancellations, 1); assert.equal(revocations, 1);
+    assert.throws(() => f.panel.html, /native use after disposal/);
+  });
+}
+
+test('timer fault reports throw undefined exactly once', () => {
+  const f = fixture(); f.preview.reload(); f.ports.output = () => { throw undefined; };
+  f.history[0](); f.history[0](); assert.deepEqual(f.faults, [undefined]); assert.equal(f.timers.size, 0);
 });

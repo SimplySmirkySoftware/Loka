@@ -348,6 +348,12 @@ PR 5b adds VS Code wiring, manifest contributions, and launch configuration.
 Externally destroyed documents (panel close or window reload) terminate abruptly:
 there is no host disposal call and no completion acknowledgement.
 
-Build retains end facts received during task acquisition and reconciles them by
-execution identity when acquisition resolves, preferring a process result over a
-processless task end; rejection or disposal drops the retained facts.
+Each owner uses an event queue: nested calls only enqueue, so the current event
+may still install a document, post disposal, or launch a task before a queued
+close/dispose takes effect. Build retains early end facts and reconciles them by
+execution identity at acquisition, preferring process results; rejection or
+disposal drops them. Unexpected exceptions stop that owner's queue permanently;
+recovery requires reopening the panel or reloading the window. Panel access uses
+an `install` / `postDispose` capability seam: the adapter must revoke capability
+synchronously on native disposal before posting CLOSE. PR 5a pins this contract
+with a strict fake; PR 5b supplies the native adapter.
