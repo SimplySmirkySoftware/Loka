@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {pathToFileURL} from 'node:url';
 import {join} from 'node:path';
 import {wire, createPanelAdapter} from '../src/wire.ts';
 import {fakeHost} from './fake.ts';
@@ -21,9 +22,13 @@ test('commands reach owners; panel options, resource roots, URI and task cwd are
   const options = p.options as {enableScripts: boolean; localResourceRoots: {fsPath: string}[]};
   assert.equal(options.enableScripts, true);
   assert.deepEqual(options.localResourceRoots.map(u => u.fsPath), [join(f.root, 'module')]);
-  assert.match(p.html, /Demo.js\?v=/); assert.match(p.html, /Demo.wasm\?v=/);
+  const files = ['Demo.js', 'Demo.wasm'].map(name => join(f.root, 'module', name));
+  assert.deepEqual(p.conversions, files.map(file => pathToFileURL(file).href));
+  for (const file of files) assert.ok(p.html.includes('https://resource.invalid' + file + '?v='));
   assert.match(p.html, /https:\/\/\*\.vscode-cdn.net/);
-  f.command('reload'); assert.equal(p.posts.length, 1); p.receive('completed');
+  const id = /const id = "([^"]+)"/.exec(p.html)?.[1];
+  assert.ok(id);
+  f.command('reload'); assert.deepEqual(p.posts, [{id, type: 'dispose'}]); p.receive('completed');
   assert.equal(p.htmlWrites, 2);
   f.command('build'); assert.equal(f.tasks.length, 1);
   assert.deepEqual(f.tasks[0], new f.api.Task({type: 'loka'}, f.folder as never, 'Build', 'Loka',
@@ -223,4 +228,60 @@ test('native close observes revoked capability and empty current before posting 
   }});
   f.panels[0].destroy(); assert.equal(closes, 1);
   assert.equal(f.panels[0].optionsWrites, 0); assert.equal(f.panels[0].posts.length, 0);
+});
+
+for (const failure of ['native', 'subscription', 'close'] as const) {
+  test(`activation shutdown contains ${failure} failure and does not repeat work`, t => {
+    const cancel = t.mock.method(globalThis, 'clearTimeout');
+    const f = fixture(t); f.command('open'); f.command('reload');
+    const p = f.panels[0], original = new Error(failure);
+    if (failure === 'native') f.hooks.nativeDispose = () => { throw original; };
+    if (failure === 'subscription') f.hooks.release = label => { if (label === 'output') throw original; };
+    if (failure === 'close') f.hooks.status = text => { if (text === 'Loka: CLOSED') throw original; };
+    assert.doesNotThrow(() => f.activation.dispose());
+    assert.ok(f.subscriptions.every(s => s.attempts === 1 && !s.active), 'every subscription released once');
+    assert.equal(p.disposeAttempts, 1);
+    assert.equal(cancel.mock.callCount(), 1, 'DISPOSING timer released');
+    if (failure !== 'close') assert.equal(f.statuses.at(-1), 'Loka: CLOSED');
+    assert.equal(f.output.length, 1, 'fault reported once');
+    const reports = f.statuses.length;
+    p.receive('completed'); f.command('reload');
+    assert.equal(p.htmlWrites, 1); assert.equal(p.posts.length, 1);
+    assert.equal(f.statuses.length, reports, 'closed owner is inert');
+    assert.doesNotThrow(() => f.activation.dispose());
+    assert.ok(f.subscriptions.every(s => s.attempts === 1), 'second dispose does not retry releases');
+    assert.equal(p.disposeAttempts, 1); assert.equal(cancel.mock.callCount(), 1);
+    f.hooks.status = () => {}; f.hooks.nativeDispose = () => {};
+    f.command('open'); assert.equal(f.panels.length, 2, 'activation slot was cleared');
+    f.panels[1].destroy();
+  });
+}
+test('failed native retirement leaves later adapter writes closed', t => {
+  const f = adapterFixture(t), a = f.make();
+  a.connect({reload() {}, receive() {}, close() { assert.fail('retire does not close'); }});
+  f.hooks.nativeDispose = () => { throw new Error('native'); };
+  assert.doesNotThrow(() => a.retire());
+  assert.equal(a.postDispose('id'), 'closed');
+  assert.equal(a.install({options: {enableScripts: false, localResourceRoots: []}, html: ''}), 'closed');
+  assert.equal(f.current(), undefined); assert.equal(f.panels[0].posts.length, 0);
+});
+test('fake Disposable retries a callback only after failure', t => {
+  const f = fakeHost(); t.after(() => f.cleanup()); let calls = 0;
+  const d = new f.api.Disposable(() => { if (++calls === 1) throw new Error('first'); });
+  assert.throws(() => d.dispose(), /first/); d.dispose(); d.dispose();
+  assert.equal(calls, 2);
+});
+test('rejecting disposal thenable reports once even when output throws', async t => {
+  const f = fixture(t); f.command('open');
+  let reports = 0;
+  f.hooks.output = text => {
+    ++reports; assert.match(text, /post rejected/); throw new Error('output unavailable');
+  };
+  f.hooks.postMessage = () => ({then(resolve, reject) {
+    return Promise.reject(new Error('post rejected')).then(resolve, reject);
+  }});
+  f.command('reload');
+  // Cross a full event-loop turn so node:test also observes any unhandled rejection.
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reports, 1, 'post rejection fault reported once');
 });

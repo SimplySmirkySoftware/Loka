@@ -9,11 +9,15 @@ import {createBuild} from './build.ts';
 type PanelAdapter = PreviewPanel & Readonly<{
   connect(doors: PreviewDoors): void;
   reveal(): void;
-  dispose(): void;
   asWebviewUri(file: string): string;
   cspSource: string;
 }>;
 type Slot = Readonly<{doors: PreviewDoors; adapter: PanelAdapter}>;
+
+/** Cost: one adapter or activation subscription; one contained release attempt. */
+function release(subscription: vscode.Disposable, fault: (error: unknown) => void): void {
+  try { subscription.dispose(); } catch (error) { fault(error); }
+}
 
 /** Internal native resource owner, also used directly by the adapter contract tests.
  * Cost: one per panel; owns only its capability and two native subscriptions. */
@@ -23,10 +27,6 @@ export function createPanelAdapter(api: typeof vscode, panel: vscode.WebviewPane
   let live: {panel: vscode.WebviewPanel; subscriptions: vscode.Disposable[]} | undefined = {
     panel, subscriptions: [],
   };
-  /** Cost: retirement or late registration once per subscription; no foreign rows. */
-  const release = (subscription: vscode.Disposable): void => {
-    try { subscription.dispose(); } catch (error) { fault(error); }
-  };
   /** Cost: native close or fault once; detach before releasing this adapter's two rows. */
   const take = (): boolean => {
     if (!live) return false;
@@ -34,12 +34,12 @@ export function createPanelAdapter(api: typeof vscode, panel: vscode.WebviewPane
     live = undefined;
     if (slot.get()?.adapter === adapter) slot.set(undefined);
     const subscriptions = outgoing.subscriptions.splice(0);
-    for (const subscription of subscriptions) release(subscription);
+    for (const subscription of subscriptions) release(subscription, fault);
     return true;
   };
   /** Cost: connect twice at most; append one own subscription or release a late return. */
   const keep = (subscription: vscode.Disposable): void => {
-    if (live) live.subscriptions.push(subscription); else release(subscription);
+    if (live) live.subscriptions.push(subscription); else release(subscription, fault);
   };
   const adapter: PanelAdapter = {
     /** Cost: INITIAL_INSTALL once; publish one slot and register at most two listeners. */
@@ -65,7 +65,7 @@ export function createPanelAdapter(api: typeof vscode, panel: vscode.WebviewPane
       void Promise.resolve(live.panel.webview.postMessage({id, type: 'dispose'})).catch(fault);
       return 'posted';
     },
-    /** Cost: mailbox fault once; take own subscriptions and attempt one native disposal. */
+    /** Cost: mailbox fault or activation shutdown once; take own subscriptions and attempt one native disposal. */
     retire() {
       const native = live?.panel;
       if (take()) {
@@ -74,8 +74,6 @@ export function createPanelAdapter(api: typeof vscode, panel: vscode.WebviewPane
     },
     /** Cost: Open with an occupied slot; one native reveal, no rows. */
     reveal() { live?.panel.reveal(api.ViewColumn.Beside); },
-    /** Cost: activation disposal once; native notification owns normal close and timer release. */
-    dispose() { live?.panel.dispose(); },
     /** Cost: replacement twice; one native URI conversion, no rows. */
     asWebviewUri(file) { return live ? live.panel.webview.asWebviewUri(api.Uri.file(file)).toString() : ''; },
     /** Cost: Preview construction once; one native source read, no rows. */
@@ -141,11 +139,15 @@ export function wire(api: typeof vscode, _context: vscode.ExtensionContext): vsc
     api.commands.registerCommand('loka.preview.build', () => build.start()),
     api.commands.registerCommand('loka.preview.reload', () => current?.doors.reload()),
   ];
-  /** Cost: deactivate/context disposal once; close current panel and release seven activation rows. */
+  /** Cost: activation shutdown once, not fault retirement; retire current, close its healthy owner
+   * to release its timer, then attempt each of seven activation releases. */
   return new api.Disposable(() => {
     build.dispose();
-    current?.adapter.dispose();
-    current = undefined;
-    for (const subscription of subscriptions) subscription.dispose();
+    if (current) {
+      const outgoing = current;
+      outgoing.adapter.retire();
+      try { outgoing.doors.close(); } catch (error) { fault(error); }
+    }
+    for (const subscription of subscriptions) release(subscription, fault);
   });
 }

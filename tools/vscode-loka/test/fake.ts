@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import type * as vscode from 'vscode';
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {pathToFileURL} from 'node:url';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -27,6 +28,7 @@ export function fakeHost() {
     disposeRegistration: (_panel: FakePanel) => {}, messageRegistration: (_panel: FakePanel) => {},
     release: (_label: string) => {}, nativeDispose: (_panel: FakePanel) => {},
     status: (_text: string) => {}, output: (_text: string) => {},
+    postMessage: (): PromiseLike<boolean> => Promise.resolve(true),
     execute: () => {}, error: () => Promise.resolve(undefined),
   };
   const subscription = (label: string) => {
@@ -44,9 +46,9 @@ export function fakeHost() {
   class Disposable {
     private action: (() => void) | undefined;
     constructor(action: () => void) { this.action = action; }
-    dispose() { const action = this.action; this.action = undefined; action?.(); }
+    dispose() { const action = this.action; action?.(); this.action = undefined; }
   }
-  const uri = (file: string) => strict({fsPath: file, toString: () => 'https://resource.invalid' + file});
+  const uri = (file: string) => strict({fsPath: file, toString: () => pathToFileURL(file).href});
   const folder = strict({uri: uri(root), name: 'fixture', index: 0});
   const api = strict({
     __esModule: false, // CommonJS __importStar probes this marker before copying exports.
@@ -70,7 +72,7 @@ export function fakeHost() {
       showErrorMessage(_message: string) { return hooks.error(); },
       createWebviewPanel(type: string, title: string, column: number, options: unknown) {
         assert.equal(type, 'loka.preview'); assert.equal(title, 'Loka Preview'); assert.equal(column, 2);
-        const p = new FakePanel(options, subscription, hooks, uri); panels.push(p); return p.native;
+        const p = new FakePanel(options, subscription, hooks); panels.push(p); return p.native;
       },
     }),
     commands: strict({registerCommand(name: string, callback: () => void) {
@@ -113,10 +115,10 @@ export class FakePanel {
   reveals = 0;
   disposed = false;
   posts: unknown[] = [];
+  conversions: string[] = [];
   closes: (() => void)[] = [];
   messages: ((raw: unknown) => void)[] = [];
-  constructor(creation: unknown, subscription: (label: string) => {dispose(): void}, hooks: Hooks,
-    uri: (file: string) => {toString(): string}) {
+  constructor(creation: unknown, subscription: (label: string) => {dispose(): void}, hooks: Hooks) {
     this.creation = creation;
     const use = () => assert.equal(this.disposed, false, 'native use after disposal');
     const self = this;
@@ -128,10 +130,13 @@ export class FakePanel {
       },
       webview: strict({
         get cspSource() { use(); return "'self' https://*.vscode-cdn.net"; },
-        asWebviewUri(file: {fsPath: string}) { use(); return uri(file.fsPath); },
+        asWebviewUri(file: {fsPath: string; toString(): string}) {
+          use(); self.conversions.push(file.toString());
+          return {toString: () => 'https://resource.invalid' + file.fsPath};
+        },
         set options(value: unknown) { use(); ++self.optionsWrites; self.options = value; hooks.options(self); },
         set html(value: string) { use(); ++self.htmlWrites; self.html = value; hooks.html(self); },
-        postMessage(raw: unknown) { use(); self.posts.push(raw); return Promise.resolve(true); },
+        postMessage(raw: unknown) { use(); self.posts.push(raw); return hooks.postMessage(); },
         onDidReceiveMessage(callback: (raw: unknown) => void) {
           use(); self.messages.push(callback); hooks.messageRegistration(self); return subscription('panel-message');
         },
