@@ -500,6 +500,13 @@ namespace
     LOKA_VERIFY(malformed == whole);
     LOKA_VERIFY(table.build(malformed, BlockStyle(), 100, controller));
     LOKA_VERIFY(!table.matches(whole));
+    // Same count and styles: only segment bodies distinguish these UTF-8 splits.
+    const AttributedString sameCountSplit = Styled("\xc3", Bold) + Styled("\xa9x", Bold);
+    const AttributedString sameCountWhole = Styled("\xc3\xa9", Bold) + Styled("x", Bold);
+    LOKA_VERIFY(sameCountSplit.segmentCount() == sameCountWhole.segmentCount());
+    LOKA_VERIFY(sameCountSplit == sameCountWhole);
+    LOKA_VERIFY(table.build(sameCountSplit, BlockStyle(), 100, controller));
+    LOKA_VERIFY(!table.matches(sameCountWhole));
   }
   void SpanCache()
   {

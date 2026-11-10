@@ -112,6 +112,16 @@ void testAttributedStringContentEquality()
   using namespace loka::app;
   const AttributedString joined = Styled("ab", Bold);
   const AttributedString split = Styled("a", Bold) + Styled("b", Bold);
+  LOKA_VERIFY(!joined.hasSameSegmentValues(split));
+  LOKA_VERIFY(joined.hasSameSegmentValues(Styled("ab", Bold)));
+  LOKA_VERIFY(!joined.hasSameSegmentValues(Styled("ab", Italic)));
+  LOKA_VERIFY(!joined.hasSameSegmentValues(Styled("ac", Bold)));
+  // Equal counts and styles force the body comparison to distinguish the split.
+  const AttributedString malformed = Styled("\xc3", Bold) + Styled("\xa9x", Bold);
+  const AttributedString whole = Styled("\xc3\xa9", Bold) + Styled("x", Bold);
+  LOKA_VERIFY(malformed.segmentCount() == whole.segmentCount());
+  LOKA_VERIFY(malformed == whole);
+  LOKA_VERIFY(!malformed.hasSameSegmentValues(whole));
   LOKA_VERIFY(joined.equals(split));
   LOKA_VERIFY(split == joined);
   LOKA_VERIFY(!(split != joined));
@@ -201,6 +211,17 @@ void testAttributedStringEmptyAndInvalid()
   const AttributedString invalid = Styled(text, Bold);
   LOKA_VERIFY(!invalid.valid());
   LOKA_VERIFY(invalid.empty());
+  LOKA_VERIFY(!invalid.hasSameSegmentValues(empty));
+  LOKA_VERIFY(!empty.hasSameSegmentValues(invalid));
+  LOKA_VERIFY(empty.hasSameSegmentValues(AttributedString()));
+  const AttributedString one = Styled(text, Bold);
+  LOKA_VERIFY(!empty.hasSameSegmentValues(one));
+  LOKA_VERIFY(!one.hasSameSegmentValues(empty));
+  AttributedString::Builder builder(1);
+  const AttributedString allocatedEmpty = builder.build();
+  LOKA_VERIFY(allocatedEmpty.valid());
+  LOKA_VERIFY(allocatedEmpty.hasSameSegmentValues(empty));
+  LOKA_VERIFY(empty.hasSameSegmentValues(allocatedEmpty));
   LOKA_VERIFY(invalid != empty);
   LOKA_VERIFY(invalid.compare(empty) < 0);
   LOKA_VERIFY(empty.compare(invalid) > 0);
@@ -290,12 +311,18 @@ void testAttributedStringRefusedBuffersAndSharedFastPath()
       loka::core::String::FromPlatform(loka::core::Managed<loka::platform::String>::Wrap(new RefusedString(&calls)));
   const AttributedString left = Styled(refused, Bold);
   const AttributedString shared = left;
+  LOKA_VERIFY(left.hasSameSegmentValues(shared));
+  LOKA_VERIFY(calls == 0);
   LOKA_VERIFY(left == shared);
   LOKA_VERIFY(left.compare(shared) == 0);
   LOKA_VERIFY(calls == 0);
   const AttributedString rebuilt = Styled(refused, Bold);
+  LOKA_VERIFY(left.hasSameSegmentValues(rebuilt));
   LOKA_VERIFY(left != rebuilt);
   LOKA_VERIFY(calls > 0);
+  const loka::core::String otherRefused =
+      loka::core::String::FromPlatform(loka::core::Managed<loka::platform::String>::Wrap(new RefusedString(&calls)));
+  LOKA_VERIFY(!left.hasSameSegmentValues(Styled(otherRefused, Bold)));
   LOKA_VERIFY(left.compare(rebuilt) == -rebuilt.compare(left));
   LOKA_VERIFY(!left.empty());
   LOKA_VERIFY(left != AttributedString());
@@ -720,6 +747,14 @@ void testAttributedStringLinkConstruction()
   using loka::core::String;
   const LinkTarget target(String("#target"));
   const AttributedString a = Linked("a", Bold, target);
+  LOKA_VERIFY(a.hasSameSegmentValues(Linked("a", Bold, LinkTarget(String("#target")))));
+  const LinkTarget other(String("#other"));
+  LOKA_VERIFY(!a.hasSameSegmentValues(Linked("a", Bold, other)));
+  LOKA_VERIFY(!(Linked("", Bold, target) + a).hasSameSegmentValues(Linked("", Bold, other) + a));
+  int calls = 0;
+  const LinkTarget refused(refusedText(calls)), distinct(refusedText(calls));
+  LOKA_VERIFY(Linked("a", Bold, refused).hasSameSegmentValues(Linked("a", Bold, refused)));
+  LOKA_VERIFY(!Linked("a", Bold, refused).hasSameSegmentValues(Linked("a", Bold, distinct)));
   LOKA_VERIFY(a.segment(0).link == target);
   LOKA_VERIFY(a.segment(0).style == Bold);
   LOKA_VERIFY(Styled("a", Bold).segment(0).link.isNone());
