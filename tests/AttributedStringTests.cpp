@@ -116,12 +116,18 @@ void testAttributedStringContentEquality()
   LOKA_VERIFY(joined.hasSameSegmentValues(Styled("ab", Bold)));
   LOKA_VERIFY(!joined.hasSameSegmentValues(Styled("ab", Italic)));
   LOKA_VERIFY(!joined.hasSameSegmentValues(Styled("ac", Bold)));
+#if defined(_WIN32) || defined(__APPLE__)
+  // Win32 and macOS strings do not keep a lone UTF-8 byte verbatim, so the
+  // split halves no longer join to the whole value there.
+  std::printf("[skip] Malformed UTF-8 split pin requires the Null or Toolbox rail.\n");
+#else
   // Equal counts and styles force the body comparison to distinguish the split.
   const AttributedString malformed = Styled("\xc3", Bold) + Styled("\xa9x", Bold);
   const AttributedString whole = Styled("\xc3\xa9", Bold) + Styled("x", Bold);
   LOKA_VERIFY(malformed.segmentCount() == whole.segmentCount());
   LOKA_VERIFY(malformed == whole);
   LOKA_VERIFY(!malformed.hasSameSegmentValues(whole));
+#endif
   LOKA_VERIFY(joined.equals(split));
   LOKA_VERIFY(split == joined);
   LOKA_VERIFY(!(split != joined));
