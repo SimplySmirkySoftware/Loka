@@ -372,6 +372,26 @@ if(NOT LOKA_MAC_OS_10_4)
     example/SmirkBench/src
   )
 
+  # Deliberately mirrors the Win32 scenario publication barrier. Target-only
+  # builds withdraw the stamp; only the aggregate publishes after all links.
+  set(LOKA_MACOS_SCENARIO_VEHICLES
+    LokaScrapbookScenarioMacOS LokaHelloWorldScenarioMacOS
+    LokaTutorialScenarioMacOS LokaMineSweeperScenarioMacOS
+    LokaFloppyBirdScenarioMacOS LokaSmirkBenchScenarioMacOS)
+  set(LOKA_MACOS_SCENARIO_SOURCE_STAMP "${CMAKE_BINARY_DIR}/scenario-source-stamp.txt")
+  add_custom_target(LokaMacOSScenarioSourceStampWithdraw
+    COMMAND bash "${PROJECT_SOURCE_DIR}/scripts/rig/source-tree-stamp.sh"
+      withdraw "${LOKA_MACOS_SCENARIO_SOURCE_STAMP}"
+    VERBATIM)
+  add_custom_target(LokaMacOSScenarioSourceStamp
+    COMMAND bash "${PROJECT_SOURCE_DIR}/scripts/rig/source-tree-stamp.sh"
+      publish "${LOKA_MACOS_SCENARIO_SOURCE_STAMP}"
+    VERBATIM)
+  foreach(loka_vehicle IN LISTS LOKA_MACOS_SCENARIO_VEHICLES)
+    add_dependencies(${loka_vehicle} LokaMacOSScenarioSourceStampWithdraw)
+    add_dependencies(LokaMacOSScenarioSourceStamp ${loka_vehicle})
+  endforeach()
+
   # Human-facing loop reels share the presentation and scenario rails, but not
   # the host-controlled ScenarioDriverSupport.mm protocol implementation.
   set(LOKA_MACOS_SCENARIO_LOOP_COMMON_SOURCES

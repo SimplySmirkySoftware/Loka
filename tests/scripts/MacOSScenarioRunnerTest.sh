@@ -151,6 +151,43 @@ for target in \
     "$SANDBOX/fake.app/Contents/MacOS/$target"
 done
 
+# Exercise real content stamps even when the app itself is overridden.
+cp "$REPO_DIR/scripts/rig/source-tree-stamp.sh" "$SANDBOX/repo/scripts/rig/"
+STAMP="$SANDBOX/repo/build/macos/Debug/scenario-source-stamp.txt"
+mkdir -p "$(dirname "$STAMP")" "$SANDBOX/no-hash"
+HELPER="$SANDBOX/repo/scripts/rig/source-tree-stamp.sh"
+refresh_stamp() {
+  bash "$HELPER" withdraw "$STAMP"
+  bash "$HELPER" publish "$STAMP"
+}
+probe_build() {
+  LOKA_MACOS_SCENARIO_APP="$SANDBOX/fake.app" \
+    FAKE_EXPECTED_AUDIT="$SANDBOX/repo/tests/scenarios/expected/tutorial/startup.audit" \
+    FAKE_SNAPSHOT="$SANDBOX/snapshot.png" \
+    bash "$SANDBOX/repo/tests/macos/run-scenario.sh" tutorial startup --ci-structural
+}
+for refusal in missing mismatch unanswerable; do
+  refresh_stamp
+  case "$refusal" in
+    missing) rm "$STAMP" ;;
+    mismatch) printf 'wrong-id\n' >"$STAMP" ;;
+    unanswerable)
+      printf '#!/bin/bash\nexit 1\n' >"$SANDBOX/no-hash/shasum"
+      chmod +x "$SANDBOX/no-hash/shasum" ;;
+  esac
+  if PATH="$SANDBOX/no-hash:$PATH" probe_build >"$SANDBOX/$refusal.log" 2>&1; then
+    fail "source stamp $refusal accepted"
+  fi
+  grep -Fq 'build stage failed: source tree stamp: built ' "$SANDBOX/$refusal.log" || fail "$refusal wrong stage"
+  grep -Fq 'current ' "$SANDBOX/$refusal.log" || fail "$refusal missing current id"
+  grep -Fq 'target-only builds do not refresh the source stamp' "$SANDBOX/$refusal.log" || fail "$refusal missing remedy"
+done
+rm "$SANDBOX/no-hash/shasum"
+refresh_stamp
+probe_build >"$SANDBOX/source-pass.log" 2>&1 || fail 'matching stamp refused'
+grep -Eq 'stage: build source tree content:[0-9a-f]+ \(no git\)' "$SANDBOX/source-pass.log" || fail 'source log absent'
+grep -Eq 'stage: build vehicle mtime [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$SANDBOX/source-pass.log" || fail 'mtime absent'
+
 EXPECTED="$SANDBOX/repo/tests/scenarios/expected/scrapbook/open-first-page-refused.audit"
 WORK="$SANDBOX/repo/build/macos-scenario/scrapbook/open-first-page-refused"
 if ! env -u LOKA_MACOS_RIG \
@@ -506,5 +543,22 @@ grep -Fq 'artifacts stage failed: missing settle-b.png' "$SANDBOX/missing-artifa
   || fail "missing-artifact refusal did not name the artifact"
 grep -E '^Absent: .*\bsettle-b\.png\b' "$SANDBOX/missing-artifact.log" >/dev/null \
   || fail "census did not report the missing artifact as absent"
+
+# Git mode reports HEAD and distinguishes a rebuilt dirty tracked tree.
+git -C "$SANDBOX/repo" init -q
+git -C "$SANDBOX/repo" config user.name Test
+git -C "$SANDBOX/repo" config user.email test@example.invalid
+printf 'build/\n' >"$SANDBOX/repo/.gitignore"
+git -C "$SANDBOX/repo" add .
+git -C "$SANDBOX/repo" commit -qm fixture
+refresh_stamp
+probe_build >"$SANDBOX/git-pass.log" 2>&1 || fail 'matching git stamp refused'
+grep -Eq 'stage: build source tree [0-9a-f]+ \(HEAD [0-9a-f]+\)' "$SANDBOX/git-pass.log" || fail 'HEAD absent'
+printf '# tracked edit\n' >>"$SANDBOX/repo/.gitignore"
+if probe_build >"$SANDBOX/git-dirty.log" 2>&1; then fail 'edited tree accepted'; fi
+grep -Fq 'build stage failed:' "$SANDBOX/git-dirty.log" || fail 'dirty wrong stage'
+refresh_stamp
+probe_build >"$SANDBOX/git-rebuilt.log" 2>&1 || fail 'rebuilt dirty tree refused'
+grep -Fq ', tracked changes)' "$SANDBOX/git-rebuilt.log" || fail 'dirty diagnostic absent'
 
 echo "macOS scenario runner tests passed"

@@ -419,7 +419,8 @@
         "LokaMineSweeperScenarioMacOS",
         "LokaMineSweeperScenarioLoopMacOS",
         "LokaFloppyBirdScenarioMacOS",
-        "LokaSmirkBenchScenarioMacOS"
+        "LokaSmirkBenchScenarioMacOS",
+        "LokaMacOSScenarioSourceStamp"
       ],
       "condition": {
         "type": "equals",
