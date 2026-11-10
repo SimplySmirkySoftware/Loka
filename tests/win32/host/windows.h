@@ -70,7 +70,16 @@ namespace win32_host
     HFONT font;
     COLORREF textColor;
     std::wstring units;
+    RECT clip;
   };
+  struct Event
+  {
+    char kind;
+    HGDIOBJ object;
+    COLORREF value;
+  };
+  extern std::vector<Event> events;
+  extern int refuseSelection, refuseOutput, outputAttempts;
   extern int selections, measures, metrics;
   extern bool failMeasure;
   extern std::vector<Draw> draws;

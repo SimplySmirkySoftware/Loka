@@ -57,6 +57,27 @@ private:
   };
   loka::app::MeasurementResult<int, Extent> measurement_;
   class WidthSource;
+  class FontSelection;
+  enum Ellipsis
+  {
+    ELLIPSIS_NONE,
+    ELLIPSIS_DRAWN
+  };
+  /** Completed seat-relative fitting facts, consumed only on success. */
+  struct FittedLine
+  {
+    std::size_t paintedEnd;
+    int offset;
+    int paintedWidth;
+    Ellipsis ellipsis;
+    std::size_t dotsSpan;
+  };
+  bool fitLine(const loka::app::TextLineRecord &line,
+               int seatWidth,
+               const loka::app::BlockStyle &block,
+               const WidthSource &source,
+               FontSelection &measure,
+               FittedLine &out) const;
   bool buildRows(const loka::app::AttributedString &,
                  const loka::app::BlockStyle &,
                  int,
