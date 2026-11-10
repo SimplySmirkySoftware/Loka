@@ -498,6 +498,7 @@
       "configurePreset": "win32-debug",
       "targets": [
         "LokaTestsWin32",
+        "LokaWin32ScenarioSourceStamp",
         "LokaScrapbookScenarioWin32",
         "LokaHelloWorldScenarioWin32",
         "LokaHelloWorldScenarioLoopWin32",
