@@ -52,7 +52,7 @@ test('page completion is real, start once or zero with disposal pending', async 
     assert.equal(disposals, 1);
   }
 });
-test('READY survives start throw and observer error; PENDING observer error does not assert absence', async () => {
+test('READY survives start throw and observer error', async () => {
   const p = page(); let disposals = 0, acquire!: (module: object) => void;
   p.context.Demo = () => new Promise<object>(yes => { acquire = yes; });
   p.boot(); p.error();
@@ -61,4 +61,21 @@ test('READY survives start throw and observer error; PENDING observer error does
   await tick(); p.error(); p.dispose();
   assert.equal(disposals, 1); assert.equal(p.messages.filter(m => m.type === 'absent').length, 0);
   assert.equal(p.messages.filter(m => m.type === 'error').length, 3);
+});
+
+test('PENDING observer error then disposal waits for acquisition and real completion', async () => {
+  const p = page(); let starts = 0, disposals = 0;
+  let acquire!: (module: object) => void, complete!: () => void;
+  const completed = new Promise<void>(yes => { complete = yes; });
+  p.context.Demo = () => new Promise<object>(yes => { acquire = yes; });
+  p.boot(); p.error(); p.dispose();
+  assert.equal(p.messages.filter(m => m.type === 'absent').length, 0);
+  assert.equal(p.messages.filter(m => m.type === 'completed').length, 0);
+  acquire({web: {completed, start() { ++starts; return 0; }, dispose() { ++disposals; }}});
+  await tick();
+  assert.equal(starts, 0); assert.equal(disposals, 1);
+  assert.equal(p.messages.filter(m => m.type === 'absent').length, 0);
+  assert.equal(p.messages.filter(m => m.type === 'completed').length, 0);
+  complete(); await tick();
+  assert.equal(p.messages.filter(m => m.type === 'completed').length, 1);
 });

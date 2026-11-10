@@ -15,7 +15,7 @@ function fixture(trusted = true, folder: string | null = '/workspace', present: 
     set html(value) { html = value; ++assignments; },
     postMessage(message) { posts.push(message); },
   };
-  const ports: PreviewPorts<() => void> = {
+  const ports: {-readonly [K in keyof PreviewPorts<() => void>]: PreviewPorts<() => void>[K]} = {
     admitted: () => trusted, folder: () => folder ?? undefined,
     setting: name => { reads.push(name); return directory + '/Demo.js'; },
     resolve: posix.resolve, directory: posix.dirname, stem: file => posix.basename(file, '.js'),
@@ -31,7 +31,7 @@ function fixture(trusted = true, folder: string | null = '/workspace', present: 
   const preview = createPreview(panel, ports);
   const state = () => Object.getOwnPropertyDescriptor(preview, 'state')!.value;
   const receive = (type: string, extra = {}, id = state().id) => preview.receive({id, type, ...extra});
-  return {preview, panel, posts, output, errors, status, timers, history, reads, state, receive,
+  return {preview, panel, ports, posts, output, errors, status, timers, history, reads, state, receive,
     assignments: () => assignments, trust: () => { trusted = true; },
     directory: () => { directory = 'second'; }};
 }
@@ -150,4 +150,73 @@ test('failed start reports once for started 2 followed by error', () => {
   const f = fixture();
   f.receive('started', {status: 2}); f.receive('error', {reason: 'Module start failed'});
   assert.deepEqual(f.errors, ['Module start failed']);
+});
+
+for (const path of ['acknowledgement', 'timeout']) {
+  for (const action of ['close', 'nested acknowledgement']) {
+    test(`${path} output reentry: ${action}`, () => {
+      const f = fixture(); f.preview.reload(); const html = f.panel.html;
+      const original = f.ports.output;
+      f.ports.output = message => {
+        f.ports.output = original;
+        if (action === 'close') f.preview.close(); else f.receive('completed');
+      };
+      if (path === 'timeout') f.history[0](); else f.receive('completed');
+      assert.equal(f.assignments(), action === 'close' ? 1 : 2);
+      assert.equal(f.state().phase.kind, action === 'close' ? 'CLOSED' : 'LOADING');
+      if (action === 'close') { assert.equal(f.panel.html, html); assert.equal(f.status.at(-1), 'CLOSED'); }
+    });
+  }
+}
+test('error callback close suppresses stale FAILED status', () => {
+  const f = fixture(); f.ports.error = () => f.preview.close();
+  f.receive('error', {reason: 'failure'});
+  assert.equal(f.state().phase.kind, 'CLOSED'); assert.equal(f.status.at(-1), 'CLOSED');
+});
+test('DISPOSING status callback close suppresses dispose post', () => {
+  const f = fixture(), original = f.ports.status;
+  f.ports.status = message => { original(message); if (message === 'DISPOSING') f.preview.close(); };
+  f.preview.reload();
+  assert.equal(f.state().phase.kind, 'CLOSED'); assert.equal(f.posts.length, 0); assert.equal(f.timers.size, 0);
+});
+for (const port of ['admitted', 'folder', 'identity', 'setting', 'resolve', 'existsSync', 'directory', 'asWebviewUri', 'stem'] as const) {
+  test(`replacement ${port} callback close preserves CLOSED and html`, () => {
+    const f = fixture(); f.receive('completed'); const html = f.panel.html, options = f.panel.options;
+    const original = f.ports[port];
+    Object.assign(f.ports, {[port]: (...args: never[]) => {
+      f.preview.close(); return (original as (...args: never[]) => unknown)(...args);
+    }});
+    f.preview.reload();
+    assert.equal(f.state().phase.kind, 'CLOSED'); assert.equal(f.panel.html, html);
+    assert.equal(f.panel.options, options);
+  });
+}
+test('timer creation callback close cancels uninstalled timer', () => {
+  const f = fixture(), original = f.ports.clock.after;
+  f.ports.clock.after = (ms, callback) => { f.preview.close(); return original(ms, callback); };
+  f.preview.reload(); assert.equal(f.state().phase.kind, 'CLOSED');
+  assert.equal(f.timers.size, 0); assert.equal(f.posts.length, 0);
+});
+test('timer cancellation callback close cannot be overwritten', () => {
+  const f = fixture(); f.preview.reload(); const original = f.ports.clock.cancel;
+  f.ports.clock.cancel = timer => { f.ports.clock.cancel = original; original(timer); f.preview.close(); };
+  f.receive('completed'); assert.equal(f.state().phase.kind, 'CLOSED'); assert.equal(f.status.at(-1), 'CLOSED');
+});
+for (const property of ['options', 'html'] as const) {
+  test(`panel ${property} setter close stops replacement`, () => {
+    const f = fixture(); f.receive('completed'); const html = f.panel.html;
+    Object.defineProperty(f.panel, property, {set() { f.preview.close(); }});
+    f.preview.reload(); assert.equal(f.state().phase.kind, 'CLOSED');
+    if (property === 'options') assert.equal(f.panel.html, html);
+  });
+}
+test('replacement status close preserves terminal timeout status', () => {
+  const f = fixture(); f.preview.reload(); const original = f.ports.status;
+  f.ports.status = message => { original(message); if (message === 'Waiting for startup response') f.preview.close(); };
+  f.history[0](); assert.equal(f.state().phase.kind, 'CLOSED'); assert.equal(f.status.at(-1), 'CLOSED');
+});
+
+test('status callback may close unconditionally without recursive close', () => {
+  const f = fixture(); f.ports.status = () => f.preview.close();
+  f.receive('started', {status: 0}); assert.equal(f.state().phase.kind, 'CLOSED');
 });

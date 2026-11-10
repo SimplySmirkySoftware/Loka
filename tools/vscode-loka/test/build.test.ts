@@ -72,3 +72,37 @@ test('DISPOSED ignores resolve, reject, process end, task end, and start', async
     assert.equal(f.reloads(), 0); assert.equal(f.reports.length, 0);
   }
 });
+
+test('early ends reconcile by identity with process precedence and permit retry', async () => {
+  for (const ends of ['success', 'failure', 'undefined', 'task', 'both', 'reverse']) {
+    const f = fixture(), execution = {};
+    f.build.start();
+    if (['task', 'both'].includes(ends)) f.build.taskEnded(execution);
+    if (ends !== 'task') f.build.ended(execution, ends === 'failure' ? 1 : ends === 'undefined' ? undefined : 0);
+    if (ends === 'reverse') f.build.taskEnded(execution);
+    f.resolve(execution); await tick();
+    const success = ['success', 'both', 'reverse'].includes(ends);
+    assert.equal(f.reloads(), success ? 1 : 0, ends);
+    assert.equal(f.reports.length, success ? 0 : 1, ends);
+    assert.equal(f.run().kind, 'IDLE', ends);
+    f.build.taskEnded(execution); assert.equal(f.reports.length, success ? 0 : 1);
+    f.build.start(); assert.equal(f.calls(), 2);
+  }
+});
+test('unrelated early ends leave acquired execution RUNNING', async () => {
+  const f = fixture(), execution = {};
+  f.build.start(); f.build.ended({}, 0); f.build.taskEnded({});
+  f.resolve(execution); await tick();
+  assert.equal(f.run().kind, 'RUNNING'); assert.equal(f.reloads(), 0);
+  f.build.ended(execution, 0); assert.equal(f.reloads(), 1);
+});
+test('dispose or rejection drops early facts', async () => {
+  for (const dispose of [true, false]) {
+    const f = fixture(), execution = {};
+    f.build.start(); f.build.ended(execution, 0); f.build.taskEnded(execution);
+    if (dispose) { f.build.dispose(); f.resolve(execution); } else f.reject();
+    await tick(); assert.equal(f.reloads(), 0);
+    assert.equal(f.run().kind, dispose ? 'DISPOSED' : 'IDLE');
+    assert.equal(f.reports.length, dispose ? 0 : 1);
+  }
+});

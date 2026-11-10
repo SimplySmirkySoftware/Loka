@@ -44,21 +44,26 @@ export function createPreview<T>(panel: PreviewPanel, ports: PreviewPorts<T>) {
       this.replace();
     }
 
-    /** Cost: internal transition once; own state and at most one owned timer. */
+    /** Cost: internal transition once; own state and at most one owned timer; revalidate after callback boundaries. */
     private enter(next: State<T>): void {
-      if (this.state?.phase.kind === 'DISPOSING') ports.clock.cancel(this.state.phase.timer);
       const previous = this.state?.phase;
       this.state = next;
+      if (previous?.kind === 'DISPOSING') ports.clock.cancel(previous.timer);
+      if (this.state !== next) return;
       const phase = next.phase;
-      if (phase.kind === 'FAILED' && previous?.kind !== 'FAILED') ports.error(phase.reason);
+      if (phase.kind === 'FAILED' && previous?.kind !== 'FAILED') {
+        ports.error(phase.reason);
+        if (this.state !== next) return;
+      }
       ports.status(phase.kind === 'MESSAGE' ? phase.text
         : phase.kind === 'FAILED' ? phase.reason
         : phase.kind === 'RUNNING' ? (phase.status === 1 ? 'Windowless' : 'Running')
         : phase.kind === 'LOADING' ? 'Waiting for startup response' : phase.kind);
     }
 
-    /** Cost: open or reload completion once; one setting, two existence checks, own panel only. */
-    private replace(): void {
+    /** Cost: open or reload completion once; one setting, two existence checks, own panel; revalidate before each write. */
+    private replace(): State<T> | undefined {
+      const before = this.state;
       const admitted = ports.admitted();
       const folder = ports.folder();
       const id = ports.identity(), nonce = ports.identity();
@@ -84,33 +89,42 @@ export function createPreview<T>(panel: PreviewPanel, ports: PreviewPorts<T>) {
       }
       const options = {enableScripts: input.kind === 'module', localResourceRoots: roots};
       const html = renderPreviewHtml(input);
+      if (this.state !== before) return;
       this.panel.options = options;
+      if (this.state !== before) return;
       this.panel.html = html;
-      this.enter({id, phase: input.kind === 'message'
-        ? {kind: 'MESSAGE', text: input.text} : {kind: 'LOADING'}});
+      if (this.state !== before) return;
+      const next: State<T> = {id, phase: input.kind === 'message'
+        ? {kind: 'MESSAGE', text: input.text} : {kind: 'LOADING'}};
+      this.enter(next);
+      return next;
     }
 
-    /** Cost: command or successful build once; own state, at most one post and timer. */
+    /** Cost: command or successful build once; own state, at most one post and timer; revalidate after callbacks. */
     reload(): void {
       switch (this.state.phase.kind) {
         case 'CLOSED': case 'DISPOSING': return;
         case 'MESSAGE': case 'ENDED': this.replace(); return;
         case 'LOADING': case 'RUNNING': case 'FAILED': {
-          const next: State<T> = {id: this.state.id, phase: {kind: 'DISPOSING',
+          const before = this.state;
+          const next = {id: before.id, phase: {kind: 'DISPOSING' as const,
             timer: ports.clock.after(2000, () => {
               if (this.state !== next) return;
               const reason = 'Previous document did not acknowledge completion or absence within 2 s; replacing';
               ports.output(reason);
-              this.replace();
-              ports.status(reason);
+              if (this.state !== next) return;
+              const replacement = this.replace();
+              if (replacement && this.state === replacement) ports.status(reason);
             })}};
+          if (this.state !== before) { ports.clock.cancel(next.phase.timer); return; }
           this.enter(next);
+          if (this.state !== next) return;
           this.panel.postMessage({id: next.id, type: 'dispose'});
         }
       }
     }
 
-    /** Cost: webview event; own state only, one replacement on disposal acknowledgement. */
+    /** Cost: webview event; own state, at most one replacement; revalidate after acknowledgement output. */
     receive(message: unknown): void {
       if (!message || typeof message !== 'object') return;
       const m = message as Record<string, unknown>;
@@ -119,10 +133,12 @@ export function createPreview<T>(panel: PreviewPanel, ports: PreviewPorts<T>) {
         || !['started', 'completed', 'absent', 'error'].includes(m.type)) return;
       if (m.type === 'started' && m.status !== 0 && m.status !== 1 && m.status !== 2) return;
       if (m.type === 'error' && typeof m.reason !== 'string') return;
-      const {id, phase} = this.state;
+      const before = this.state;
+      const {id, phase} = before;
       if (phase.kind === 'CLOSED') return;
       if (phase.kind === 'DISPOSING' && (m.type === 'completed' || m.type === 'absent')) {
         ports.output('Previous document: ' + m.type);
+        if (this.state !== before) return;
         this.replace();
         return;
       }
@@ -142,7 +158,10 @@ export function createPreview<T>(panel: PreviewPanel, ports: PreviewPorts<T>) {
     }
 
     /** Cost: panel destruction once; cancels own timer, no page disposal after destruction. */
-    close(): void { this.enter({id: this.state.id, phase: {kind: 'CLOSED'}}); }
+    close(): void {
+      if (this.state.phase.kind === 'CLOSED') return;
+      this.enter({id: this.state.id, phase: {kind: 'CLOSED'}});
+    }
   }
   return new Preview();
 }

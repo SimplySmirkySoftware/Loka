@@ -347,3 +347,7 @@ The shell procedures live in `tools/vscode-loka/src/previewHtml.ts` (documents),
 PR 5b adds VS Code wiring, manifest contributions, and launch configuration.
 Externally destroyed documents (panel close or window reload) terminate abruptly:
 there is no host disposal call and no completion acknowledgement.
+
+Build retains end facts received during task acquisition and reconciles them by
+execution identity when acquisition resolves, preferring a process result over a
+processless task end; rejection or disposal drops the retained facts.
