@@ -1,10 +1,12 @@
-import test from 'node:test';
+import test, {mock} from 'node:test';
 import assert from 'node:assert/strict';
 import {posix} from 'node:path';
 import {createPreview} from '../src/preview.ts';
 import type {PreviewPanel, PreviewPorts} from '../src/preview.ts';
 
-function fixture(trusted = true, folder: string | null = '/workspace', present: boolean | '.js' | '.wasm' = true) {
+type MutablePorts = {-readonly [K in keyof PreviewPorts<() => void>]: PreviewPorts<() => void>[K]};
+function fixture(trusted = true, folder: string | null = '/workspace', present: boolean | '.js' | '.wasm' = true,
+  configure: (ports: MutablePorts) => void = () => {}) {
   let serial = 0, directory = 'first', html = '', assignments = 0;
   const errors: string[] = [], faults: unknown[] = [];
   let live: 'live' | 'closed' = 'live';
@@ -35,7 +37,7 @@ function fixture(trusted = true, folder: string | null = '/workspace', present: 
     revoke() { live = 'closed'; },
   };
   const isClosed = () => live === 'closed';
-  const ports: {-readonly [K in keyof PreviewPorts<() => void>]: PreviewPorts<() => void>[K]} = {
+  const ports: MutablePorts = {
     admitted: () => trusted, folder: () => folder ?? undefined,
     setting: name => { reads.push(name); return directory + '/Demo.js'; },
     resolve: posix.resolve, directory: posix.dirname, stem: file => posix.basename(file, '.js'),
@@ -49,6 +51,7 @@ function fixture(trusted = true, folder: string | null = '/workspace', present: 
     fault: error => { faults.push(error); },
     error: message => errors.push(message), output: message => output.push(message), status: message => status.push(message),
   };
+  configure(ports);
   const preview = createPreview(adapter, ports);
   const state = () => Object.getOwnPropertyDescriptor(preview, 'state')!.value;
   const receive = (type: string, extra = {}, id = state().id) => preview.receive({id, type, ...extra});
@@ -56,6 +59,11 @@ function fixture(trusted = true, folder: string | null = '/workspace', present: 
     assignments: () => assignments, trust: () => { trusted = true; },
     directory: () => { directory = 'second'; }};
 }
+
+test('returned Preview has no open member', () => {
+  const f = fixture();
+  assert.equal('open' in f.preview, false);
+});
 
 test('RUNNING reload waits, posts once, times out at 2 s', () => {
   const f = fixture(); f.receive('started', {status: 0});
@@ -256,17 +264,37 @@ test('reload retained for started, error, completed posted from clock.after', ()
   }
 });
 
-for (const door of ['OPEN', 'cancel', 'nested RELOAD']) {
+test('initial install: outer-before, outer-after, nested', () => {
+  const prototype = Object.getPrototypeOf(fixture().preview);
+  const handle = prototype.handle;
+  let owner!: ReturnType<typeof createPreview>;
+  const capture = mock.method(prototype, 'handle', function (this: typeof owner, event: unknown) {
+    owner = this;
+    return handle.call(this, event);
+  });
+  const trace: string[] = [];
+  try {
+    const f = fixture(true, '/workspace', true, ports => {
+      ports.admitted = () => {
+        trace.push('outer-before'); owner.close(); trace.push('outer-after'); return true;
+      };
+      const status = ports.status;
+      ports.status = message => { status(message); if (message === 'CLOSED') trace.push('nested'); };
+    });
+    assert.deepEqual(trace, ['outer-before', 'outer-after', 'nested']);
+    assert.deepEqual(f.status, ['Waiting for startup response', 'CLOSED']);
+    assert.equal(f.assignments(), 1); assert.equal(f.posts.length, 0);
+    assert.equal(f.state().phase.kind, 'CLOSED'); assert.equal(f.timers.size, 0);
+  } finally { capture.mock.restore(); }
+});
+
+for (const door of ['cancel', 'nested RELOAD']) {
   test(`${door}: outer-before, outer-after, nested`, () => {
     const f = fixture(), trace: string[] = [];
     const queueClose = () => { trace.push('outer-before'); f.preview.close(); trace.push('outer-after'); };
     const status = f.ports.status;
     f.ports.status = message => { status(message); if (message === 'CLOSED') trace.push('nested'); };
-    if (door === 'OPEN') {
-      f.ports.admitted = () => { queueClose(); return true; };
-      f.preview.open();
-      assert.equal(f.assignments(), 2); assert.equal(f.posts.length, 0);
-    } else if (door === 'cancel') {
+    if (door === 'cancel') {
       f.preview.reload();
       const cancel = f.ports.clock.cancel;
       f.ports.clock.cancel = timer => { cancel(timer); queueClose(); };
@@ -371,15 +399,15 @@ for (const setter of ['options', 'html'] as const) {
   });
 }
 
-test('Preview terminal head ignores queued valid MESSAGE, RELOAD, CLOSE, OPEN and fresh doors', () => {
+test('Preview terminal head ignores queued valid MESSAGE, RELOAD, CLOSE and fresh doors', () => {
   const f = fixture(); f.preview.reload();
   const cancel = f.ports.clock.cancel;
   f.ports.clock.cancel = timer => {
-    cancel(timer); f.receive('started', {status: 0}); f.preview.reload(); f.preview.close(); f.preview.open();
+    cancel(timer); f.receive('started', {status: 0}); f.preview.reload(); f.preview.close();
   };
   f.preview.close();
   const effects = [f.assignments(), f.status.length, f.output.length, f.errors.length, f.history.length, f.posts.length];
-  f.receive('completed'); f.preview.reload(); f.preview.close(); f.preview.open(); f.history[0]();
+  f.receive('completed'); f.preview.reload(); f.preview.close(); f.history[0]();
   assert.deepEqual([f.assignments(), f.status.length, f.output.length, f.errors.length, f.history.length, f.posts.length], effects);
   assert.equal(f.output.length, 0); assert.equal(f.assignments(), 1); assert.equal(f.timers.size, 0);
 });
@@ -390,7 +418,7 @@ for (const path of ['timeout output', 'CLOSE cancellation', 'CLOSED status', 'pa
     f.preview.reload(); let cancellations = 0, revocations = 0;
     const cancel = f.ports.clock.cancel, revoke = f.adapter.revoke;
     f.adapter.revoke = () => {
-      ++revocations; revoke(); f.preview.open(); f.preview.reload(); f.preview.close();
+      ++revocations; revoke(); f.preview.reload(); f.preview.close();
       throw new Error('cleanup must not replace primary');
     };
     f.ports.clock.cancel = timer => {
@@ -410,7 +438,7 @@ for (const path of ['timeout output', 'CLOSE cancellation', 'CLOSED status', 'pa
     assert.equal(revocations, 1); assert.equal(cancellations, 1);
     assert.equal(f.timers.size, path === 'CLOSE cancellation' ? 1 : 0);
     const effects = [f.assignments(), f.status.length, f.output.length];
-    f.preview.open(); f.preview.reload(); f.receive('completed'); f.preview.close(); f.history[0]();
+    f.preview.reload(); f.receive('completed'); f.preview.close(); f.history[0]();
     assert.deepEqual([f.assignments(), f.status.length, f.output.length], effects);
     assert.equal(cancellations, 1); assert.equal(revocations, 1);
     assert.throws(() => f.panel.html, /native use after disposal/);
