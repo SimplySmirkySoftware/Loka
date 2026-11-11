@@ -1329,6 +1329,8 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
       COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/ToolboxScenarioRunnerTest.sh)
     add_test(NAME scriptToolboxStandaloneAuditVerifier
       COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/ToolboxStandaloneAuditVerifierTest.sh)
+    add_test(NAME scriptSourceTreeStamp
+      COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/SourceTreeStampTest.sh)
     add_test(NAME scriptMacOSScenarioRunner
       COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/MacOSScenarioRunnerTest.sh)
     add_test(NAME scriptBuild104Guard
