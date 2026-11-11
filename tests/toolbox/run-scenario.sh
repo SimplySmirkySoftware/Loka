@@ -122,6 +122,9 @@ if [ -f "$ENV_FILE" ]; then
   set +a
 fi
 
+# Keep this vehicle table and loka_toolbox_scenario_source_stamp calls in
+# CMakeLists.txt (including smirkycard/) in agreement; an unwired vehicle has
+# no stamp and fails safe.
 case "$EXAMPLE" in
   scrapbook)
     APPL="$PROJECT_DIR/build/retro68/68k/Release/tests/toolbox/LokaTestsToolbox68K.bin"
@@ -241,6 +244,25 @@ if [ ! -f "$APPL" ]; then
   fail_stage mame \
     "missing $APPL; build it with: cmake --preset retro68-68k-release${CONFIGURE_FLAGS:-} && cmake --build --preset retro68-68k-release --target $TARGET"
 fi
+SOURCE_STAMP="${APPL%.bin}.source-stamp.txt"
+SOURCE_HELPER="$PROJECT_DIR/scripts/rig/source-tree-stamp.sh"
+REBUILD_REMEDY="rebuild with: cmake --build --preset retro68-68k-release --target $TARGET"
+stamped_id="$(cat "$SOURCE_STAMP" 2>/dev/null || true)"
+current_id="$(bash "$SOURCE_HELPER" id 2>/dev/null || true)"
+if [ -z "$stamped_id" ] || [ -z "$current_id" ] || [ "$stamped_id" != "$current_id" ]; then
+  fail_stage mame "source tree stamp: built ${stamped_id:-missing}, current ${current_id:-unanswerable}; $REBUILD_REMEDY"
+fi
+case "$current_id" in
+  content:*) source_context="no git" ;;
+  *)
+    head_sha="$(git -C "$PROJECT_DIR" rev-parse HEAD)"
+    head_tree="$(git -C "$PROJECT_DIR" rev-parse 'HEAD^{tree}')"
+    source_context="HEAD $head_sha"
+    if [ "$head_tree" != "$current_id" ]; then source_context="$source_context, tracked changes"; fi ;;
+esac
+echo "stage: build source tree $current_id ($source_context)"
+# Python is already a runner prerequisite; this avoids incompatible BSD/GNU stat flags.
+python3 -c 'import datetime, os, sys; print("stage: build vehicle mtime " + datetime.datetime.fromtimestamp(os.path.getmtime(sys.argv[1]), datetime.timezone.utc).isoformat())' "$APPL"
 LRPC="$PROJECT_DIR/build/host/lrpc/lrpc"
 if [ "$EXAMPLE" = "scrapbook" ] && [ ! -x "$LRPC" ]; then
   fail_stage mame \

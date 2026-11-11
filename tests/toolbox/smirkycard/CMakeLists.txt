@@ -22,3 +22,5 @@ smirkycard_cpp_target(LokaSmirkyCardTest68K)
 target_link_libraries(LokaSmirkyCardTest68K PRIVATE LaptopScenarioInputs)
 target_include_directories(LokaSmirkyCardTest68K PRIVATE ${PROJECT_SOURCE_DIR}/tests/toolbox/src)
 target_compile_definitions(LokaSmirkyCardTest68K PRIVATE TEST_BUILD LOKA_DIAG=1)
+
+loka_toolbox_scenario_source_stamp(LokaSmirkyCardTest68K)

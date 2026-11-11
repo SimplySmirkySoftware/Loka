@@ -24,6 +24,12 @@ uses a content digest (including untracked regular files, excluding `build/` and
 before invoking `LOKA_MACOS_RIG=tahoe tests/macos/run-scenario.sh <example> <scenario>`;
 both routes refuse a missing or changed stamp and target-only builds withdraw it.
 
+The Toolbox runner uses a per-vehicle `<X>.source-stamp.txt` beside `<X>.bin`,
+withdrawn before compilation and published after `cmake --build --preset
+retro68-68k-release --target <X>_APPL`. Toolbox workflows build one vehicle at a
+time, so an aggregate stamp would refuse normal builds. Missing, unanswerable,
+or mismatched source identity refuses the run before MAME starts.
+
 ## Updating desktop startup-identity pairs
 
 For a macOS or Win32 bake that changes both members of a startup-identity

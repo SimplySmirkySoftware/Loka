@@ -117,6 +117,22 @@ function(loka_add_toolbox_test_application target core_target)
   endif()
 endfunction()
 
+# Keep these opt-in calls and run-scenario.sh's EXAMPLE table in agreement.
+# A missing vehicle call fails safe: no source stamp means the runner refuses it.
+# Do not put this in the generic app helper: only scenario vehicles pay the git walk.
+function(loka_toolbox_scenario_source_stamp target)
+  set(stamp "${CMAKE_CURRENT_BINARY_DIR}/${target}.source-stamp.txt")
+  add_custom_target(${target}_SourceStampWithdraw
+    COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/rig/source-tree-stamp.sh"
+      withdraw "${stamp}"
+    VERBATIM)
+  add_dependencies(${target} ${target}_SourceStampWithdraw)
+  add_custom_command(TARGET ${target}_APPL POST_BUILD
+    COMMAND bash "${CMAKE_SOURCE_DIR}/scripts/rig/source-tree-stamp.sh"
+      publish "${stamp}"
+    VERBATIM)
+endfunction()
+
 # One finite native placement pin; no scenario registry or extra rig cells.
 set(LOKA_WINDOW_CLAMP_TARGET "LokaWindowClamp${LOKA_CLASSIC_TARGET_SUFFIX}")
 configure_file(
@@ -511,6 +527,15 @@ target_include_directories(${LOKA_SIMPLE_TEXT_TESTS_TOOLBOX_TARGET} PRIVATE
   ${CMAKE_SOURCE_DIR}/example/SimpleText/src
 )
 target_compile_definitions(${LOKA_SIMPLE_TEXT_TESTS_TOOLBOX_TARGET} PRIVATE TEST_BUILD LOKA_DIAG=1)
+
+loka_toolbox_scenario_source_stamp(${LOKA_TESTS_TOOLBOX_TARGET})
+loka_toolbox_scenario_source_stamp(${LOKA_HELLO_WORLD_TESTS_TOOLBOX_TARGET})
+loka_toolbox_scenario_source_stamp(${LOKA_TUTORIAL_TESTS_TOOLBOX_TARGET})
+loka_toolbox_scenario_source_stamp(${LOKA_MINESWEEPER_TESTS_TOOLBOX_TARGET})
+loka_toolbox_scenario_source_stamp(${LOKA_SIMPLE_TEXT_TESTS_TOOLBOX_TARGET})
+loka_toolbox_scenario_source_stamp(${LOKA_SIMPLE_VIEWER_TESTS_TOOLBOX_TARGET})
+loka_toolbox_scenario_source_stamp(${LOKA_SMIRK_BENCH_TESTS_TOOLBOX_TARGET})
+loka_toolbox_scenario_source_stamp(${LOKA_FLOPPY_BIRD_TESTS_TOOLBOX_TARGET})
 
 function(loka_configure_toolbox_standalone_target
          target example_include_dir aggregate_target)

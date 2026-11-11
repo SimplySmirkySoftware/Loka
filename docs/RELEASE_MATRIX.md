@@ -179,6 +179,8 @@ the other cells unchecked so the sample remains visible.
 The Win32 scenario runner requires `cmake --build --preset win32-tests` for the current tracked source tree; target-only builds do not refresh its source stamp.
 The macOS scenario runner requires `cmake --build --preset macos-scenarios` for the current source tree; target-only builds do not refresh its source stamp, and copies without git use a content digest of regular files excluding `build/` and `.git`.
 
+The Toolbox scenario runner requires `cmake --build --preset retro68-68k-release --target <X>_APPL` for the current source tree; each vehicle carries its own stamp, so a target-only build of that vehicle refreshes it.
+
 Run commands from the repository root. The configure-and-build lines below are
 single shell invocations that reproduce each build leg available today; the
 host must satisfy that preset's toolchain requirements.
