@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "lib": ["ES2022"],
+    "module": "NodeNext", "moduleResolution": "NodeNext",
+    "rootDir": ".", "outDir": "out", "strict": true,
+    "noEmitOnError": true, "erasableSyntaxOnly": true,
+    "rewriteRelativeImportExtensions": true, "verbatimModuleSyntax": false,
+    "esModuleInterop": true, "types": ["node"], "sourceMap": true
+  },
+  "include": ["extension.ts", "src/**/*.ts", "test/**/*.ts"],
+  "exclude": ["node_modules", "out"]
+}

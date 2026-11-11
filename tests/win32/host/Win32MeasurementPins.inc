@@ -24,6 +24,58 @@ namespace
     return win32_host::measures + win32_host::metrics + win32_host::drawMeasures;
   }
 
+  void pinTargetOnlyRebuild()
+  {
+    fittingPin("host_live_target_only_rebuild");
+    Win32ScenePlatformController controller;
+    HostWindow root;
+    controller.rootHwnd_ = &root;
+    const LinkTarget x(String("x")), y(String("y"));
+    const AttributedString joined = Linked("ab", Bold, x) + Linked("cd", Bold, x);
+    const AttributedString split = Linked("ab", Bold, x) + Linked("cd", Bold, y);
+    MutableState<AttributedString> live(joined);
+    PushStateTracker tracker;
+    tracker.addState(&live);
+    MeasurementBoundary boundary;
+    AttributedTextNode node(AttributedText(&live).props);
+    node.setPropsTypeId(AttributedTextProps::staticTypeId());
+    node.setContext(new Win32AttributedTextContext(&controller, &root, 0, 0, 101, 20, &node));
+    BoundaryNode::declareBoundaryDirtySources(&node, &boundary);
+    LayoutState seat;
+    seat.width = 101;
+    node.layout(&controller, seat);
+    const Win32AttributedTextTable &table =
+        FittingAccess::table(*static_cast<Win32AttributedTextContext *>(node.getContext()));
+    LOKA_VERIFY(table.reusable(101) && FittingAccess::spans(table) == 1 && table.lines().line(0).fragmentCount == 1);
+    int calls = measurementCalls();
+    {
+      StateTrackerGuard guard(&tracker);
+      live.set(split);
+    }
+    LOKA_VERIFY(live.get() == split && live.get() != joined);
+    node.layout(&controller, seat);
+    LOKA_VERIFY(measurementCalls() > calls && table.reusable(101));
+    LOKA_VERIFY(FittingAccess::spans(table) == 2 && table.lines().line(0).fragmentCount == 2);
+    LOKA_VERIFY(table.value() == split && table.value().segment(1).link == y);
+    calls = measurementCalls();
+    node.layout(&controller, seat);
+    LOKA_VERIFY(measurementCalls() == calls);
+
+    fittingPin("host_retained_target_only_rebuild");
+    LOKA_VERIFY(AttributedText(joined).applyPropsToNode(&node));
+    node.layout(&controller, seat);
+    LOKA_VERIFY(FittingAccess::spans(table) == 1 && table.lines().line(0).fragmentCount == 1 && table.reusable(101));
+    calls = measurementCalls();
+    LOKA_VERIFY(AttributedText(split).applyPropsToNode(&node));
+    node.layout(&controller, seat);
+    LOKA_VERIFY(measurementCalls() > calls && table.reusable(101));
+    LOKA_VERIFY(FittingAccess::spans(table) == 2 && table.lines().line(0).fragmentCount == 2);
+    LOKA_VERIFY(table.value() == split && table.value().segment(1).link == y);
+    calls = measurementCalls();
+    node.layout(&controller, seat);
+    LOKA_VERIFY(measurementCalls() == calls);
+  }
+
   void pinMeasurement(bool attributed)
   {
     std::printf("context pins: %s\n", attributed ? "AttributedText" : "Text");

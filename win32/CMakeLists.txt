@@ -222,6 +222,36 @@ if(LOKA_WIN32_TOP_LEVEL_SOURCE_NORMALIZED STREQUAL
     COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
       ${CMAKE_CURRENT_SOURCE_DIR}/../tests/scripts/Win32RigDescriptorTest.ps1)
 
+  add_test(NAME scriptWin32SourceTreeStamp
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+      ${CMAKE_CURRENT_SOURCE_DIR}/../tests/scripts/Win32SourceTreeStampTest.ps1)
+
+  # The source stamp the scenario runner compares (#1224). Every vehicle
+  # build first withdraws the old one and records the starting tree; only a
+  # complete scenario build publishes it again, after every vehicle has
+  # linked and only if the tree did not change meanwhile. A build that fails
+  # partway, builds one vehicle, or races an edit leaves no stamp.
+  set(LOKA_WIN32_SCENARIO_VEHICLES
+    LokaScrapbookScenarioWin32 LokaHelloWorldScenarioWin32
+    LokaTutorialScenarioWin32 LokaMineSweeperScenarioWin32
+    LokaFloppyBirdScenarioWin32 LokaSmirkBenchScenarioWin32)
+  set(LOKA_WIN32_SCENARIO_SOURCE_STAMP
+    "${CMAKE_BINARY_DIR}/scenario-source-stamp.txt")
+  add_custom_target(LokaWin32ScenarioSourceStampWithdraw
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+      "${CMAKE_CURRENT_SOURCE_DIR}/../tests/win32/SourceTreeStamp.ps1"
+      -Withdraw "${LOKA_WIN32_SCENARIO_SOURCE_STAMP}"
+    VERBATIM)
+  add_custom_target(LokaWin32ScenarioSourceStamp
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+      "${CMAKE_CURRENT_SOURCE_DIR}/../tests/win32/SourceTreeStamp.ps1"
+      -Write "${LOKA_WIN32_SCENARIO_SOURCE_STAMP}"
+    VERBATIM)
+  foreach(loka_vehicle IN LISTS LOKA_WIN32_SCENARIO_VEHICLES)
+    add_dependencies(${loka_vehicle} LokaWin32ScenarioSourceStampWithdraw)
+    add_dependencies(LokaWin32ScenarioSourceStamp ${loka_vehicle})
+  endforeach()
+
   loka_add_win32_scenario_loop_executable(
     LokaHelloWorldScenarioLoopWin32
     HelloWorldScenarioLoopMain.cpp

@@ -52,29 +52,19 @@ local ALIASES = {
     five = { "5  %" },
 }
 
+local here = debug.getinfo(1, "S").source:match("^@(.*[/\\])") or ""
+local keys = dofile(here .. "mame-keys.lua")(say)
+local tap = keys.tap
 local function key(name)
     for _, fieldName in ipairs(ALIASES[name] or { name }) do
-        for tag, port in pairs(manager.machine.ioport.ports) do
-            if tag:find("^:macadb:KEY") and port.fields[fieldName] then
-                return port.fields[fieldName]
-            end
-        end
+        local ok, found = pcall(keys.keyByName, fieldName)
+        if ok then return found end
     end
     error("no key field for " .. name)
 end
 
-local function tap(field)
-    field:set_value(1)
-    emu.wait(0.10)
-    field:clear_value()
-    emu.wait(0.20)
-end
-
 local function commandTap(name)
-    local command = key("cmd")
-    command:set_value(1)
-    tap(key(name))
-    command:clear_value()
+    keys.commandTap(key(name))
 end
 
 local finderZone = nil
@@ -260,6 +250,7 @@ local ok, err = pcall(function()
             error("PPC low-memory page not found: the machine did not boot; run it again")
         end
     end
+    keys.decideKeyMapReadable()
     say("lowmem base=%08x", lowmem)
     zone32 = mem:read_u8(logical(0xCB2)) ~= 0
     say("zone format=%s", zone32 and "32-bit" or "24-bit")
@@ -297,14 +288,8 @@ local ok, err = pcall(function()
         finderZone = mem:read_u32(logical(0x2AA))
         doubleClick(tonumber(appH), tonumber(appV))
     else
-        tap(key("l"))
-        commandTap("o")
-        emu.wait(5)
-        local tabs = assert(tonumber(os.getenv("LOKA_TAB_COUNT")), "LOKA_TAB_COUNT must be set by the runner")
-        for _ = 1, tabs do
-            tap(key("tab"))
-        end
-        emu.wait(1)
+        keys.openVolume()
+        keys.selectApplication(tonumber(os.getenv("LOKA_TAB_COUNT")))
         finderZone = mem:read_u32(logical(0x2AA))
         commandTap("o")
     end

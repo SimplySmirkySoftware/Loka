@@ -364,6 +364,17 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "LOKA_WARNINGS_AS_ERRORS": "ON"
       }
+    },
+    {
+      "name": "web",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/wasm/web",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "TEST_BUILD": "OFF",
+        "LOKA_COMPILE_PINS": "OFF",
+        "LOKA_WARNINGS_AS_ERRORS": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -487,6 +498,7 @@
       "configurePreset": "win32-debug",
       "targets": [
         "LokaTestsWin32",
+        "LokaWin32ScenarioSourceStamp",
         "LokaScrapbookScenarioWin32",
         "LokaHelloWorldScenarioWin32",
         "LokaHelloWorldScenarioLoopWin32",
@@ -703,6 +715,10 @@
     {
       "name": "testing-web",
       "configurePreset": "testing-web"
+    },
+    {
+      "name": "web",
+      "configurePreset": "web"
     }
   ],
   "testPresets": [

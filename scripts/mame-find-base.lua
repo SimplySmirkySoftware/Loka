@@ -41,32 +41,16 @@ local function say(fmt, ...)
     log:flush()
 end
 
-local function field(portTag, name)
-    return assert(manager.machine.ioport.ports[portTag].fields[name])
-end
-
-local lKey = field(":macadb:KEY2", "l  L")
-local aKey = field(":macadb:KEY0", "a  A")
-local oKey = field(":macadb:KEY1", "o  O")
-local escapeKey = field(":macadb:KEY3", "Esc")
-local commandKey = field(":macadb:KEY3", "Command / Open Apple")
-
-local function tap(key)
-    key:set_value(1)
-    emu.wait(0.10)
-    key:clear_value()
-    emu.wait(0.20)
-end
-
+local here = debug.getinfo(1, "S").source:match("^@(.*[/\\])") or ""
+local keys = dofile(here .. "mame-keys.lua")(say)
 local space = manager.machine.devices[":maincpu"].spaces["program"]
 
--- Boot, open the LokaDev volume, select all, open the application.
+-- Boot, open the LokaDev volume, select the application, open it.
 say("booting (%d emulated seconds)", BOOT_WAIT)
 emu.wait(BOOT_WAIT)
-tap(lKey)
-commandKey:set_value(1); tap(oKey); commandKey:clear_value()
-emu.wait(5)
-tap(escapeKey)
+keys.decideKeyMapReadable()
+keys.openVolume()
+keys.tap(keys.keyByName("Esc"))
 -- Select only the application. Cmd-A would also open the staged data files:
 -- LokaTest.cfg lands in TeachText, which takes the foreground, and a
 -- cannotBackground vehicle then freezes mid-scenario -- a debug session that
@@ -75,26 +59,12 @@ tap(escapeKey)
 -- landing count is a per-boot-image fact the caller owns (LOKA_TAB_COUNT,
 -- default 1). Verify the landing through the heap-size line below: the
 -- wrong application shows the wrong partition size.
-local tabKey
-for tag, port in pairs(manager.machine.ioport.ports) do
-    if tag:find("^:macadb:KEY") then
-        local found = port.fields["Tab"]
-        if found then
-            tabKey = found
-            break
-        end
-    end
-end
-assert(tabKey, "no key field named Tab")
 local tabCount = tonumber(os.getenv("LOKA_TAB_COUNT") or "1")
 assert(tabCount and tabCount > 0 and tabCount == math.floor(tabCount),
     "LOKA_TAB_COUNT must be a positive integer")
 say("selecting the application (%d tabs)", tabCount)
-for _ = 1, tabCount do
-    tap(tabKey)
-end
-emu.wait(1)
-commandKey:set_value(1); tap(oKey); commandKey:clear_value()
+keys.selectApplication(tabCount)
+keys.commandTap(keys.field(":macadb:KEY1", "o  O"))
 emu.wait(20)
 say("application launched")
 

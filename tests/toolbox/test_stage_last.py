@@ -115,6 +115,7 @@ class StageLastTests(unittest.TestCase):
         (self.root / '.env-mame').write_text('MAME_EXECUTABLE=/bin/false\nMAME_HDA=' + str(self.root / 'template.hd') + '\n')
         (self.root / 'template.hd').write_bytes(b'fixture boot template')
         (self.root / 'tests/toolbox/mame-launch.lua').write_text('-- fixture')
+        (self.root / 'tests/toolbox/mame-keys.lua').write_text('-- shared keys fixture')
         disk = self.root / 'scripts/mame-dev-disk.sh'
         disk.write_text('#!/usr/bin/env bash\nexit 88\n')
         disk.chmod(0o755)

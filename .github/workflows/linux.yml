@@ -30,6 +30,18 @@ jobs:
           git diff --name-only --no-renames "origin/$BASE...HEAD" -- > "$RUNNER_TEMP/ci-paths.txt"
           python3 tools/ci/ci_paths.py --job linux-headless --summary "$GITHUB_STEP_SUMMARY" \
             < "$RUNNER_TEMP/ci-paths.txt" | tee -a "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: tools/vscode-loka/package-lock.json
+      - name: Check VS Code shell
+        if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
+        working-directory: tools/vscode-loka
+        run: |
+          npm ci --ignore-scripts
+          npm run check -- --pretty false
       # No build can catch a reintroduced side-effect assert: it compiles, and
       # under NDEBUG it just makes a test check less than it claims (#264).
       - run: python3 tests/scripts/TestAssertCheckerTest.py
@@ -57,6 +69,8 @@ jobs:
       - run: cmake --build --preset testing
         if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
       - run: ctest --preset testing --output-on-failure
+        env:
+          LOKA_REQUIRE_NODE: '1'
         if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
 
   linux-asan:

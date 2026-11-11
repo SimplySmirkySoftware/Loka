@@ -6,6 +6,27 @@
 class WebPlatformContext;
 class WebApp;
 class WebEntry;
+/** Session scrollbar fact, replaced whole after a measurable probe. */
+class WebScrollbarGeometry
+{
+public:
+  WebScrollbarGeometry(int vertical = 0, int horizontal = 0)
+      : vertical_(vertical),
+        horizontal_(horizontal)
+  {
+  }
+  int vertical() const
+  {
+    return this->vertical_;
+  }
+  int horizontal() const
+  {
+    return this->horizontal_;
+  }
+
+private:
+  int vertical_, horizontal_;
+};
 /** Module-lifetime owner. Destruction of the App chain occurs only in a consumed
     shutdown task at IDLE. Cost: ingress O(1); shutdown once over owned services,
     each service destroys its own rows. No Operation is stored in this owner. */
@@ -35,6 +56,14 @@ public:
   /** Cost: one click; two button and two root lookups (each <=33 probes).
       App checks its pending-close rows twice; one receiver, then completion. */
   Ingress click(loka::web::Token token, double now);
+  /** Cost: scroll event; receiver/root lookup twice, pending-close twice, one bounded tail batch. */
+  Ingress scroll(loka::web::Token token, int x, int y, double now);
+  const WebScrollbarGeometry &scrollbarGeometry() const
+  {
+    return this->scrollbarGeometry_;
+  }
+  /** Cost: accepted resize once; one probe, changed value walks own live root rows. */
+  void refreshScrollbarGeometry();
   /** Cost: one resize; two bounded root lookups; App checks its pending-close
       rows once, then owner layout scheduling and completion. */
   Ingress resize(loka::web::Token root, int width, int height, double now);
@@ -87,6 +116,7 @@ private:
   void schedule(double now);
   /** Cost: one consumed shutdown task; each owner tears down its own rows in reverse order. */
   void shutdown();
+  WebScrollbarGeometry scrollbarGeometry_;
   WebInputRoutes routes_;
   WebTokens tokens_;
   WebPlatformContext *platform_;

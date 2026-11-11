@@ -49,6 +49,13 @@ public:
   bool initialize();
   /** Cost: ingress once; O(1) own controller and Scene attachment facts. */
   bool live() const;
+  /** Cost: deferred visit once; reads the root applied visibility in O(1). */
+  bool rootShown() const
+  {
+    return this->root_.isShown();
+  }
+  /** Cost: reveal or gutter change once; sets only this Window Scene pending. */
+  void requestSceneRelayout();
   /** Cost: one admitted resize; publish own geometry and request own Scene layout. */
   void handleNativeSize(int width, int height);
   WebScenePlatformController *controller()

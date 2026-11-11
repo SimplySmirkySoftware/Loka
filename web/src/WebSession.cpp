@@ -41,8 +41,10 @@ WebSession::StartResult WebSession::start(ConfigFactory factory, double now)
   if (this->lifecycle_ != STARTING || this->execution_ != IDLE)
     return FAILED;
   this->execution_ = BOOTSTRAP;
-  if (web_text_admit(kWebTextWireFingerprint, WEB_TEXT_FIELD_COUNT))
+  int vertical = 0, horizontal = 0;
+  if (web_scrollbar_geometry(&vertical, &horizontal) && web_text_admit(kWebTextWireFingerprint, WEB_TEXT_FIELD_COUNT))
   {
+    this->scrollbarGeometry_ = WebScrollbarGeometry(vertical, horizontal);
     loka::platform::InitPlatformRuntime();
     this->platform_ = new (std::nothrow) WebPlatformContext(*this);
     if (this->platform_ && factory)
@@ -143,7 +145,7 @@ WebSession::Ingress WebSession::click(loka::web::Token token, double now)
   if (entry != ACCEPTED && entry != NESTED)
     return entry;
   WebResource *row = this->routes_.find(token);
-  if (!row || row->kind != loka::web::BUTTON || !row->leaf || !row->leaf->active())
+  if (!row || row->kind != loka::web::BUTTON || !row->leaf() || !row->leaf()->active())
     return REFUSED_TOKEN;
   return WebEntry::run(*this, entry, loka::web::BUTTON, token, 0, 0, loka::web::WAKE_COUNT, now);
 }
@@ -175,10 +177,15 @@ namespace
     switch (kind)
     {
     case loka::web::BUTTON:
-      WebInputDoor::buttonClick(*row->leaf);
+      WebInputDoor::buttonClick(*row->leaf());
       break;
     case loka::web::ROOT:
+      session.refreshScrollbarGeometry();
       WebInputDoor::resize(*row->root, width, height);
+      break;
+    case loka::web::SCROLL:
+      if (row->scroll())
+        WebInputDoor::scroll(*row->scroll(), width, height);
       break;
     case loka::web::TEXT:
       break;
@@ -230,4 +237,37 @@ bool WebSession::acceptsRoot(loka::web::Token token) const
   WebResource *row = this->routes_.find(token);
   return this->lifecycle_ == RUNNING && row && row->root && row->root->live() && row->root->visibilityState().get()
          && !this->app_->closing(row->root);
+}
+
+WebSession::Ingress WebSession::scroll(loka::web::Token token, int x, int y, double now)
+{
+  const Ingress entry = this->ingress();
+  if (entry != ACCEPTED && entry != NESTED)
+    return entry;
+  WebResource *row = this->routes_.find(token);
+  if (!row || !row->scroll() || !row->scroll()->active())
+    return REFUSED_TOKEN;
+  return WebEntry::run(*this, entry, loka::web::SCROLL, token, x, y, loka::web::WAKE_COUNT, now);
+}
+namespace
+{
+  struct RelayoutRoot
+  {
+    void operator()(WebWindow &window)
+    {
+      if (window.live())
+        window.requestSceneRelayout();
+    }
+  };
+} // namespace
+void WebSession::refreshScrollbarGeometry()
+{
+  int vertical = 0, horizontal = 0;
+  if (!web_scrollbar_geometry(&vertical, &horizontal))
+    return;
+  if (vertical == this->scrollbarGeometry_.vertical() && horizontal == this->scrollbarGeometry_.horizontal())
+    return;
+  this->scrollbarGeometry_ = WebScrollbarGeometry(vertical, horizontal);
+  RelayoutRoot visitor;
+  this->routes_.forEachRoot(visitor);
 }
