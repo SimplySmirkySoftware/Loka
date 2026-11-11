@@ -331,17 +331,18 @@ admission, then publishes origin once without writing native offsets. There is
 no cached event origin or mute flag. Requests replay completed geometry through
 the same commit import and publish only on APPLIED.
 
-Web scrollbars are not shortened by content insets. Grid retains its vertical
-fallback until its separate layout-handler registration page. These are Web
-limits, not claims of native parity.
+Web scrollbars are not shortened by content insets. Grid uses the common grid
+computation through the Web adapter described below. These are Web policies,
+not claims of native parity.
 
 ### Stack layout
 
 The Web registry owns a Stack handler that borrows its creating controller.
 It calls the same `LayoutStack` computation as the common handler; native common
 handlers retain their copied metrics. No typography state is added to the
-Session or controller, and startup and text admission are unchanged. Grid
-metrics remain null: Grid is not registered until its coordinate checks exist.
+Session or controller, and startup and text admission are unchanged. Generic
+registration still receives null Grid metrics; the Web Grid adapter is
+registered separately.
 
 Each reached column or row without vertical alignment passes default metrics
 without fetching an estimate. Each reached aligned row calls
@@ -435,6 +436,62 @@ Scroll reproduction adds `LOKA_WEB_CAPTURE_SCROLL=1` for `scroll.golden`,
 `node tests/web/js/boundary.test.mjs` for deterministic adapter read-back and
 listener checks, and `tests/web/mutations/scroll-{1,2,3,4,5,6,7}.py <worktree>`.
 The counter golden includes the intended additional root-reveal projection pass.
+
+### Grid layout
+
+The controller's registry owns one `WebGridLayoutHandler`, a policy adapter for
+`computeGridLayoutResultY`. It retains no controller, metrics, typography or
+flags. Each reached visit supplies zero gaps and the existing traversal helpers.
+The common computation's optional synchronous coordinate callback borrows the
+same context as child dispatch; omitted or null preserves existing native
+policy. The common Grid handler and native direct calls omit it.
+
+The Web wall admits the **offered cell**, not the eventual descendant drawing.
+Before narrowing it checks x, right, y and bottom in int. It stops that child and
+all remaining Grid children at the first refusal, returning the greatest bottom
+already dispatched (the incoming y if none). Previous writes and old DOM are not
+rolled back. At root the Grid stops its own remaining children and later siblings
+can still be visited. Inside a ScrollView the refusal also stops subsequent scope
+dispatch and its commit, preserving the previous extent and origin.
+
+Arithmetic safety here is limited to Web's short layout state with zero gaps.
+Cell extents are nonnegative; negative offers become zero, and nonpositive row
+or column counts become one. Arbitrary int gaps or int coordinates in the generic
+computation can overflow before the callback; the wall makes no guarantee for
+those inputs. The callback costs at most four O(1) calls per examined child.
+The handler walks only its Grid's children up to the lesser of capacity and
+child count, with no extra traversal or retained visit state.
+
+Grid divides its parent's offer; it has no height prop or natural-height repair.
+Root, a column's remaining height, a ScrollView and a fixed Box can supply positive
+height. A zero-height offer places every row at the same y, sharing the current
+native rule. Buttons retain their measured height plus chrome and do not fill
+the offered cell. Grid creates no DOM panel or fixed height. Cell remains refused:
+if every visited child is refused without tripping the coordinate wall, the
+returned bottom is the last visited row's top (incoming y for an empty Grid).
+Sparse and mixed Grids use the greatest returned child bottom.
+
+Children beyond rows times columns are not dispatched. Initially unprojected
+children create no DOM on that visit. Shrinking capacity while retaining attached
+Buttons can leave excess children's previous DOM, rects, visibility and input
+routes active. This accepted limitation does not promise hiding or input removal;
+that would need a separate projection-eligibility design. Restoring capacity
+lays out the same retained children again. MineSweeper has no Web entry and its
+Cells still need a separate projection implementation.
+
+Grid build-verified: Linux x86_64 C++98 testing and ASan builds, Emscripten
+7.0.0 testing-web, and production LokaHelloWeb. Host and wasm Node cells passed
+for offers, refusal and retained-history behavior, and the full native suite
+passed. The selected ASan grid/layout/web tests ran with leak detection
+disabled, so they give no leak verdict.
+
+Grid browser-verified (Chromium on Linux, through the driver; separate from the
+Stack evidence above): `Grid2x2` (four Button rects in a 100x80 Box at x 0/50,
+y 0/40, width 50, measured height below the cell height) and
+`GridCapacityHistory` (shrinking to 1x1 keeps all four DOM identities, widens
+the first Button to the whole offer and preserves the excess Buttons' previous
+rects and visibility, with the fourth Button's click route still working;
+restoring as 4x1 lays the same Buttons out again). Without an installed Chromium the driver prints a skip.
 
 ### VS Code shell (PR 5a / 5b)
 

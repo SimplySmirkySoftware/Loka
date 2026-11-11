@@ -23,12 +23,20 @@ namespace loka
         }
       };
 
+      /** Optional synchronous admission of each offered cell before narrowing.
+          Null preserves the caller's existing coordinate policy. Refusal stops
+          this and later children, preserving the greatest dispatched bottom.
+          Cost: computation calls the borrowed callback at most four times per
+          examined child, O(1) each; neither callback nor context is retained.
+          Arithmetic safety for Web assumes short state and zero gaps; arbitrary
+          int coordinates and gaps are not protected against arithmetic overflow. */
       template <typename LayoutStateT>
       int computeGridLayoutResultY(loka::app::GridNode *grid,
                                    const LayoutStateT &state,
                                    const GridLayoutMetrics &metrics,
                                    void *context,
-                                   int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &))
+                                   int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &),
+                                   bool (*acceptCoordinate)(void *, int) = 0)
       {
         if (!grid)
         {
@@ -53,15 +61,21 @@ namespace loka
           {
             const int rowIndex = static_cast<int>(index / cols);
             const int colIndex = static_cast<int>(index % cols);
+            const int childX = state.x + colIndex * (cellWidth + metrics.gapX);
+            const int childY = state.y + rowIndex * (cellHeight + metrics.gapY);
+            if (acceptCoordinate
+                && (!acceptCoordinate(context, childX) || !acceptCoordinate(context, childX + cellWidth)
+                    || !acceptCoordinate(context, childY) || !acceptCoordinate(context, childY + cellHeight)))
+              return maxY;
             LayoutStateT childState = state;
-            childState.x = layoutCoordinate<LayoutStateT>(state.x + colIndex * (cellWidth + metrics.gapX));
-            childState.y = layoutCoordinate<LayoutStateT>(state.y + rowIndex * (cellHeight + metrics.gapY));
+            childState.x = layoutCoordinate<LayoutStateT>(childX);
+            childState.y = layoutCoordinate<LayoutStateT>(childY);
             childState.width = layoutCoordinate<LayoutStateT>(cellWidth);
             childState.height = layoutCoordinate<LayoutStateT>(cellHeight);
-            const int childY = layoutChild(context, child, childState);
-            if (childY > maxY)
+            const int bottom = layoutChild(context, child, childState);
+            if (bottom > maxY)
             {
-              maxY = childY;
+              maxY = bottom;
             }
           }
         }

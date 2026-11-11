@@ -8,6 +8,7 @@ import {fileURLToPath} from 'node:url';
 const driverDir=fileURLToPath(new URL('.',import.meta.url));
 import assert from 'node:assert/strict';
 import {runStackCells, runHelloRoundTrip} from './stack-cells.mjs';
+import {runGridCells} from './grid-cells.mjs';
 import {renderPreviewHtml} from '../../../tools/vscode-loka/src/previewHtml.ts';
 
 const build=resolve(process.argv[2] || 'build/wasm/testing/web');
@@ -282,6 +283,7 @@ try {
   })()`);
   assert.equal(closingScroll.count,2);assert.equal(closingScroll.result,5,'pending-close root refuses scroll while another root remains');
   await client.evaluate('web.dispose();web.completed.then(()=>true)');
+  await runGridCells(client, navigate);
   await runStackCells(client, navigate);
   await runHelloRoundTrip(client, navigate);
   for(const viewportWidth of [800,300]) {

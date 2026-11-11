@@ -1073,6 +1073,7 @@ namespace
 } // namespace
 void WebTextProjectionTests();
 void WebStackLayoutTests();
+void WebGridLayoutTests();
 void WebTextProtocolDeath();
 void WebStackProtocolDeath();
 void WebNaturalProtocolDeath();
@@ -1081,6 +1082,11 @@ int main(int argc, char **argv)
   if (argc == 2 && std::strcmp(argv[1], "natural-protocol-death") == 0)
   {
     WebNaturalProtocolDeath();
+    return 0;
+  }
+  if (argc == 2 && std::strcmp(argv[1], "grid-only") == 0)
+  {
+    WebGridLayoutTests();
     return 0;
   }
   if (argc == 2 && std::strcmp(argv[1], "stack-only") == 0)
@@ -1115,6 +1121,7 @@ int main(int argc, char **argv)
     std::fflush(stdout);                                                                                               \
     name();                                                                                                            \
   } while (0)
+  RUN(WebGridLayoutTests);
   RUN(WebStackLayoutTests);
   RUN(WebTextProjectionTests);
   RUN(CounterTest);
@@ -1139,6 +1146,6 @@ int main(int argc, char **argv)
   RUN(RootVisibilityTest);
   RUN(TwoRootTest);
 #undef RUN
-  std::puts("28 Web test groups passed (20 legacy, 6 projection, 1 scroll, 1 stack)");
+  std::puts("29 Web test groups passed (20 legacy, 6 projection, 1 scroll, 1 stack, 1 grid)");
   return 0;
 }
