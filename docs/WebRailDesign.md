@@ -364,11 +364,20 @@ Open the repository in Remote WSL with Node/npm available to tasks. Run
 `npm ci --ignore-scripts` once in `tools/vscode-loka` (and again after lockfile
 changes), select **Loka: Preview Extension**, and press F5. Its pre-launch task
 runs a clean `npm run build`; a failed build stops launch (do not choose Debug
-Anyway). The task shell must already have emsdk available for **Loka: Build**.
+Anyway). The Extension Development Host window opens without a folder: open the
+repository folder there, then use the **Loka: Open Preview**, **Loka: Build** and
+**Loka: Reload** commands; opening a source file does not open the preview.
+The task shell must already have emsdk available for **Loka: Build**.
 Build and every preview replacement read workspace trust afresh; an untrusted
 workspace runs no task and receives a script-free MESSAGE page.
 
 Build-verified: the pinned TypeScript configuration emits a CommonJS entry;
 the built-artifact check loads it through `require`, activates the extension
 against a strict API fake, and verifies command/listener registration and disposal.
-This is not verification of the VS Code runtime or webview resource enforcement.
+
+Runtime-verified (2026-11-11, VS Code 1.143.1, Remote WSL, Extension Development
+Host, by hand): Open Preview started the workspace-built HelloWorld module and its
+buttons responded; a successful **Loka: Build** reloaded the preview; a Build
+with the preview tab hidden reported `Previous document: completed`. Not
+runtime-verified: the untrusted-workspace refusal, the four themes, the outer
+scroll, the cache-busted Wasm refetch and webview resource enforcement.
