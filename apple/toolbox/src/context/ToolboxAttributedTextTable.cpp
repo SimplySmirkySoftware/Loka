@@ -102,18 +102,7 @@ void ToolboxAttributedTextTable::clear()
 
 bool ToolboxAttributedTextTable::matches(const AttributedString &value) const
 {
-  if (!this->bytes_.valid() || !value.valid() || this->snapshot_.segmentCount() != value.segmentCount())
-    return false;
-  for (std::size_t s = 0; s < value.segmentCount(); ++s)
-  {
-    const AttributedString::Segment &a = this->snapshot_.segment(s);
-    const AttributedString::Segment &b = value.segment(s);
-    if (&a == &b)
-      return true; // Shared immutable storage owns every segment.
-    if (a.style != b.style || !a.text.equals(b.text) || a.link != b.link)
-      return false;
-  }
-  return true;
+  return this->bytes_.valid() && this->snapshot_.hasSameSegmentValues(value);
 }
 
 bool ToolboxAttributedTextTable::reconcileProjection(const AttributedString &value)
