@@ -490,8 +490,8 @@ Stack evidence above): `Grid2x2` (four Button rects in a 100x80 Box at x 0/50,
 y 0/40, width 50, measured height below the cell height) and
 `GridCapacityHistory` (shrinking to 1x1 keeps all four DOM identities, widens
 the first Button to the whole offer and preserves the excess Buttons' previous
-rects, visibility and click route; restoring as 4x1 lays the same Buttons out
-again). Without an installed Chromium the driver prints a skip.
+rects and visibility, with the fourth Button's click route still working;
+restoring as 4x1 lays the same Buttons out again). Without an installed Chromium the driver prints a skip.
 
 ### VS Code shell (PR 5a / 5b)
 
