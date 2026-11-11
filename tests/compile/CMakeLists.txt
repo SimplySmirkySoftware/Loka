@@ -66,6 +66,11 @@ loka_compile_pin(observablelist-assign
   ACCEPTS pins/accepts_observablelist_assign.cpp
 )
 
+loka_compile_pin(observablelist-entry-size
+  REFUSES pins/refuses_observablelist_entry_size.cpp
+  ACCEPTS pins/accepts_observablelist_entry_size.cpp
+)
+
 loka_compile_pin(mirroredlist-copy
   REFUSES pins/refuses_mirroredlist_copy.cpp
   ACCEPTS pins/accepts_mirroredlist_copy.cpp
