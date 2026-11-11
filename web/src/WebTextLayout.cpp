@@ -91,6 +91,24 @@ namespace
       assert(false && "Web measurement protocol refusal");
     return status;
   }
+  /** Cost: natural height or row estimate once; one keyed service call, no rows. */
+  int FetchMetrics(int key, int &height)
+  {
+    const WebTextDescriptor descriptor = WebMetricDescriptor(key);
+    int ascent = 0, descent = 0;
+    const int status = CheckedStatus(web_metrics(descriptor.data(), &ascent, &descent));
+    if (status == WEB_MEASURE_OK)
+      height = ascent + descent;
+    return status;
+  }
+  /** Cost: natural answer or row estimate twice; checked own arithmetic, O(1). */
+  bool CheckedInset(int measured, int inset, short &out)
+  {
+    if (measured < 0 || measured > SHRT_MAX - inset || measured + inset < 1)
+      return false;
+    out = static_cast<short>(measured + inset);
+    return true;
+  }
   bool Ellipsis(const BlockStyle &block)
   {
     return block.hasTruncation_ && block.truncation_ == TEXT_TRUNCATION_ELLIPSIS;
@@ -399,18 +417,26 @@ bool WebTextLayout::natural(
   {
     if (height)
     {
-      int ascent = 0, descent = 0;
-      status = CheckedStatus(web_metrics(descriptor.data(), &ascent, &descent));
-      if (status == WEB_MEASURE_OK)
-        measured = ascent + descent;
+      status = FetchMetrics(constraint.fontKey, measured);
     }
     else
       status = CheckedStatus(web_measure(descriptor.data(), prepared, static_cast<unsigned>(length), &measured));
   }
   loka::core::LokaFreeRaw(prepared, Storage);
   const int inset = button ? 2 * ((height ? kWebButtonInsetY : kWebButtonInsetX) + kWebButtonBorder) : 0;
-  if (status != WEB_MEASURE_OK || measured < 0 || measured > SHRT_MAX - inset || measured + inset < 1)
-    return false;
-  out = static_cast<short>(measured + inset);
-  return true;
+  return status == WEB_MEASURE_OK && CheckedInset(measured, inset, out);
+}
+int WebTextLayout::rowEstimate(short &line, short &button)
+{
+  int height = 0;
+  const int status = FetchMetrics(WebFontKey(TextStyle()), height);
+  if (status != WEB_MEASURE_OK)
+    return status;
+  short checkedLine = 0, checkedButton = 0;
+  if (!CheckedInset(height, 0, checkedLine)
+      || !CheckedInset(height, 2 * (kWebButtonInsetY + kWebButtonBorder), checkedButton))
+    return WEB_MEASURE_REFUSED;
+  line = checkedLine;
+  button = checkedButton;
+  return WEB_MEASURE_OK;
 }

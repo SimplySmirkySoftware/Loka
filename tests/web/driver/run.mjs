@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 const driverDir=fileURLToPath(new URL('.',import.meta.url));
 import assert from 'node:assert/strict';
+import {runStackCells, runHelloRoundTrip} from './stack-cells.mjs';
 import {renderPreviewHtml} from '../../../tools/vscode-loka/src/previewHtml.ts';
 
 const build=resolve(process.argv[2] || 'build/wasm/testing/web');
@@ -57,6 +58,7 @@ class CDP {
   }
 }
 assert.equal(spawnSync('python3',[join(driverDir,'make-font.py'),join(build,'text-probe.ttf')],{stdio:'inherit'}).status,0);
+assert.equal(spawnSync('python3',[join(driverDir,'make-font.py'),join(build,'stack-probe.ttf'),'--ascii-labels'],{stdio:'inherit'}).status,0);
 const profile=await mkdtemp(join(tmpdir(),'loka-web-chrome-'));
 let helloWasmFetches=0;
 const server=createServer(async(req,res)=>{
@@ -98,6 +100,7 @@ const server=createServer(async(req,res)=>{
         service:()=>WebDOM.text,
         replaceService:service=>{WebDOM.text=service},
         resources:()=>WebDOM.resources.size,
+        immediatePending:()=>[...WebDOM.tasks.values()].some(row=>row.kind===2),
         admit:()=>LokaWebText.admit(LokaWebStyle.wire.fingerprint,LokaWebStyle.wire.count,
           document,navigator,CSS,message=>console.error(message)),
         badDescriptor:token=>_web_set_text_style(token,0,8)
@@ -279,6 +282,8 @@ try {
   })()`);
   assert.equal(closingScroll.count,2);assert.equal(closingScroll.result,5,'pending-close root refuses scroll while another root remains');
   await client.evaluate('web.dispose();web.completed.then(()=>true)');
+  await runStackCells(client, navigate);
+  await runHelloRoundTrip(client, navigate);
   for(const viewportWidth of [800,300]) {
     await client.send('Emulation.setDeviceMetricsOverride',{width:viewportWidth,height:600,deviceScaleFactor:1,mobile:false});
     await navigate('hello.html');

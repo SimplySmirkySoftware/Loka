@@ -2,6 +2,7 @@
 #include "WebSession.hpp"
 #include "WebFixture.hpp"
 #include "ScrollFixture.hpp"
+#include "LayoutFixture.hpp"
 #include "WebTestHooks.hpp"
 #include "WebTestAccess.hpp"
 #include "WebWindow.hpp"
@@ -37,6 +38,12 @@ namespace loka
       vehicle.roots = webtest::staged.roots;
       vehicle.destroy = webtest::staged.destroy;
       session = &testing::Access::session(static_cast<WebPlatformContext &>(*platform));
+      if (webtest::staged.roots <= -10)
+      {
+        webtest::layoutCell() = static_cast<webtest::LayoutCell>(-10 - webtest::staged.roots);
+        webtest::layoutVariant() = 0;
+        return webtest::CreateLayout(platform);
+      }
       if (webtest::staged.roots < 0)
         vehicle.roots = -webtest::staged.roots;
       return webtest::staged.roots < 0 ? webtest::CreateScroll(platform) : webtest::CreateCounter(platform);
@@ -60,6 +67,35 @@ namespace loka
 extern "C" int web_wake(int kind, double now);
 extern "C"
 {
+  /** Cost: driver once per transition; one fixture state or its existing Scene request. */
+  EMSCRIPTEN_KEEPALIVE void fixture_layout_command(int command, int value)
+  {
+    if (!session || !webtest::layoutFixture())
+      return;
+    {
+      loka::core::Operation turn;
+      webtest::LayoutFixture &body = *webtest::layoutFixture();
+      if (command == 0)
+        body.axis.set(value ? loka::app::STACK_AXIS_COLUMN : loka::app::STACK_AXIS_ROW);
+      if (command == 1)
+        body.shown.set(value != 0);
+      if (command == 2)
+        body.request.set(loka::app::ScrollTarget::Origin(value, 0));
+      if (command == 4)
+        body.request.set(loka::app::ScrollTarget::Origin(0, value));
+      if (command == 3)
+        body.scene()->requestLayoutAfterRun();
+    }
+    web_wake(loka::web::IMMEDIATE, emscripten_get_now());
+  }
+  /** Cost: driver observation once; copies one fixture fact, no tree walk. */
+  EMSCRIPTEN_KEEPALIVE int fixture_layout_fact(int field)
+  {
+    if (!webtest::layoutFixture())
+      return -999;
+    const loka::core::Frame value = webtest::layoutFixture()->viewport.get();
+    return field == 0 ? value.x : field == 1 ? value.y : field == 2 ? value.width : value.height;
+  }
   EMSCRIPTEN_KEEPALIVE int fixture_scroll_close(uint32_t root, uint32_t token)
   {
     loka::core::Operation turn;

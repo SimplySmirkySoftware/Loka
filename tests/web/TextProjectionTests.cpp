@@ -407,6 +407,48 @@ namespace
       loka::core::LokaAllocSetBackend(0, 0);
     }
   }
+  void NaturalCharacterization()
+  {
+    webtest::reset();
+    const WebTextConstraint constraint(WebFontKey(FontSize<24>() + Bold), BlockStyle(), 100);
+    const WebTextDescriptor descriptor = WebMetricDescriptor(constraint.fontKey);
+    short out = 123;
+    const loka::core::String value = loka::core::String::Literal("a\tb");
+    LOKA_VERIFY(WebTextLayout::natural(value, constraint, false, true, out) && out == 13);
+    LOKA_VERIFY(webtest::measurementOrder.size() == 1 && webtest::measurementOrder[0] == "metrics");
+    LOKA_VERIFY(webtest::metricDescriptors.back() == std::vector<int>(descriptor.data(), descriptor.data() + 9));
+    LOKA_VERIFY(WebTextLayout::natural(value, constraint, false, false, out) && out == 21);
+    LOKA_VERIFY(webtest::measurementOrder.size() == 2 && webtest::measurementOrder[1] == "advance");
+    LOKA_VERIFY(webtest::measuredText.back() == "a b");
+    LOKA_VERIFY(webtest::advanceDescriptors.back() == webtest::metricDescriptors.back());
+    webtest::metricAscent = 32757;
+    LOKA_VERIFY(WebTextLayout::natural(value, constraint, false, true, out) && out == 32760);
+    out = 123;
+    LOKA_VERIFY(!WebTextLayout::natural(value, constraint, true, true, out) && out == 123);
+    webtest::failMetrics = 1;
+    LOKA_VERIFY(!WebTextLayout::natural(value, constraint, false, true, out) && out == 123);
+    const unsigned calls = webtest::metricCalls + webtest::measureCalls;
+    const loka::core::String lines = loka::core::String::Literal("a\nb");
+    LOKA_VERIFY(!WebTextLayout::natural(lines, constraint, false, true, out) && out == 123);
+    LOKA_VERIFY(!WebTextLayout::natural(lines, constraint, false, false, out) && out == 123);
+    LOKA_VERIFY(webtest::metricCalls + webtest::measureCalls == calls);
+    loka::core::LokaAllocSetBackend(&Allocate, &Free);
+    failAllocation = 1;
+    LOKA_VERIFY(!WebTextLayout::natural(value, constraint, false, true, out) && out == 123);
+    loka::core::LokaAllocSetBackend(0, 0);
+    LOKA_VERIFY(webtest::metricCalls + webtest::measureCalls == calls);
+#ifdef NDEBUG
+    webtest::measureStatus = WEB_MEASURE_PROTOCOL;
+    webtest::failMetrics = 1;
+    LOKA_VERIFY(!WebTextLayout::natural(value, constraint, false, true, out) && out == 123);
+    webtest::failAdvance = 1;
+    LOKA_VERIFY(!WebTextLayout::natural(value, constraint, false, false, out) && out == 123);
+#else
+    std::puts("[skip] natural PROTOCOL release: requires NDEBUG; debug death tested separately");
+#endif
+    webtest::reset();
+    std::puts("NaturalCharacterization passed");
+  }
   void NaturalAndMemo()
   {
     const int points[] = {-32768, 0, 9, 11, 16, 21, 24, 32767};
@@ -478,6 +520,7 @@ void WebTextProjectionTests()
   ReuseAndKeepLast();
   FailureExits();
   AllocationStages();
+  NaturalCharacterization();
   NaturalAndMemo();
   SceneRouting();
   std::puts("6 Web text projection groups passed");
@@ -488,4 +531,17 @@ void WebTextProtocolDeath()
   webtest::measureStatus = WEB_MEASURE_PROTOCOL;
   webtest::failMeasure = 1;
   rig.visit();
+}
+
+void WebNaturalProtocolDeath()
+{
+  webtest::reset();
+  webtest::measureStatus = WEB_MEASURE_PROTOCOL;
+  webtest::failMetrics = 1;
+  short out = 123;
+  WebTextLayout::natural(loka::core::String::Literal("x"),
+                         WebTextConstraint(WebFontKey(loka::app::TextStyle()), loka::app::BlockStyle(), 100),
+                         false,
+                         true,
+                         out);
 }

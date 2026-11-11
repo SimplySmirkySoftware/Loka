@@ -331,9 +331,105 @@ admission, then publishes origin once without writing native offsets. There is
 no cached event origin or mute flag. Requests replay completed geometry through
 the same commit import and publish only on APPLIED.
 
-Web scrollbars are not shortened by content insets. Stack uses its vertical
-fallback until the separate layout-handler registration page. These are Web
+Web scrollbars are not shortened by content insets. Grid retains its vertical
+fallback until its separate layout-handler registration page. These are Web
 limits, not claims of native parity.
+
+### Stack layout
+
+The Web registry owns a Stack handler that borrows its creating controller.
+It calls the same `LayoutStack` computation as the common handler; native common
+handlers retain their copied metrics. No typography state is added to the
+Session or controller, and startup and text admission are unchanged. Grid
+metrics remain null: Grid is not registered until its coordinate checks exist.
+
+Each reached column or row without vertical alignment passes default metrics
+without fetching an estimate. Each reached aligned row calls
+`WebTextLayout::rowEstimate` once, resolving `WebFontKey(TextStyle())` lazily.
+The existing text service owns the cache. Successful estimates populate only:
+
+| Row metric | Value |
+| --- | --- |
+| textHeight, fallbackHeight | Default font line height H |
+| buttonHeight | H plus twice the Button vertical inset and border |
+| editTextHeight, popupMenuHeight, imageFallbackHeight | Zero |
+
+Both H and H plus chrome must fit 1..32767 before either output is assigned.
+`rowEstimate` neither normalizes nor allocates. Natural queries retain their
+normalization, allocation, keyed measurements, decline behavior and call order;
+Text height is not limited by Button chrome. Leaf chrome arithmetic is unchanged.
+
+An estimate failure **does not refuse the Stack visit**. The handler dispatches
+children through the common computation with all-zero metrics. REFUSED (including
+out-of-range heights) requests relayout once per visit through the existing
+controller door; it does not restore Stack layout inputs. PROTOCOL asserts in
+debug, and release dispatches with zero metrics without a handler-originated
+retry. Leaf measurement can independently refuse and request a retry.
+
+Zero metrics are a lower estimate, not a measured value or a switch to top
+alignment. Natural Text answers and explicit heights still contribute. With all
+answers declined and no positive explicit height, each offer is zero and the
+returned bottom is the greatest actual child bottom. With a Text answer of 13
+and a Button of actual height 23, CENTER can place the Button at y+6 and return
+y+29 instead of y+23. The common maximum also preserves the estimated reservation.
+
+If leaves and coordinates succeed, a ScrollView commits the degraded extent.
+Recovery recomputes extent but does not restore an origin clamped by that commit
+or replay a request already settled against it. Estimate degradation is distinct
+from leaf refusal: a failed first leaf measurement may leave an empty display;
+a reusable snapshot can continue to display. A leaf refusal in a ScrollView can
+stop later dispatch and prevent commit. There is no such channel on the
+projection root.
+
+Persistent REFUSED retries have no budget, like the existing Text leaf path.
+After-run requests avoid re-entering the current Scene drain, but finite Web tail
+batches can arm another IMMEDIATE task indefinitely. There is no promise of one
+attempt per event-loop turn or of stopping between flushes. Backoff for both
+paths remains separate work.
+
+SHARED rows divide remaining width without natural width consultations. NATURAL
+and Toolbar's NATURAL_LABELS_SHARE use the traversal as their natural source;
+unknown widths remain flexible. Refused kinds still occupy attached seats and
+gaps without DOM. EditText/PopupMenu estimate zero; Cell/CardBand use H;
+ImageView/RectSurface use explicit heights or H. An aligned all-refused row
+reserves its largest estimate, falling back to H if that maximum is nonpositive;
+an unaligned all-refused row returns its starting y.
+
+Wrapping Text is measured at its allocated width and retains its actual height.
+Vertical alignment still uses an estimate, shared with Win32/macOS, and is not
+repeated after measuring wrapped lines. HelloWorld at root widths of at least
+400 therefore has two panels; below 400 they stack. The narrower SHARED seats
+can clip the growing Add message. This accepted result does not change examples.
+
+Columns now apply remaining-height offers, natural height and horizontal
+alignment. Zero remaining height does not become a content-sized ScrollView
+viewport. Common range/spans forwarding remains caller-owned and is not passed
+to descendants. Axis State changes affect layout, while Lazy window placement
+remains Canvas-based. Toolbar and Ribbon retain their existing common policies.
+
+Row coordinate checks precede narrowing on both axes. A failing check returns
+the maximum bottom so far and stops remaining children in that row. Within a
+ScrollView, the channel also stops later dispatch and metrics/fact commit; at the
+projection root, subsequent siblings are still visited. Earlier DOM writes are
+not rolled back. A leaf setting the channel during dispatch does not stop the
+common loop itself; the Web dispatch entry refuses its later visits.
+
+Cost: one estimate boundary crossing per reached aligned-row visit, no extra tree
+walk. Common aligned height consultation occurs at most twice per child; natural
+width consultation can recurse through wrappers and rescan when shrinking.
+Natural Web text consultations normalize and measure each time. Retry revisits
+the existing Scene root. No metrics, retry flag or last-height member is retained.
+
+Build-verified: Linux x86_64 C++98 native testing, Release and ASan builds,
+Emscripten 7.0.0 testing-web, and production LokaHelloWeb, with the host fake and
+wasm Node cells. ASan ran with leak detection disabled, so it gives no leak verdict.
+
+Browser-verified (Chromium 157 on Linux, through the driver): the Stack cells for
+alignment, estimate degradation and recovery, scroll extent and origin after a
+degraded commit, wrapping at two widths, axis changes, column offers, scroll
+reveal, and a same-root HelloWorld 420 → 399 → 420 sequence with the growing
+message's clip record. A missing Chromium is a reported skip, not verification.
+Other browsers and the VS Code preview are not verified for these cells.
 
 Scroll reproduction adds `LOKA_WEB_CAPTURE_SCROLL=1` for `scroll.golden`,
 `node tests/web/js/boundary.test.mjs` for deterministic adapter read-back and

@@ -493,7 +493,7 @@ class MacOSRigRun:
                         process.wait()
 
     def _build(self) -> None:
-        build_dir = self.target_source / "build" / "loka-rig-macos"
+        build_dir = self.target_source / "build" / "macos" / "Debug"
         configure = remote_in_directory(
             self.target_source,
             (
@@ -521,7 +521,7 @@ class MacOSRigRun:
                 "--build",
                 str(build_dir),
                 "--target",
-                "LokaScrapbookScenarioMacOS",
+                "LokaMacOSScenarioSourceStamp",
                 "--parallel",
                 "2",
             ),
@@ -562,7 +562,7 @@ class MacOSRigRun:
         self._run_logged_ssh(build_lrpc, "build.log", "build-lrpc")
 
     def _runner_command(self) -> str:
-        app = self.target_source / "build" / "loka-rig-macos" / "apple" / "macos" / "LokaScrapbookScenarioMacOS.app"
+        app = self.target_source / "build" / "macos" / "Debug" / "apple" / "macos" / "LokaScrapbookScenarioMacOS.app"
         flag = "--inspect" if self.mode == "inspect" else "--ci-structural"
         environment = {
             "LOKA_MACOS_SCENARIO_APP": str(app),
