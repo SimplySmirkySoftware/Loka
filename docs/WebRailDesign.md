@@ -340,11 +340,11 @@ Scroll reproduction adds `LOKA_WEB_CAPTURE_SCROLL=1` for `scroll.golden`,
 listener checks, and `tests/web/mutations/scroll-{1,2,3,4,5,6,7}.py <worktree>`.
 The counter golden includes the intended additional root-reveal projection pass.
 
-### VS Code shell (PR 5a)
+### VS Code shell (PR 5a / 5b)
 
 The shell procedures live in `tools/vscode-loka/src/previewHtml.ts` (documents),
 `src/preview.ts` (panel lifetime), and `src/build.ts` (task lifetime).
-PR 5b adds VS Code wiring, manifest contributions, and launch configuration.
+PR 5b supplies the native VS Code ports, manifest contributions, and F5 launch configuration.
 Externally destroyed documents (panel close or window reload) terminate abruptly:
 there is no host disposal call and no completion acknowledgement.
 
@@ -356,4 +356,28 @@ disposal drops them. Unexpected exceptions stop that owner's queue permanently;
 recovery requires reopening the panel or reloading the window. Panel access uses
 an `install` / `postDispose` capability seam: the adapter must revoke capability
 synchronously on native disposal before posting CLOSE. PR 5a pins this contract
-with a strict fake; PR 5b supplies the native adapter.
+with a strict fake; PR 5b connects native listeners before the first installation.
+Native disposal and fault retirement share a capability-taking cleanup path.
+
+
+Open the repository in Remote WSL with Node/npm available to tasks. Run
+`npm ci --ignore-scripts` once in `tools/vscode-loka` (and again after lockfile
+changes), select **Loka: Preview Extension**, and press F5. Its pre-launch task
+runs a clean `npm run build`; a failed build stops launch (do not choose Debug
+Anyway). The Extension Development Host window opens without a folder: open the
+repository folder there, then use the **Loka: Open Preview**, **Loka: Build** and
+**Loka: Reload** commands; opening a source file does not open the preview.
+The task shell must already have emsdk available for **Loka: Build**.
+Build and every preview replacement read workspace trust afresh; an untrusted
+workspace runs no task and receives a script-free MESSAGE page.
+
+Build-verified: the pinned TypeScript configuration emits a CommonJS entry;
+the built-artifact check loads it through `require`, activates the extension
+against a strict API fake, and verifies command/listener registration and disposal.
+
+Runtime-verified (2026-11-11, VS Code 1.143.1, Remote WSL, Extension Development
+Host, by hand): Open Preview started the workspace-built HelloWorld module and its
+buttons responded; a successful **Loka: Build** reloaded the preview; a Build
+with the preview tab hidden reported `Previous document: completed`. Not
+runtime-verified: the untrusted-workspace refusal, the four themes, the outer
+scroll, the cache-busted Wasm refetch and webview resource enforcement.

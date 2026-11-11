@@ -14,7 +14,7 @@ export type PreviewPanel = Readonly<{
   /** Cost: one reload; at most one native post while the capability is live, not an acknowledgement. */
   postDispose(id: string): 'posted' | 'closed';
   /** Idempotent fault cleanup. Cost: one capability reference, no owner events. */
-  revoke(): void;
+  retire(): void;
 }>;
 /** Host services borrowed for the preview lifetime; clock callbacks are asynchronous.
  * Cost: admission once per replacement; one setting and file existence twice. */
@@ -42,7 +42,11 @@ type Phase<T> = Readonly<
   | {kind: 'ENDED'} | {kind: 'DISPOSING'; timer: T} | {kind: 'CLOSED'}>;
 type State<T> = Readonly<{id: string; phase: Phase<T>}>;
 
-type Event<T> = Readonly<{kind: 'INITIAL_INSTALL' | 'RELOAD' | 'CLOSE'}
+/** Owner entries available while the initial event connects native listeners. */
+export type PreviewDoors = Readonly<{reload(): void; receive(raw: unknown): void; close(): void}>;
+
+type Event<T> = Readonly<{kind: 'INITIAL_INSTALL'; connect: (doors: PreviewDoors) => void}
+  | {kind: 'RELOAD' | 'CLOSE'}
   | {kind: 'MESSAGE'; raw: unknown} | {kind: 'TIMEOUT'; state: State<T>}>;
 
 class Preview<T> {
@@ -56,17 +60,18 @@ class Preview<T> {
 
   /** Construct one panel's lifetime owner; the raw panel stays in the adapter.
    * Cost: once per panel; the initial event drains one synchronous replacement. */
-  static create<T>(panel: PreviewPanel, ports: PreviewPorts<T>) {
+  static create<T>(panel: PreviewPanel, ports: PreviewPorts<T>,
+    connect: (doors: PreviewDoors) => void): PreviewDoors {
     const preview = new Preview(panel, ports);
-    preview.mailbox.post({kind: 'INITIAL_INSTALL'});
+    preview.mailbox.post({kind: 'INITIAL_INSTALL', connect});
     return preview;
   }
 
   private state: State<T> = {id: '', phase: {kind: 'MESSAGE', text: ''}};
   private readonly mailbox = createMailbox<Event<T>>(event => this.handle(event), () => {
     /** Fault cleanup also runs after CLOSED publication fails.
-     * Cost: mailbox once on fault; revoke one capability and release at most one owned timer. */
-    try { this.panel.revoke(); } finally {
+     * Cost: mailbox once on fault; retire one capability and release at most one owned timer. */
+    try { this.panel.retire(); } finally {
       const outgoing = this.state.phase;
       this.state = {id: this.state.id, phase: {kind: 'CLOSED'}};
       if (outgoing.kind === 'DISPOSING') this.ports.clock.cancel(outgoing.timer);
@@ -135,7 +140,7 @@ class Preview<T> {
     };
 
     switch (event.kind) {
-      case 'INITIAL_INSTALL': replace(); return;
+      case 'INITIAL_INSTALL': event.connect(this); replace(); return;
       case 'CLOSE': enter({id: this.state.id, phase: {kind: 'CLOSED'}}); return;
       case 'TIMEOUT': {
         if (this.state !== event.state) return;

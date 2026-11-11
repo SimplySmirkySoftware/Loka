@@ -57,4 +57,16 @@ result=0
 PATH="$scratch/bin" /bin/bash "$scratch/empty/tests/scripts/VscodeLokaTest.sh" >"$scratch/empty.log" 2>&1 || result=$?
 [[ $result == 1 ]] || { echo "empty list exit=$result"; exit 1; }
 grep -Fx 'vscode-loka: no source tests found' "$scratch/empty.log" >/dev/null
-echo 'vscode-loka launcher fixtures: passed (absent, old, 23, supported, required, test failure, empty list)'
+# A build and the CJS artifact checker must not alter source enumeration.
+mkdir -p "$scratch/source/tests/scripts" "$scratch/source/tools/vscode-loka/test" "$scratch/source/tools/vscode-loka/out/test"
+cp "$launcher" "$scratch/source/tests/scripts/"
+touch "$scratch/source/tools/vscode-loka/test/source.test.ts" "$scratch/source/tools/vscode-loka/test/artifact.cjs" "$scratch/source/tools/vscode-loka/out/test/generated.test.js"
+cat >"$scratch/bin/node" <<'EOF_NODE'
+#!/bin/bash
+if [[ $1 == --version ]]; then echo v24.19.0; exit 0; fi
+[[ $# == 2 && $1 == --test && $2 == test/source.test.ts ]] || exit 8
+EOF_NODE
+chmod +x "$scratch/bin/node"
+PATH="$scratch/bin" /bin/bash "$scratch/source/tests/scripts/VscodeLokaTest.sh"
+bash "$script_dir/VscodeLokaArtifactLauncherTest.sh"
+echo 'vscode-loka launcher fixtures: passed (absent, old, 23, supported, required, test failure, empty list, source-only after build)'

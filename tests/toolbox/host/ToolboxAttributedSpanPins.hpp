@@ -277,6 +277,7 @@ namespace
     unsigned &calls_;
     const bool firstReadable_, secondReadable_;
   };
+  unsigned spanReadableCalls = 0;
   class SpanReadableString : public loka::platform::String
   {
   public:
@@ -286,6 +287,7 @@ namespace
     }
     virtual bool appendUtf8(std::string &out) const
     {
+      ++spanReadableCalls;
       if (!this->readable_)
         return false;
       out += "target";
@@ -439,6 +441,72 @@ namespace
     LOKA_VERIFY(table.draw(7, 11, controller, BlockStyle(), 100));
     VerifySpanDraw(0, "ab", 7, 23, 12, bold, blackColor);
     VerifySpanDraw(1, "c", 17, 23, 12, italic, blackColor);
+  }
+  void SpanMatches()
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    ToolboxAttributedTextTable table;
+    bool readable = true;
+    const loka::core::String body = SpanString(new SpanReadableString(readable));
+    const loka::core::String otherBody = SpanString(new SpanReadableString(readable));
+    const AttributedString value = Styled(body, Bold);
+    const AttributedString copy = value;
+    const AttributedString separate = Styled(body, Bold);
+    const AttributedString distinct = Styled(otherBody, Bold);
+    Pin("ToolboxMatchesRefusedBodies");
+    LOKA_VERIFY(table.build(value, BlockStyle(), 100, controller));
+    readable = false;
+    spanReadableCalls = 0;
+    LOKA_VERIFY(table.matches(copy));
+    LOKA_VERIFY(spanReadableCalls == 0);
+    LOKA_VERIFY(value != separate);
+    LOKA_VERIFY(table.matches(separate));
+    LOKA_VERIFY(!table.matches(distinct));
+
+    Pin("ToolboxMatchesBytesValidity");
+    table.clear();
+    LOKA_VERIFY(!table.matches(AttributedString()));
+    LOKA_VERIFY(!table.build(distinct, BlockStyle(), 100, controller));
+    LOKA_VERIFY(!table.matches(AttributedString()));
+    LOKA_VERIFY(table.build(AttributedString(), BlockStyle(), 100, controller));
+    LOKA_VERIFY(table.matches(AttributedString()));
+    AttributedString::Builder builder(1);
+    LOKA_VERIFY(table.matches(builder.build()));
+    LOKA_VERIFY(!table.matches(builder.build())); // A consumed builder produces an invalid value.
+
+    Pin("ToolboxMatchesSegmentValues");
+    const LinkTarget x(loka::core::String("x")), y(loka::core::String("y"));
+    const AttributedString linked = Linked("a", Bold, x);
+    LOKA_VERIFY(table.build(linked, BlockStyle(), 100, controller));
+    LOKA_VERIFY(!table.matches(Linked("a", Italic, x)));
+    LOKA_VERIFY(!table.matches(Linked("b", Bold, x)));
+    LOKA_VERIFY(!table.matches(Linked("a", Bold, y)));
+    LOKA_VERIFY(!table.matches(linked + linked));
+    LOKA_VERIFY(!table.matches(AttributedString()));
+    LOKA_VERIFY(table.matches(Linked("a", Bold, LinkTarget(loka::core::String("x")))));
+    LOKA_VERIFY(table.build(Linked("", Bold, x) + linked, BlockStyle(), 100, controller));
+    LOKA_VERIFY(!table.matches(Linked("", Bold, y) + linked));
+
+    Pin("ToolboxMatchesSegmentBoundaries");
+    const AttributedString joined = Styled("ab", Bold);
+    const AttributedString split = Styled("a", Bold) + Styled("b", Bold);
+    LOKA_VERIFY(joined == split);
+    LOKA_VERIFY(table.build(joined, BlockStyle(), 100, controller));
+    LOKA_VERIFY(!table.matches(split));
+    const AttributedString malformed = Styled("\xc3", Bold) + Styled("\xa9", Bold) + Styled("\xc3\xa9", Italic);
+    const AttributedString whole = Styled("\xc3\xa9", Bold) + Styled("\xc3\xa9", Italic);
+    LOKA_VERIFY(malformed == whole);
+    LOKA_VERIFY(table.build(malformed, BlockStyle(), 100, controller));
+    LOKA_VERIFY(!table.matches(whole));
+    // Same count and styles: only segment bodies distinguish these UTF-8 splits.
+    const AttributedString sameCountSplit = Styled("\xc3", Bold) + Styled("\xa9x", Bold);
+    const AttributedString sameCountWhole = Styled("\xc3\xa9", Bold) + Styled("x", Bold);
+    LOKA_VERIFY(sameCountSplit.segmentCount() == sameCountWhole.segmentCount());
+    LOKA_VERIFY(sameCountSplit == sameCountWhole);
+    LOKA_VERIFY(table.build(sameCountSplit, BlockStyle(), 100, controller));
+    LOKA_VERIFY(!table.matches(sameCountWhole));
   }
   void SpanCache()
   {

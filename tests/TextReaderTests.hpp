@@ -21,4 +21,7 @@ void testTextChunkDoor();
 void testTextPublisherDocumentDestroyedDuringCommit();
 void testTextMembershipPrimitives();
 void testTextReaderEndedRechecks();
+void testTextDocumentSaveRefusals();
+void testTextDocumentSaveSecondPass();
+void testTextDocumentSaveNewlines();
 #endif

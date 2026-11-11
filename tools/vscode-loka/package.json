@@ -8,6 +8,60 @@
   },
   "devDependencies": {
     "@types/node": "24.19.2",
+    "@types/vscode": "1.140.0",
     "typescript": "5.9.3"
+  },
+  "displayName": "Loka Preview",
+  "description": "Preview a Loka Web module in VS Code.",
+  "publisher": "simplysmirkysoftware",
+  "main": "./out/extension.js",
+  "engines": {
+    "vscode": "^1.143.0"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "loka.preview.open",
+        "title": "Open Preview",
+        "category": "Loka"
+      },
+      {
+        "command": "loka.preview.build",
+        "title": "Build",
+        "category": "Loka"
+      },
+      {
+        "command": "loka.preview.reload",
+        "title": "Reload",
+        "category": "Loka"
+      }
+    ],
+    "configuration": {
+      "title": "Loka Preview",
+      "properties": {
+        "loka.preview.module": {
+          "type": "string",
+          "default": "build/wasm/web/example/HelloWorld/LokaHelloWeb.js",
+          "scope": "resource",
+          "description": "Path relative to the first workspace folder to the JavaScript output of loka_add_web_app. The export name and companion .wasm file use the same stem."
+        },
+        "loka.preview.buildCommand": {
+          "type": "string",
+          "default": "emcmake cmake --preset web && cmake --build --preset web --target LokaHelloWeb",
+          "scope": "resource",
+          "description": "Shell command to build the preview module in the first workspace folder. The task shell must already have emsdk in its environment."
+        }
+      }
+    }
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Preview runs workspace JavaScript and Wasm; Build runs a workspace shell command."
+    },
+    "virtualWorkspaces": false
   }
 }

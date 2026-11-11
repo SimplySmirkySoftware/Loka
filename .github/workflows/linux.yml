@@ -42,6 +42,8 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npm run check -- --pretty false
+          npm run build
+          LOKA_REQUIRE_NODE=1 LOKA_REQUIRE_VSCODE_ARTIFACT=1 bash ../../tests/scripts/VscodeLokaArtifactTest.sh
       # No build can catch a reintroduced side-effect assert: it compiles, and
       # under NDEBUG it just makes a test check less than it claims (#264).
       - run: python3 tests/scripts/TestAssertCheckerTest.py
