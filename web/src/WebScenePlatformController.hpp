@@ -128,30 +128,10 @@ public:
   virtual short layout(loka::app::scene::IPlatformController *, loka::app::scene::LayoutState &);
   virtual void render(loka::app::scene::IPlatformController *);
   bool active() const;
-  virtual bool click()
-  {
-    return false;
-  }
+  /** Cost: admitted dispatch once; rechecks admission then emits at most one current emitter. */
+  virtual bool click();
 
 protected:
   WebTextSlot projection_;
-};
-class WebTextContext : public WebElementContext
-{
-public:
-  WebTextContext(loka::app::scene::Node &node, WebScenePlatformController &c)
-      : WebElementContext(node, c)
-  {
-  }
-};
-class WebButtonContext : public WebElementContext
-{
-public:
-  WebButtonContext(loka::app::scene::Node &node, WebScenePlatformController &c)
-      : WebElementContext(node, c)
-  {
-  }
-  /** Cost: one admitted native click; one own emitter, no rows. */
-  virtual bool click();
 };
 #endif

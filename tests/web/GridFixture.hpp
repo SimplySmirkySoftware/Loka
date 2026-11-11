@@ -4,7 +4,7 @@
 #include "app/nodes/nestable/Grid.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
-#include "app/nodes/controls/Cell.hpp"
+#include "app/nodes/controls/ScrollBar.hpp"
 namespace webtest
 {
   enum GridCell
@@ -69,9 +69,9 @@ namespace webtest
       using namespace loka::app;
       Grid grid = Grid().rows(2).cols(2);
       if (gridCell() == GRID_REFUSED)
-        grid << Cell() << Cell() << Cell() << Cell();
+        grid << ScrollBar() << ScrollBar() << ScrollBar() << ScrollBar();
       else if (gridCell() == GRID_MIXED)
-        grid << Cell() << Button("b", &this->clicked) << Cell() << Button("d", &this->clicked);
+        grid << ScrollBar() << Button("b", &this->clicked) << ScrollBar() << Button("d", &this->clicked);
       else if (gridCell() != GRID_EMPTY)
       {
         grid << Button("a", &this->clicked) << Button("b", &this->clicked) << Button("c", &this->clicked);

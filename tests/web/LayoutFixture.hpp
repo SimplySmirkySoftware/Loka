@@ -6,7 +6,7 @@
 #include "app/nodes/controls/Toolbar.hpp"
 #include "app/nodes/controls/EditText.hpp"
 #include "app/nodes/controls/PopupMenu.hpp"
-#include "app/nodes/controls/Cell.hpp"
+#include "app/nodes/controls/ScrollBar.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "app/nodes/ImageView.hpp"
 #include "app/RectSurface.hpp"
@@ -111,7 +111,7 @@ namespace webtest
         else if (layoutVariant() == 4)
           row << RectSurface().size(20, 40);
         else if (layoutVariant() == 5)
-          row << Cell("refused");
+          row << ScrollBar();
         else if (layoutVariant() == 6)
           row << scene::NodeDefinition<CardBandProps, CardBandNode>(CardBandProps());
         else
