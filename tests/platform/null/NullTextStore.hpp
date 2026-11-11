@@ -17,6 +17,8 @@ namespace loka
       scene::TextStoreBirth consumeTextStoreBirthFailure();
       void startTextDocumentRevision(TextDocument &, unsigned long revision);
       void failTextChunkReads(unsigned count);
+      /** Allow k chunk calls (including END), then refuse n calls with RESOURCE. */
+      void failTextChunkReadsAfter(unsigned successes, unsigned failures);
       bool consumeTextChunkReadFailure();
 #endif
     }

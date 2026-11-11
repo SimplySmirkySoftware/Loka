@@ -1772,3 +1772,7 @@ LOKA_TEST(testTextSpanCharacterUnderfill)
 LOKA_TEST(testTextSpanEmptyBecomesNonempty)
 LOKA_TEST(testTextSpanNonemptyBecomesEmpty)
 LOKA_TEST(testWin32LinkedSpanCharacterization)
+
+LOKA_TEST(testTextDocumentSaveRefusals)
+LOKA_TEST(testTextDocumentSaveSecondPass)
+LOKA_TEST(testTextDocumentSaveNewlines)
