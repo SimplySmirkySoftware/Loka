@@ -1,6 +1,7 @@
 #include <algorithm>
 #include "WebWindow.hpp"
 #include "WebStackLayoutHandler.hpp"
+#include "WebGridLayoutHandler.hpp"
 #include "WebScrollContext.hpp"
 #include "WebTextDescriptor.hpp"
 #include "WebScenePlatformController.hpp"
@@ -117,6 +118,7 @@ WebScenePlatformController::WebScenePlatformController(WebSession &session,
   this->layout_.spacing = 4;
   loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(this->layouts_, 0, 0, WebLayoutSpacing);
   this->layouts_.registerHandler(new WebStackLayoutHandler(*this));
+  this->layouts_.registerHandler(new WebGridLayoutHandler());
 }
 WebScenePlatformController::~WebScenePlatformController()
 {

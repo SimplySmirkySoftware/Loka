@@ -3,6 +3,7 @@
 #include "WebFixture.hpp"
 #include "ScrollFixture.hpp"
 #include "LayoutFixture.hpp"
+#include "GridFixture.hpp"
 #include "WebTestHooks.hpp"
 #include "WebTestAccess.hpp"
 #include "WebWindow.hpp"
@@ -38,6 +39,11 @@ namespace loka
       vehicle.roots = webtest::staged.roots;
       vehicle.destroy = webtest::staged.destroy;
       session = &testing::Access::session(static_cast<WebPlatformContext &>(*platform));
+      if (webtest::staged.roots <= -100)
+      {
+        webtest::gridCell() = static_cast<webtest::GridCell>(-100 - webtest::staged.roots);
+        return webtest::CreateGrid(platform);
+      }
       if (webtest::staged.roots <= -10)
       {
         webtest::layoutCell() = static_cast<webtest::LayoutCell>(-10 - webtest::staged.roots);
@@ -67,6 +73,26 @@ namespace loka
 extern "C" int web_wake(int kind, double now);
 extern "C"
 {
+  /** Cost: driver once per capacity transition; fixture walks its own tree once. */
+  EMSCRIPTEN_KEEPALIVE void fixture_grid_capacity(int rows, int cols)
+  {
+    if (!session || !webtest::gridFixture())
+      return;
+    {
+      loka::core::Operation turn;
+      loka::app::GridNode *grid = webtest::FindGrid(webtest::gridFixture());
+      if (grid)
+        loka::app::Grid().rows(static_cast<short>(rows)).cols(static_cast<short>(cols)).applyPropsToNode(grid);
+      webtest::gridFixture()->scene()->requestLayoutAfterRun();
+    }
+    web_wake(loka::web::IMMEDIATE, emscripten_get_now());
+  }
+  /** Cost: driver observation once; reads one fixture counter, no rows. */
+  EMSCRIPTEN_KEEPALIVE int fixture_grid_clicks()
+  {
+    return webtest::gridFixture() ? static_cast<int>(webtest::gridFixture()->clicks) : -1;
+  }
+
   /** Cost: driver once per transition; one fixture state or its existing Scene request. */
   EMSCRIPTEN_KEEPALIVE void fixture_layout_command(int command, int value)
   {
