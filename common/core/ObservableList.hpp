@@ -197,6 +197,11 @@ namespace loka
           {
           }
         };
+        // reserve() takes an unsigned short, so the largest request is USHRT_MAX
+        // entries; refusing at compile time any Entry whose USHRT_MAX copies
+        // would overflow std::size_t keeps sizeof(Entry) * capacity exact
+        // without a runtime comparison that GCC 4.2 proves always false.
+        typedef char EntryArrayMustFitSize[(sizeof(Entry) <= static_cast<std::size_t>(-1) / USHRT_MAX) ? 1 : -1];
         explicit EntryBuffer(const LokaAllocationSite &site)
             : site_(site),
               data_(0),
@@ -212,8 +217,6 @@ namespace loka
           assert(!this->data_);
           if (capacity == 0)
             return true;
-          if (capacity > static_cast<std::size_t>(-1) / sizeof(Entry))
-            return false;
           this->data_ = static_cast<Entry *>(LokaAllocRaw(sizeof(Entry) * capacity, this->site_));
           if (!this->data_)
             return false;

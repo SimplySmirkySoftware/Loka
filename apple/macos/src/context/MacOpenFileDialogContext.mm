@@ -186,8 +186,10 @@ void MacOpenFileDialogContext::presentDialog()
     }
     // The 10.3 type API keeps Tiger support; UTType APIs require newer systems.
     // Keep deprecation suppression local to the deliberate compatibility calls.
+#if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
     [panel setAllowedFileTypes:loka::macos::MacSaveFileDialogAllowedTypes(options)];
     [panel setAllowsOtherFileTypes:YES];
     [panel setCanCreateDirectories:YES];
@@ -220,7 +222,9 @@ void MacOpenFileDialogContext::presentDialog()
         result = loka::app::FileChooserResult::Error(2);
       }
     }
+#if defined(__clang__)
 #pragma clang diagnostic pop
+#endif
     // The context may have detached or been reclaimed during the modal loop.
     port.seal(result);
     return;

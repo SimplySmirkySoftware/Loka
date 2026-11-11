@@ -85,10 +85,14 @@ namespace loka
       else
       {
         // Tiger through Snow Leopard: the one scroller width there is.
+#if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
         thickness = [NSScroller scrollerWidth];
+#if defined(__clang__)
 #pragma clang diagnostic pop
+#endif
       }
       const CGFloat height = this->projectFrame(seatLu).r.size.height - thickness;
       return height > 0 ? this->clientCapacityToLu(height) : 0;

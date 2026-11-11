@@ -165,9 +165,13 @@ void MacCardBandContext::draw() const
   const NSPoint phase =
       NSMakePoint(origin.x - NSMinX([root bounds]),
                   [root isFlipped] ? origin.y - NSMinY([root bounds]) : NSMaxY([root bounds]) - origin.y);
+#if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
   CGContextRef graphics = static_cast<CGContextRef>([[NSGraphicsContext currentContext] graphicsPort]);
+#if defined(__clang__)
 #pragma clang diagnostic pop
+#endif
   loka::macos::PaintCardBandInk(graphics, this->band_, this->props_, this->controller()->projection(), phase);
 }

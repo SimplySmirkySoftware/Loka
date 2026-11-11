@@ -183,10 +183,14 @@ void MacConfirmDialogContext::presentDialog()
   [alert setMessageText:message];
   [alert setInformativeText:@""];
   // The legacy spelling keeps the 10.3+ API usable with the old SDKs.
+#if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
   [alert setAlertStyle:NSWarningAlertStyle];
+#if defined(__clang__)
 #pragma clang diagnostic pop
+#endif
   [alert addButtonWithTitle:@"Save"];
   [alert addButtonWithTitle:@"Cancel"];
   [alert addButtonWithTitle:@"Don't Save"];
