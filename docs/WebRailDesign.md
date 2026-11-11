@@ -608,9 +608,10 @@ Cell build-verified: Linux x86_64 C++98 testing, ASan, and NDEBUG release;
 Emscripten testing plus production `LokaHelloWeb` and `LokaMineWeb` targets.
 Host and wasm `WebCellTests` pass policy, refusal and lifecycle checks, and the
 full native suite passes. ASan ran with leak detection disabled, so it gives no
-leak verdict. Native MineSweeper targets share the adapter header and are
-build-verified by their own toolchains; that does not establish native runtime
-verification.
+leak verdict. Of the native MineSweeper targets that share the adapter header,
+`LokaMine68K` is build-verified (`retro68-68k-release`); `LokaMineWin32`,
+`LokaMineMacOS` and `LokaMinePPC` are built by CI only and were not built
+locally. No native runtime verification is claimed.
 
 Cell browser-verified (Chromium on Linux, through the driver): 64 Cells in
 eight distinct rows and columns with CENTER beside the Button's LEFT; a CDP

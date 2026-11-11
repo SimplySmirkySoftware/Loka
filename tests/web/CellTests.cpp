@@ -325,11 +325,29 @@ namespace
     LOKA_VERIFY(webtest::resources[scroll].originX == before.originX
                 && webtest::resources[scroll].originY == before.originY);
     LOKA_VERIFY(webtest::cellFixture()->viewport.get() == viewport);
+    // Positive control for the PROTOCOL pin below: REFUSED leaves a retry armed.
+    LOKA_VERIFY(webtest::task(IMMEDIATE));
     webtest::failMeasure = 0;
     rig.flush();
     LOKA_VERIFY(webtest::resources[cells[0]].text == "scroll changed");
     LOKA_VERIFY(webtest::cellFixture()->viewport.get().height == 80);
     LOKA_VERIFY(webtest::resources[scroll].extent == 80);
+    LOKA_VERIFY(!webtest::task(IMMEDIATE));
+#ifdef NDEBUG
+    webtest::measureStatus = WEB_MEASURE_PROTOCOL;
+    webtest::failMeasure = -1;
+    {
+      loka::core::Operation turn;
+      webtest::cellFixture()->text.set(loka::core::String::Literal("protocol"));
+    }
+    rig.flush();
+    LOKA_VERIFY(webtest::resources[cells[0]].text == "scroll changed" && !webtest::task(IMMEDIATE));
+    webtest::measureStatus = WEB_MEASURE_REFUSED;
+    webtest::failMeasure = 0;
+    std::puts("CellScrollMeasurement NDEBUG PROTOCOL keeps the snapshot and arms no retry passed");
+#else
+    std::puts("[skip] CellScrollMeasurement PROTOCOL no-retry requires NDEBUG");
+#endif
     std::puts("CellScrollMeasurement refusal retains snapshot/extent/origin/viewport then recovery commits passed");
   }
   void CellConstructionRefusals()

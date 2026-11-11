@@ -138,7 +138,8 @@ export async function runCellCells(client, navigate) {
   assert.equal(geometry.rows.length,64);
   assert.equal(new Set(geometry.rows.map(r=>r.x)).size,8);
   assert.equal(new Set(geometry.rows.map(r=>r.y)).size,8);
-  assert(geometry.root.w>0 && geometry.root.h>0);
+  assert.deepEqual(geometry.root,{w:220,h:240});
+  assert(geometry.rows.every(r=>r.w>0 && r.h>0));
   await client.evaluate('window.kept=newGame;window.old=cells.slice();newGame.click()');
   assert((await inspect()).rows.every(r=>r.text==='.' && r.h>0));
   assert.equal(await client.evaluate('newGame===kept && old.every(e=>!e.isConnected)'),true);
