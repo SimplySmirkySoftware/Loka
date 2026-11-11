@@ -119,7 +119,7 @@ profile. Both HelloWeb and counter use this same function.
 
 Build `LokaWebTests` with the existing testing, testing-release and testing-asan presets and run `ctest --test-dir <build> -R '^webRail$' --output-on-failure`. The fake boundary implements the same imports as the real adapter. `LOKA_WEB_CAPTURE_GOLDEN=1` prints the initial instruction sequence; ordinary runs compare the committed golden.
 
-With emsdk 7.0.0 sourced, use `emcmake cmake --preset testing-web`, then build `build/wasm/testing`. The node fixture alone links NODERAWFS. The browser fixture links production Web/common libraries without TEST_BUILD and keeps EXIT_RUNTIME disabled. Run `node tests/web/driver/run.mjs build/wasm/testing/web`; absence of Chromium is an explicit skip, and `CHROMIUM=<executable>` names a browser outside PATH. No npm installation is needed.
+The driver requires Node 22.x from 22.18, or Node 24 or newer (not Node 23). With emsdk 7.0.0 sourced, use `emcmake cmake --preset testing-web`, then build `build/wasm/testing`. The node fixture alone links NODERAWFS. The browser fixture links production Web/common libraries without TEST_BUILD and keeps EXIT_RUNTIME disabled. Run `node tests/web/driver/run.mjs build/wasm/testing/web`; absence of Chromium is an explicit skip, and `CHROMIUM=<executable>` names a browser outside PATH. No npm installation is needed.
 
 Production build: `emcmake cmake --preset web && cmake --build --preset web
 --target LokaHelloWeb LokaWebCounter`. Run
@@ -339,3 +339,45 @@ Scroll reproduction adds `LOKA_WEB_CAPTURE_SCROLL=1` for `scroll.golden`,
 `node tests/web/js/boundary.test.mjs` for deterministic adapter read-back and
 listener checks, and `tests/web/mutations/scroll-{1,2,3,4,5,6,7}.py <worktree>`.
 The counter golden includes the intended additional root-reveal projection pass.
+
+### VS Code shell (PR 5a / 5b)
+
+The shell procedures live in `tools/vscode-loka/src/previewHtml.ts` (documents),
+`src/preview.ts` (panel lifetime), and `src/build.ts` (task lifetime).
+PR 5b supplies the native VS Code ports, manifest contributions, and F5 launch configuration.
+Externally destroyed documents (panel close or window reload) terminate abruptly:
+there is no host disposal call and no completion acknowledgement.
+
+Each owner uses an event queue: nested calls only enqueue, so the current event
+may still install a document, post disposal, or launch a task before a queued
+close/dispose takes effect. Build retains early end facts and reconciles them by
+execution identity at acquisition, preferring process results; rejection or
+disposal drops them. Unexpected exceptions stop that owner's queue permanently;
+recovery requires reopening the panel or reloading the window. Panel access uses
+an `install` / `postDispose` capability seam: the adapter must revoke capability
+synchronously on native disposal before posting CLOSE. PR 5a pins this contract
+with a strict fake; PR 5b connects native listeners before the first installation.
+Native disposal and fault retirement share a capability-taking cleanup path.
+
+
+Open the repository in Remote WSL with Node/npm available to tasks. Run
+`npm ci --ignore-scripts` once in `tools/vscode-loka` (and again after lockfile
+changes), select **Loka: Preview Extension**, and press F5. Its pre-launch task
+runs a clean `npm run build`; a failed build stops launch (do not choose Debug
+Anyway). The Extension Development Host window opens without a folder: open the
+repository folder there, then use the **Loka: Open Preview**, **Loka: Build** and
+**Loka: Reload** commands; opening a source file does not open the preview.
+The task shell must already have emsdk available for **Loka: Build**.
+Build and every preview replacement read workspace trust afresh; an untrusted
+workspace runs no task and receives a script-free MESSAGE page.
+
+Build-verified: the pinned TypeScript configuration emits a CommonJS entry;
+the built-artifact check loads it through `require`, activates the extension
+against a strict API fake, and verifies command/listener registration and disposal.
+
+Runtime-verified (2026-11-11, VS Code 1.143.1, Remote WSL, Extension Development
+Host, by hand): Open Preview started the workspace-built HelloWorld module and its
+buttons responded; a successful **Loka: Build** reloaded the preview; a Build
+with the preview tab hidden reported `Previous document: completed`. Not
+runtime-verified: the untrusted-workspace refusal, the four themes, the outer
+scroll, the cache-busted Wasm refetch and webview resource enforcement.
