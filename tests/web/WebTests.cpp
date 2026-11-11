@@ -558,9 +558,8 @@ namespace
       ImageViewNode image((ImageViewProps()));
       RectSurfaceNode surface((RectSurfaceProps()));
       ScrollBarNode bar((ScrollBarProps()));
-      CellNode cell((CellProps()));
       CardBandNode band((CardBandProps()));
-      Node *nodes[] = {&edit, &editor, &popup, &image, &surface, &bar, &cell, &band};
+      Node *nodes[] = {&edit, &editor, &popup, &image, &surface, &bar, &band};
       LayoutState layout;
       for (unsigned i = 0; i < sizeof(nodes) / sizeof(nodes[0]); ++i)
       {
@@ -1077,11 +1076,23 @@ void WebGridLayoutTests();
 void WebTextProtocolDeath();
 void WebStackProtocolDeath();
 void WebNaturalProtocolDeath();
+void WebCellTests();
+void WebCellProtocolDeath();
 int main(int argc, char **argv)
 {
   if (argc == 2 && std::strcmp(argv[1], "natural-protocol-death") == 0)
   {
     WebNaturalProtocolDeath();
+    return 0;
+  }
+  if (argc == 2 && std::strcmp(argv[1], "cell-protocol-death") == 0)
+  {
+    WebCellProtocolDeath();
+    return 0;
+  }
+  if (argc == 2 && std::strcmp(argv[1], "cell-only") == 0)
+  {
+    WebCellTests();
     return 0;
   }
   if (argc == 2 && std::strcmp(argv[1], "grid-only") == 0)
@@ -1121,6 +1132,7 @@ int main(int argc, char **argv)
     std::fflush(stdout);                                                                                               \
     name();                                                                                                            \
   } while (0)
+  RUN(WebCellTests);
   RUN(WebGridLayoutTests);
   RUN(WebStackLayoutTests);
   RUN(WebTextProjectionTests);
@@ -1146,6 +1158,6 @@ int main(int argc, char **argv)
   RUN(RootVisibilityTest);
   RUN(TwoRootTest);
 #undef RUN
-  std::puts("29 Web test groups passed (20 legacy, 6 projection, 1 scroll, 1 stack, 1 grid)");
+  std::puts("30 Web test groups passed (20 legacy, 6 projection, 1 scroll, 1 stack, 1 grid, 1 Cell)");
   return 0;
 }

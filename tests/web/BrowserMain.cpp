@@ -4,6 +4,7 @@
 #include "ScrollFixture.hpp"
 #include "LayoutFixture.hpp"
 #include "GridFixture.hpp"
+#include "CellFixture.hpp"
 #include "WebTestHooks.hpp"
 #include "WebTestAccess.hpp"
 #include "WebWindow.hpp"
@@ -39,6 +40,13 @@ namespace loka
       vehicle.roots = webtest::staged.roots;
       vehicle.destroy = webtest::staged.destroy;
       session = &testing::Access::session(static_cast<WebPlatformContext &>(*platform));
+      if (webtest::staged.roots == -301)
+        return webtest::CreateSeededMine(platform);
+      if (webtest::staged.roots <= -200)
+      {
+        webtest::cellMode() = -200 - webtest::staged.roots;
+        return webtest::CreateCells(platform);
+      }
       if (webtest::staged.roots <= -100)
       {
         webtest::gridCell() = static_cast<webtest::GridCell>(-100 - webtest::staged.roots);
@@ -73,6 +81,25 @@ namespace loka
 extern "C" int web_wake(int kind, double now);
 extern "C"
 {
+  /** Cost: driver observation once; one fixture-owned identity counter. */
+  EMSCRIPTEN_KEEPALIVE int fixture_cell_hits(int index)
+  {
+    return index >= 0 && index < 64 ? webtest::cellFixture()->hits[index].count : -1;
+  }
+  /** Cost: driver command once; updates one fixture state or requests its Scene layout. */
+  EMSCRIPTEN_KEEPALIVE void fixture_cell_command(int command)
+  {
+    {
+      loka::core::Operation turn;
+      if (command == 0)
+        webtest::cellFixture()->reset();
+      if (command == 1)
+        webtest::cellFixture()->scene()->requestLayoutAfterRun();
+      if (command == 2)
+        webtest::cellFixture()->text.set(loka::core::String::Literal("changed"));
+    }
+    web_wake(loka::web::IMMEDIATE, emscripten_get_now());
+  }
   /** Cost: driver once per capacity transition; fixture walks its own tree once. */
   EMSCRIPTEN_KEEPALIVE void fixture_grid_capacity(int rows, int cols)
   {

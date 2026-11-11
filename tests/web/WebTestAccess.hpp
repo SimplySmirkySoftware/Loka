@@ -22,14 +22,30 @@ namespace loka
         {
           return context.controller().layoutNode(context.owner(), seat);
         }
+        /** Cost: Cell wall pin once per offer; uses the controller's existing viewport scope. */
+        static bool cellViewportVisit(WebElementContext &context, loka::app::scene::LayoutState seat)
+        {
+          WebScenePlatformController &controller = context.controller();
+          loka::app::scene::ProjectionParentScope scope;
+          if (!controller.projectionParents_.current().deriveScrolled(
+                  reinterpret_cast<void *>(static_cast<uintptr_t>(context.token())),
+                  0,
+                  0,
+                  loka::core::Frame(0, 0, 100, 100),
+                  scope))
+            return false;
+          loka::app::scene::ProjectionViewportScopeGuard guard(controller.projectionParents_, scope);
+          context.layout(&controller, seat);
+          return controller.projectionParents_.current().hasShortRangeRefusal();
+        }
         /** Deliberately slow alternative used only by mutation 4. */
         static bool scanNode(loka::app::scene::Node *node, Token token)
         {
           if (!node)
             return false;
           routeProbe();
-          if ((node->asTextNode() || node->asButtonNode() || node->asScrollViewNode()) && node->getContext()
-              && static_cast<WebResourceContext *>(node->getContext())->element_.token() == token)
+          if ((node->asTextNode() || node->asButtonNode() || node->asCellNode() || node->asScrollViewNode())
+              && node->getContext() && static_cast<WebResourceContext *>(node->getContext())->element_.token() == token)
             return true;
           loka::app::scene::INestable *nestable = node->asNestable();
           if (nestable)

@@ -41,7 +41,7 @@ namespace
   /** Cost: build or equality once; one scan of borrowed bytes. Build writes its
       own prepared buffer; equality uses the identical normalizer without storage. */
   bool Normalize(const WebUtf8Bytes &source,
-                 bool button,
+                 bool singleLine,
                  char *destination,
                  const char *expected,
                  std::size_t expectedLength,
@@ -70,7 +70,7 @@ namespace
       {
         if (value == '\r' && i < source.length() && source.bytes()[i] == '\n')
           ++i;
-        single = value == '\t' || value == '\f' || button ? ' ' : '\n';
+        single = value == '\t' || value == '\f' || singleLine ? ' ' : '\n';
         bytes = &single;
         count = 1;
       }
@@ -164,7 +164,7 @@ WebTextSnapshot::~WebTextSnapshot()
   loka::core::LokaFreeRaw(this->characters_, Storage);
   loka::core::LokaFreeRaw(this->lines_, Storage);
 }
-int WebTextSnapshot::matches(const loka::core::String &value, bool button, bool &out) const
+int WebTextSnapshot::matches(const loka::core::String &value, bool singleLine, bool &out) const
 {
 #ifdef TEST_BUILD
   loka::web::testing::textCompared();
@@ -173,7 +173,7 @@ int WebTextSnapshot::matches(const loka::core::String &value, bool button, bool 
   if (!source.valid())
     return WEB_MEASURE_REFUSED;
   std::size_t length = 0;
-  out = Normalize(source, button, 0, this->prepared_, this->preparedLength_, length);
+  out = Normalize(source, singleLine, 0, this->prepared_, this->preparedLength_, length);
   return WEB_MEASURE_OK;
 }
 /** Per-build source and open-addressed memo, owned entirely by the build stack.
@@ -307,7 +307,7 @@ private:
 };
 int WebTextLayout::build(const loka::core::String &value,
                          const WebTextConstraint &constraint,
-                         bool button,
+                         bool singleLine,
                          WebTextSnapshot *&out)
 {
 #ifdef TEST_BUILD
@@ -325,7 +325,7 @@ int WebTextLayout::build(const loka::core::String &value,
   if (!s->prepared_)
     return WEB_MEASURE_REFUSED;
   std::size_t length = 0;
-  Normalize(bytes, button, s->prepared_, 0, 0, length);
+  Normalize(bytes, singleLine, s->prepared_, 0, 0, length);
   s->preparedLength_ = static_cast<unsigned>(length);
   s->characters_ = Allocate<TextBreakCharacter>(length);
   if (!s->characters_)
@@ -346,7 +346,7 @@ int WebTextLayout::build(const loka::core::String &value,
     return status;
   WebTextMeasure source(*s);
   BlockStyle block = constraint.block;
-  if (Ellipsis(block) || button)
+  if (Ellipsis(block) || singleLine)
     block.wrap(TEXT_WRAP_NONE);
   const TextLineBreaker result(source, block, constraint.availableWidth);
   if (!result.valid())

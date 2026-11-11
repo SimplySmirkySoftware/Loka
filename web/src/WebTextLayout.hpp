@@ -60,7 +60,7 @@ public:
     return this->extent_;
   }
   /** Cost: owner predicate once per matching constraint; one normalized scan, no allocation on borrow. */
-  int matches(const loka::core::String &, bool button, bool &out) const;
+  int matches(const loka::core::String &, bool singleLine, bool &out) const;
 
 private:
   friend class WebTextLayout;
@@ -131,7 +131,7 @@ class WebTextLayout
 public:
   /** Cost: owner miss once per visit; prepares own bytes, metrics, two breaker passes and joined rows.
       Width memo lives only during this build; WORD lookahead can visit quadratic bytes. */
-  static int build(const loka::core::String &, const WebTextConstraint &, bool button, WebTextSnapshot *&out);
+  static int build(const loka::core::String &, const WebTextConstraint &, bool singleLine, WebTextSnapshot *&out);
   /** Cost: Stack handler once per reached aligned-row visit; one default-key
       metrics boundary call, no normalization, allocation, or row walk.
       Both outputs commit together only after line and chrome range checks. */
