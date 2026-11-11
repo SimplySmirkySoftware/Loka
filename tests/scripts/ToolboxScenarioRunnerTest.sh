@@ -26,6 +26,7 @@ mkdir -p \
   "$SANDBOX/repo/example/ScrapbookUI" \
   "$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox" \
   "$SANDBOX/retro-tools"
+cp "$REPO_DIR/scripts/rig/source-tree-stamp.sh" "$SANDBOX/repo/scripts/rig/"
 cp "$RUNNER" "$SANDBOX/repo/tests/toolbox/run-scenario.sh"
 cp "$LAUNCHER" "$SANDBOX/repo/tests/toolbox/mame-launch.lua"
 cp "$REPO_DIR/tests/toolbox/mame-keys.lua" "$SANDBOX/repo/tests/toolbox/"
@@ -220,6 +221,64 @@ MAME_EXECUTABLE=$SANDBOX/fake-mame
 MAME_HDA=$SANDBOX/BootTemplate.hd
 EOF
 
+# Real tracked-tree stamps around the fake vehicles; no production bypass.
+HELPER="$SANDBOX/repo/scripts/rig/source-tree-stamp.sh"
+STAMP="$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox/LokaHelloWorldTestsToolbox68K.source-stamp.txt"
+refresh_stamps() {
+  local vehicle
+  while IFS= read -r vehicle; do
+    bash "$HELPER" withdraw "${vehicle%.bin}.source-stamp.txt" >/dev/null
+    bash "$HELPER" publish "${vehicle%.bin}.source-stamp.txt" >/dev/null
+  done < <(find "$SANDBOX/repo/build/retro68" -name '*.bin')
+}
+probe_source_stamp() {
+  MAME_ENV_FILE="$SANDBOX/mame.env" env -u WSL_INTEROP \
+    bash "$SANDBOX/repo/tests/toolbox/run-scenario.sh" helloworld startup
+}
+mkdir -p "$SANDBOX/no-id"
+for refusal in missing mismatch unanswerable; do
+  refresh_stamps
+  case "$refusal" in
+    missing) rm "$STAMP" ;;
+    mismatch) printf '\n# tracked edit\n' >>"$SANDBOX/repo/scripts/retro68-env.sh" ;;
+    unanswerable)
+      # Keep git discovery working; refuse the identity-producing operation.
+      cat >"$SANDBOX/no-id/git" <<SH
+#!/bin/bash
+for argument in "\$@"; do
+  [ "\$argument" != write-tree ] || exit 1
+done
+exec "$(command -v git)" "\$@"
+SH
+      chmod +x "$SANDBOX/no-id/git" ;;
+  esac
+  rm -f "$SANDBOX/tab-count"
+  if PATH="$SANDBOX/no-id:$PATH" probe_source_stamp >"$SANDBOX/stamp-$refusal.log" 2>&1; then
+    fail "source stamp $refusal accepted"
+  fi
+  grep -Fq 'mame stage failed: source tree stamp: built ' "$SANDBOX/stamp-$refusal.log" \
+    || fail "$refusal wrong source stamp stage"
+  grep -Fq 'rebuild with: cmake --build --preset retro68-68k-release --target LokaHelloWorldTestsToolbox68K_APPL' "$SANDBOX/stamp-$refusal.log" \
+    || fail "$refusal missing source stamp remedy"
+  [ ! -f "$SANDBOX/tab-count" ] || fail "$refusal launched fake MAME"
+  case "$refusal" in
+    missing) grep -Fq 'built missing, current ' "$SANDBOX/stamp-$refusal.log" || fail 'missing not diagnosed' ;;
+    mismatch) git -C "$SANDBOX/repo" checkout -- scripts/retro68-env.sh ;;
+    unanswerable)
+      grep -Fq 'current unanswerable' "$SANDBOX/stamp-$refusal.log" || fail 'unanswerable not diagnosed'
+      rm "$SANDBOX/no-id/git" ;;
+  esac
+done
+refresh_stamps
+if probe_source_stamp >"$SANDBOX/stamp-pass.log" 2>&1; then
+  fail 'source stamp pass unexpectedly passed fake MAME'
+fi
+grep -Eq 'stage: build source tree [0-9a-f]+ \(HEAD [0-9a-f]+\)' "$SANDBOX/stamp-pass.log" || fail 'matching source stamp refused'
+grep -Eq 'stage: build vehicle mtime [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$SANDBOX/stamp-pass.log" || fail 'vehicle mtime absent'
+[ -f "$SANDBOX/tab-count" ] || fail 'matching source stamp did not reach fake MAME'
+grep -Fq 'mame stage failed: MAME exited with status 7' "$SANDBOX/stamp-pass.log" || fail 'matching source stamp stopped at an unexpected stage'
+echo 'Toolbox source stamp: missing, tracked mismatch, unanswerable refused; matching stamp reached fake MAME'
+
 verify_preflight_failure_vocabulary() {
   local provenance="$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox/classic-build-provenance.txt"
   local saved="$SANDBOX/classic-build-provenance.saved"
@@ -259,6 +318,9 @@ run_case() {
   local override="${5:-}"
   local actual_tab_count
   local actual_settle_timeout
+
+  # Launch-only fixtures below deliberately extend the tracked registry.
+  refresh_stamps
 
   rm -f "$SANDBOX/tab-count" "$SANDBOX/settle-timeout" "$SANDBOX/dev-disk-arguments"
   if [ -n "$override" ]; then
@@ -315,6 +377,7 @@ cp "$SANDBOX/repo/tests/scenarios/scrapbook-package-fixtures.txt" \
   "$SANDBOX/fixtures-valid.txt"
 printf '%s\n' 'malformed fixture row' \
   >>"$SANDBOX/repo/tests/scenarios/scrapbook-package-fixtures.txt"
+refresh_stamps
 rm -f "$SANDBOX/tab-count"
 if MAME_ENV_FILE="$SANDBOX/mame.env" env -u WSL_INTEROP \
     bash "$SANDBOX/repo/tests/toolbox/run-scenario.sh" scrapbook startup \
@@ -499,6 +562,7 @@ done
 # Startup does not depend on the fixture.
 run_case simpletext startup 2 unset
 cp "$SANDBOX/shared-scenarios.txt" "$SANDBOX/repo/tests/scenarios/scenarios.txt"
+refresh_stamps
 run_case helloworld toggle-action-probe 9 unset 9
 
 # --probe is admitted only on a cell whose driver has a probe leg. The
@@ -553,6 +617,7 @@ prepare_authorized_bundle() {
 }
 
 prepare_authorized_bundle
+refresh_stamps
 
 run_golden_update() {
   local example="$1"
@@ -574,6 +639,7 @@ verify_record_time_startup_identity_guard() {
   cp "$STARTUP_IDENTITY_DECLARATIONS" "$declarations_saved"
   grep -v '^tutorial increment-summary-toggle ' "$declarations_saved" \
     >"$STARTUP_IDENTITY_DECLARATIONS"
+  refresh_stamps
   rm -rf "$staging"
   run_golden_update tutorial startup "$SANDBOX/identity-undeclared-startup.log" \
     || fail "could not stage the startup reference for the undeclared case"
@@ -588,6 +654,7 @@ verify_record_time_startup_identity_guard() {
     || fail "undeclared identity was copied into golden.incomplete before refusal"
 
   cp "$declarations_saved" "$STARTUP_IDENTITY_DECLARATIONS"
+  refresh_stamps
   rm -rf "$staging"
   run_golden_update minesweeper startup "$SANDBOX/identity-declared-startup.log" \
     || fail "could not stage the startup reference for the declared case"
@@ -1051,6 +1118,7 @@ LOKA_KEY_RELEASE_HOLD=0 verify_writable_boot_copy
 grep -q LOKA_KEY_RELEASE_HOLD "$SANDBOX/wslenv" || fail 'release hold not forwarded'
 [ "$(cat "$SANDBOX/release-hold")" = 0 ] || fail 'release hold value lost'
 rm "$SANDBOX/repo/tests/toolbox/mame-keys.lua"
+refresh_stamps
 if MAME_ENV_FILE="$SANDBOX/mame.env" RETRO68_TOOLCHAIN_BIN="$SANDBOX/retro-tools" \
     env -u WSL_INTEROP bash "$SANDBOX/repo/tests/toolbox/run-scenario.sh" helloworld startup \
     >"$SANDBOX/missing-keys.log" 2>&1; then
