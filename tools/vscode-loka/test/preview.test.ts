@@ -1,12 +1,13 @@
-import test, {mock} from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import {posix} from 'node:path';
 import {createPreview} from '../src/preview.ts';
-import type {PreviewPanel, PreviewPorts} from '../src/preview.ts';
+import type {PreviewDoors, PreviewPanel, PreviewPorts} from '../src/preview.ts';
 
 type MutablePorts = {-readonly [K in keyof PreviewPorts<() => void>]: PreviewPorts<() => void>[K]};
 function fixture(trusted = true, folder: string | null = '/workspace', present: boolean | '.js' | '.wasm' = true,
-  configure: (ports: MutablePorts) => void = () => {}) {
+  configure: (ports: MutablePorts) => void = () => {},
+  connect: (doors: PreviewDoors) => void = () => {}) {
   let serial = 0, directory = 'first', html = '', assignments = 0;
   const errors: string[] = [], faults: unknown[] = [];
   let live: 'live' | 'closed' = 'live';
@@ -34,7 +35,7 @@ function fixture(trusted = true, folder: string | null = '/workspace', present: 
       if (live === 'closed') return 'closed';
       panel.postMessage({id, type: 'dispose'}); return 'posted';
     },
-    revoke() { live = 'closed'; },
+    retire() { live = 'closed'; },
   };
   const isClosed = () => live === 'closed';
   const ports: MutablePorts = {
@@ -52,10 +53,10 @@ function fixture(trusted = true, folder: string | null = '/workspace', present: 
     error: message => errors.push(message), output: message => output.push(message), status: message => status.push(message),
   };
   configure(ports);
-  const preview = createPreview(adapter, ports);
+  const preview = createPreview(adapter, ports, connect);
   const state = () => Object.getOwnPropertyDescriptor(preview, 'state')!.value;
   const receive = (type: string, extra = {}, id = state().id) => preview.receive({id, type, ...extra});
-  return {preview, panel, adapter, hooks, faults, nativeDispose: () => { adapter.revoke(); preview.close(); }, ports, posts, output, errors, status, timers, history, reads, state, receive,
+  return {preview, panel, adapter, hooks, faults, nativeDispose: () => { adapter.retire(); preview.close(); }, ports, posts, output, errors, status, timers, history, reads, state, receive,
     assignments: () => assignments, trust: () => { trusted = true; },
     directory: () => { directory = 'second'; }};
 }
@@ -265,27 +266,21 @@ test('reload retained for started, error, completed posted from clock.after', ()
 });
 
 test('initial install: outer-before, outer-after, nested', () => {
-  const prototype = Object.getPrototypeOf(fixture().preview);
-  const handle = prototype.handle;
-  let owner!: ReturnType<typeof createPreview>;
-  const capture = mock.method(prototype, 'handle', function (this: typeof owner, event: unknown) {
-    owner = this;
-    return handle.call(this, event);
-  });
+  let owner!: PreviewDoors;
   const trace: string[] = [];
-  try {
+  {
     const f = fixture(true, '/workspace', true, ports => {
       ports.admitted = () => {
         trace.push('outer-before'); owner.close(); trace.push('outer-after'); return true;
       };
       const status = ports.status;
       ports.status = message => { status(message); if (message === 'CLOSED') trace.push('nested'); };
-    });
+    }, doors => { owner = doors; });
     assert.deepEqual(trace, ['outer-before', 'outer-after', 'nested']);
     assert.deepEqual(f.status, ['Waiting for startup response', 'CLOSED']);
     assert.equal(f.assignments(), 1); assert.equal(f.posts.length, 0);
     assert.equal(f.state().phase.kind, 'CLOSED'); assert.equal(f.timers.size, 0);
-  } finally { capture.mock.restore(); }
+  }
 });
 
 for (const door of ['cancel', 'nested RELOAD']) {
@@ -364,7 +359,7 @@ for (const type of ['started', 'error', 'completed']) {
 }
 
 test('capability absent at install entry closes without success or timeout status', () => {
-  const f = fixture(); f.preview.reload(); f.adapter.revoke();
+  const f = fixture(); f.preview.reload(); f.adapter.retire();
   f.history[0]();
   assert.equal(f.assignments(), 1); assert.equal(f.timers.size, 0);
   assert.equal(f.status.at(-1), 'CLOSED'); assert.equal(f.state().phase.kind, 'CLOSED');
@@ -383,7 +378,7 @@ test('queued RELOAD ahead of native CLOSE gets postDispose closed: zero native p
 });
 
 test('postDispose closed ends current handler without waiting for a CLOSE event', () => {
-  const f = fixture(); f.adapter.revoke(); f.preview.reload();
+  const f = fixture(); f.adapter.retire(); f.preview.reload();
   assert.equal(f.state().phase.kind, 'CLOSED'); assert.equal(f.status.at(-1), 'CLOSED');
   assert.equal(f.timers.size, 0); assert.equal(f.posts.length, 0);
 });
@@ -413,12 +408,12 @@ test('Preview terminal head ignores queued valid MESSAGE, RELOAD, CLOSE and fres
 });
 
 for (const path of ['timeout output', 'CLOSE cancellation', 'CLOSED status', 'partial options']) {
-  test(`fault during ${path}: revoke, release once, cleanup reentry inert, preserve original`, () => {
+  test(`fault during ${path}: retire, release once, cleanup reentry inert, preserve original`, () => {
     const f = fixture(), original = {fault: path};
     f.preview.reload(); let cancellations = 0, revocations = 0;
-    const cancel = f.ports.clock.cancel, revoke = f.adapter.revoke;
-    f.adapter.revoke = () => {
-      ++revocations; revoke(); f.preview.reload(); f.preview.close();
+    const cancel = f.ports.clock.cancel, retire = f.adapter.retire;
+    f.adapter.retire = () => {
+      ++revocations; retire(); f.preview.reload(); f.preview.close();
       throw new Error('cleanup must not replace primary');
     };
     f.ports.clock.cancel = timer => {
@@ -448,4 +443,46 @@ for (const path of ['timeout output', 'CLOSE cancellation', 'CLOSED status', 'pa
 test('timer fault reports throw undefined exactly once', () => {
   const f = fixture(); f.preview.reload(); f.ports.output = () => { throw undefined; };
   f.history[0](); f.history[0](); assert.deepEqual(f.faults, [undefined]); assert.equal(f.timers.size, 0);
+});
+
+for (const trusted of [true, false]) {
+  test(`connect runs once across reload, acknowledgement and timeout; trusted=${trusted}`, () => {
+    let connections = 0;
+    const f = fixture(trusted, '/workspace', true, () => {}, () => { ++connections; });
+    if (!trusted) { f.preview.reload(); f.trust(); f.preview.reload(); }
+    f.preview.reload(); f.receive('completed');
+    f.preview.reload(); f.history.at(-1)!();
+    assert.equal(connections, 1); assert.equal(f.timers.size, 0);
+  });
+}
+for (const door of ['reload', 'receive', 'close'] as const) {
+  test(`connect ${door} is queued behind INITIAL_INSTALL`, () => {
+    const trace: string[] = []; let operations = 0;
+    const f = fixture(true, '/workspace', true, ports => {
+      ports.status = message => { ++operations; trace.push(message); };
+    }, doors => {
+      trace.push('connect-before');
+      if (door === 'receive') doors.receive({id: 'id-1', type: 'started', status: 0});
+      else doors[door]();
+      assert.equal(operations, 0);
+      trace.push('connect-after');
+    });
+    assert.deepEqual(trace, ['connect-before', 'connect-after', 'Waiting for startup response',
+      door === 'reload' ? 'DISPOSING' : door === 'receive' ? 'Running' : 'CLOSED']);
+    assert.equal(f.assignments(), 1); assert.equal(f.posts.length, door === 'reload' ? 1 : 0);
+    assert.equal(f.timers.size, door === 'reload' ? 1 : 0);
+  });
+}
+test('connect throwing after all three doors drops queued work, retires once and preserves original', () => {
+  const original = {connect: 'failure'}; let connections = 0, retired = 0, effects = 0;
+  let captured!: PreviewDoors;
+  const f = fixture();
+  const panel: PreviewPanel = {install() { ++effects; return 'installed'; },
+    postDispose() { ++effects; return 'posted'; }, retire() { ++retired; }};
+  assert.throws(() => createPreview(panel, f.ports, doors => {
+    ++connections; captured = doors; doors.reload(); doors.receive({id: 'id-1', type: 'started', status: 0});
+    doors.close(); throw original;
+  }), error => error === original);
+  captured.reload(); captured.close();
+  assert.equal(connections, 1); assert.equal(retired, 1); assert.equal(effects, 0);
 });

@@ -2,6 +2,13 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Build: Loka Preview Extension",
+      "type": "shell",
+      "command": "npm run build",
+      "options": {"cwd": "${workspaceFolder}/tools/vscode-loka"},
+      "problemMatcher": "$tsc"
+    },
+    {
       "label": "Configure: macOS Native",
       "type": "shell",
       "command": "cmake",
