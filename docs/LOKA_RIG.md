@@ -17,6 +17,13 @@ The public command accepts only facts shared by every adapter: rig ID, ref,
 mode, and an optional local mapping. VM names, SSH transport, MAME paths,
 scenario internals, and test-only controls remain adapter-owned.
 
+The Mavericks adapter builds all six scenario vehicles and publishes their source
+stamp in `build/macos/Debug`; its rsync copy has no git metadata, so the stamp
+uses a content digest (including untracked regular files, excluding `build/` and
+`.git`). For direct Tahoe runs, build with `cmake --build --preset macos-scenarios`
+before invoking `LOKA_MACOS_RIG=tahoe tests/macos/run-scenario.sh <example> <scenario>`;
+both routes refuse a missing or changed stamp and target-only builds withdraw it.
+
 ## Updating desktop startup-identity pairs
 
 For a macOS or Win32 bake that changes both members of a startup-identity

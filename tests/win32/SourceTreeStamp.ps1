@@ -1,3 +1,5 @@
+# Deliberate platform twin: scripts/rig/source-tree-stamp.sh. Only the shell
+# helper has a content fallback; the Win32 rig always has git.
 param(
     [string]$Withdraw,
     [string]$Write,

@@ -184,6 +184,26 @@ publish_verified() {
 if [ ! -x "$BINARY" ]; then
   fail_stage build "missing $BINARY; run: cmake --preset macos-debug && cmake --build --preset macos-scenarios"
 fi
+# The app override still belongs to this checkout's default build stamp.
+SOURCE_STAMP="$PROJECT_DIR/build/macos/Debug/scenario-source-stamp.txt"
+SOURCE_HELPER="$PROJECT_DIR/scripts/rig/source-tree-stamp.sh"
+REBUILD_REMEDY="run cmake --build --preset macos-scenarios; target-only builds do not refresh the source stamp"
+stamped_id="$(cat "$SOURCE_STAMP" 2>/dev/null || true)"
+current_id="$(bash "$SOURCE_HELPER" id 2>/dev/null || true)"
+if [ -z "$stamped_id" ] || [ -z "$current_id" ] || [ "$stamped_id" != "$current_id" ]; then
+  fail_stage build "source tree stamp: built ${stamped_id:-missing}, current ${current_id:-unanswerable}; $REBUILD_REMEDY"
+fi
+case "$current_id" in
+  content:*) source_context="no git" ;;
+  *)
+    head_sha="$(git -C "$PROJECT_DIR" rev-parse HEAD)"
+    head_tree="$(git -C "$PROJECT_DIR" rev-parse 'HEAD^{tree}')"
+    source_context="HEAD $head_sha"
+    if [ "$head_tree" != "$current_id" ]; then source_context="$source_context, tracked changes"; fi ;;
+esac
+echo "stage: build source tree $current_id ($source_context)"
+# Python is already a runner prerequisite; this avoids incompatible BSD/GNU stat flags.
+"$PYTHON3" -c 'import datetime, os, sys; print("stage: build vehicle mtime " + datetime.datetime.fromtimestamp(os.path.getmtime(sys.argv[1]), datetime.timezone.utc).isoformat())' "$BINARY"
 if [ "$EXAMPLE" = "scrapbook" ]; then
   LRPC="$PROJECT_DIR/build/host/lrpc/lrpc"
   SOURCE_ASSETS="$PROJECT_DIR/example/ScrapbookUI/assets/ASSETS-modern.LRP"

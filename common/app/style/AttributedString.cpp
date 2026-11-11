@@ -375,6 +375,24 @@ namespace loka
       return true;
     }
 
+    bool AttributedString::hasSameSegmentValues(const AttributedString &other) const
+    {
+      if (!this->valid_ || !other.valid_)
+        return false;
+      if (this->segmentCount() != other.segmentCount())
+        return false;
+      if (this->storage_ == other.storage_)
+        return true;
+      for (std::size_t s = 0; s < this->segmentCount(); ++s)
+      {
+        const Segment &a = this->segment(s);
+        const Segment &b = other.segment(s);
+        if (a.style != b.style || !a.text.equals(b.text) || a.link != b.link)
+          return false;
+      }
+      return true;
+    }
+
     bool AttributedString::equals(const AttributedString &other) const
     {
       return this->compare(other) == 0;

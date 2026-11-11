@@ -176,6 +176,22 @@ a reader is open: finish dialogs before constructing it. Queries scan through
 the same chunk door using fixed stack scratch. Do not call `queryLineRange`
 per line to walk all lines; use one reader and count LF separators instead.
 
+`WriteTextDocument(context, file, document)` finishes synchronously: complete
+any dialog first and do not pump between the call's start and return. It reads
+the entire body twice with fixed stack scratch. Pass 1 validates before any
+filesystem work; a revision change before pass 2 refuses without opening the
+file. Pass 2 prepares and truncates the destination, then writes chunks with
+LF converted to the rail's file separator. Pass-1 malformed, resource, and
+not-ready refusals report `NOT_TEXT`, `ALLOCATION`, and `UNATTACHED` respectively.
+
+The `TextBuffer` overload stages a complete copy before touching the file.
+The document overload keeps no whole-body copy, but pass 2 can fail after
+truncation: MLTE allocates a Handle for each chunk and that allocation can fail.
+Any pass-2 read refusal reports `TEXT_DOCUMENT_WRITE_FAILED`; the first failure
+is retained through flush and close. This is the v1 limitation (Q2-F = F1);
+safe save through a temporary file belongs to a later page. After success,
+read `fact()->get().textRevision()` in the same command to record what was saved.
+
 ## Migration
 
 - `TextBuffer` does not become a compatibility layer over the document,

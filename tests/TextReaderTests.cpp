@@ -478,3 +478,187 @@ void testTextReaderEndedRechecks()
   f.body("changed");
   refused(reader, TEXT_READ_NOT_READY);
 }
+
+#include "app/TextDocumentFile.hpp"
+#include "testing/app/TextDocumentFileTestHooks.hpp"
+#include "support/TextBufferFixture.hpp"
+#include "support/TextEditorStateOwner.hpp"
+#if !defined(_WIN32) && !defined(__APPLE__) && !defined(LOKA_RETRO68)
+#include <unistd.h>
+namespace
+{
+  struct SaveFile
+  {
+    std::string directory, path;
+    NullPlatformContext context;
+    loka::file::File file;
+    SaveFile()
+    {
+      char pattern[] = "/tmp/loka-reader-save-XXXXXX";
+      const char *created = mkdtemp(pattern);
+      LOKA_VERIFY(created);
+      this->directory = created;
+      this->path = this->directory + "/text";
+      this->context.setApplicationDirectory(loka::core::String(this->directory));
+      this->file = loka::file::File::Application() << loka::file::File("text");
+    }
+    ~SaveFile()
+    {
+      std::remove(this->path.c_str());
+      LOKA_VERIFY(rmdir(this->directory.c_str()) == 0);
+    }
+    void put(const std::string &body)
+    {
+      std::FILE *f = std::fopen(this->path.c_str(), "wb");
+      LOKA_VERIFY(f);
+      LOKA_VERIFY(std::fwrite(body.data(), 1, body.size(), f) == body.size());
+      LOKA_VERIFY(std::fclose(f) == 0);
+    }
+    std::string bytes()
+    {
+      std::FILE *f = std::fopen(this->path.c_str(), "rb");
+      LOKA_VERIFY(f);
+      std::string result;
+      char chunk[512];
+      std::size_t n;
+      while ((n = std::fread(chunk, 1, sizeof chunk, f)) != 0)
+        result.append(chunk, n);
+      LOKA_VERIFY(!std::ferror(f));
+      LOKA_VERIFY(std::fclose(f) == 0);
+      return result;
+    }
+  };
+  void changeSaveRevision(void *data)
+  {
+    static_cast<ReaderFixture *>(data)->body("changed");
+  }
+} // namespace
+void testTextDocumentSaveRefusals()
+{
+  // Repeat every pre-open refusal against both destination states.
+  for (unsigned existing = 0; existing != 2; ++existing)
+  {
+    for (unsigned reason = 0; reason != 6; ++reason)
+    {
+      ReaderFixture f;
+      SaveFile target;
+      f.body(reason == 0 ? std::string(1100, 'x') + "\xff" : "valid");
+      if (existing)
+        target.put("sentinel");
+      TextDocumentResult expected = TEXT_DOCUMENT_UNATTACHED;
+      TextDocument absent;
+      const TextDocument *document = &f.text();
+      switch (reason)
+      {
+      case 0:
+        expected = TEXT_DOCUMENT_NOT_TEXT;
+        break;
+      case 1:
+        failTextChunkReads(1);
+        expected = TEXT_DOCUMENT_ALLOCATION;
+        break;
+      case 2:
+        TextDocumentAccess::uncommitted(f.text(), "marked");
+        f.app.reconcileAtCompletion();
+        break;
+      case 3:
+        observeTextDocumentSavePasses(&changeSaveRevision, &f);
+        break;
+      case 4:
+        TextDocumentAccess::withdraw(f.text());
+        break;
+      case 5:
+        document = &absent;
+        break;
+      }
+      LOKA_VERIFY(WriteTextDocument(&target.context, target.file, *document) == expected);
+      failTextChunkReads(0);
+      observeTextDocumentSavePasses(0, 0);
+      if (existing)
+        LOKA_VERIFY(target.bytes() == "sentinel");
+      else
+        LOKA_VERIFY(access(target.path.c_str(), F_OK) != 0);
+    }
+    // A declared document whose store creation failed also cannot save.
+    failTextStoreCreations(1);
+    ReaderFixture noStore;
+    SaveFile target;
+    if (existing)
+      target.put("sentinel");
+    LOKA_VERIFY(!TextDocumentAccess::store(noStore.text()));
+    LOKA_VERIFY(WriteTextDocument(&target.context, target.file, noStore.text()) == TEXT_DOCUMENT_UNATTACHED);
+    if (existing)
+      LOKA_VERIFY(target.bytes() == "sentinel");
+    else
+      LOKA_VERIFY(access(target.path.c_str(), F_OK) != 0);
+  }
+}
+void testTextDocumentSaveSecondPass()
+{
+  ReaderFixture f;
+  SaveFile target;
+  f.body("valid");
+  target.put("sentinel");
+  // Pass 1 makes one progress call and one END call; pass 2 then refuses.
+  failTextChunkReadsAfter(2, 1);
+  LOKA_VERIFY(WriteTextDocument(&target.context, target.file, f.text()) == TEXT_DOCUMENT_WRITE_FAILED);
+  LOKA_VERIFY(target.bytes().empty());
+  failTextChunkReads(0);
+  // Earlier read failure wins even when flushing buffered output also fails.
+  if (access("/dev/full", F_OK) == 0)
+  {
+    NullPlatformContext deviceContext;
+    deviceContext.setApplicationDirectory(loka::core::String("/dev"));
+    f.body(std::string(600, 'x'));
+    failTextChunkReadsAfter(4, 1); // three validation calls, one written chunk
+    LOKA_VERIFY(WriteTextDocument(&deviceContext, loka::file::File::Application() << loka::file::File("full"), f.text())
+                == TEXT_DOCUMENT_WRITE_FAILED);
+    failTextChunkReads(0);
+  }
+  else
+    std::puts("[skip] /dev/full absent: save first-failure retention");
+}
+void testTextDocumentSaveNewlines()
+{
+  const std::string bodies[] = {"",
+                                "single line",
+                                "trailing\n",
+                                std::string(511, 'a') + "\nb",
+                                std::string(512, 'a') + "\nb",
+                                std::string(1550, 'a') + "\nend\n"};
+  for (unsigned i = 0; i < sizeof bodies / sizeof bodies[0]; ++i)
+  {
+    ReaderFixture f;
+    f.body(bodies[i]);
+    TextEditorStateOwner owner;
+    loka::testing::TextBufferFixture buffer;
+    LOKA_VERIFY(buffer.attach(&owner.tracker, 16) == loka::core::ATTACH_OK);
+    std::size_t start = 0;
+    for (std::size_t j = 0; j <= bodies[i].size(); ++j)
+    {
+      if (j != bodies[i].size() && bodies[i][j] != '\n')
+        continue;
+      LOKA_VERIFY(buffer.insert(buffer.size(), loka::core::String::Utf8(bodies[i].data() + start, j - start))
+                  == loka::core::EDIT_OK);
+      start = j + 1;
+    }
+    SaveFile oldFile, newFile;
+    LOKA_VERIFY(WriteTextDocument(&oldFile.context, oldFile.file, buffer) == TEXT_DOCUMENT_OK);
+    LOKA_VERIFY(WriteTextDocument(&newFile.context, newFile.file, f.text()) == TEXT_DOCUMENT_OK);
+    LOKA_VERIFY(newFile.bytes() == oldFile.bytes());
+  }
+}
+#else
+void testTextDocumentSaveRefusals()
+{
+  std::puts("[skip] generic Linux save pins");
+}
+void testTextDocumentSaveSecondPass()
+{
+  std::puts("[skip] generic Linux save pins");
+}
+void testTextDocumentSaveNewlines()
+{
+  std::puts("[skip] generic Linux save pins");
+}
+#endif

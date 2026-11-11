@@ -177,6 +177,7 @@ the other cells unchecked so the sample remains visible.
 ## How to re-run
 
 The Win32 scenario runner requires `cmake --build --preset win32-tests` for the current tracked source tree; target-only builds do not refresh its source stamp.
+The macOS scenario runner requires `cmake --build --preset macos-scenarios` for the current source tree; target-only builds do not refresh its source stamp, and copies without git use a content digest of regular files excluding `build/` and `.git`.
 
 Run commands from the repository root. The configure-and-build lines below are
 single shell invocations that reproduce each build leg available today; the

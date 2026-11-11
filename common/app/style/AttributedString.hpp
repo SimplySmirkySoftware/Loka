@@ -51,6 +51,16 @@ namespace loka
           On success writes an origin-(0,0) extent; on invalid input or allocation
           refusal returns false and leaves out unchanged. No state is retained. */
       bool estimateExtent(short availableWidth, const BlockStyle &block, core::Frame &out) const;
+      /** True when both values are valid, have the same segment count (empty
+          segments included), and every index carries an equal style, body
+          (String::equals: a shared handle is equal without reading; a body whose
+          UTF-8 collection refuses is otherwise unequal) and link target
+          (LinkTarget::operator==: shared handles equal, distinct refused targets
+          unequal, readable targets by bytes). Shared storage is equal
+          without walking. Proves index correspondence between two values, not
+          readability, normalization or stable run boundaries; not a substitute
+          for operator==, which is segmentation-independent. */
+      bool hasSameSegmentValues(const AttributedString &other) const;
       bool equals(const AttributedString &other) const;
       bool operator==(const AttributedString &other) const;
       bool operator!=(const AttributedString &other) const;

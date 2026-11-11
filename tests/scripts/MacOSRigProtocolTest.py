@@ -159,6 +159,16 @@ class MacOSRigProtocolTest(unittest.TestCase):
         )
         self.assertEqual(command, "cd '/tmp/run path' && MODE=inspect exec /bin/echo 'hello world'")
 
+    def test_build_publishes_the_stamp_in_the_runner_build_directory(self):
+        run = object.__new__(rig.MacOSRigRun)
+        run.target_source = pathlib.PurePosixPath("/target/source")
+        run._run_logged_ssh = mock.Mock()
+        run._build()
+        configure, build = [call.args[0] for call in run._run_logged_ssh.call_args_list[:2]]
+        self.assertIn("/target/source/build/macos/Debug", configure)
+        self.assertIn("/target/source/build/macos/Debug", build)
+        self.assertIn("--target LokaMacOSScenarioSourceStamp", build)
+
     def test_runner_command_names_the_scrapbook_example(self):
         run = object.__new__(rig.MacOSRigRun)
         run.target_source = pathlib.PurePosixPath("/target/source")
@@ -167,6 +177,7 @@ class MacOSRigProtocolTest(unittest.TestCase):
         run.scenario = "flip-forward-back"
         run.mapping = types.SimpleNamespace(target_python="/target/python3")
         command = run._runner_command()
+        self.assertIn("/target/source/build/macos/Debug/apple/macos/LokaScrapbookScenarioMacOS.app", command)
         self.assertIn(
             "exec /bin/bash tests/macos/run-scenario.sh scrapbook flip-forward-back --ci-structural",
             command,

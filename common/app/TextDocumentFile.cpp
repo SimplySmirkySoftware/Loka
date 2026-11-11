@@ -2,6 +2,8 @@
 #include "app/PlatformContext.hpp"
 #include "platform/file/FileIO.hpp"
 #include "app/nodes/controls/TextDocumentLine.hpp"
+#include "app/text/TextReader.hpp"
+#include "testing/app/TextDocumentFileTestHooks.hpp"
 #include <string>
 
 namespace loka
@@ -10,6 +12,80 @@ namespace loka
   {
     namespace
     {
+      /** Stack owner for destination preparation and first-failure stdio cleanup. */
+      class DocumentSink
+      {
+      public:
+        DocumentSink()
+            : stream_(0),
+              result_(TEXT_DOCUMENT_OK)
+        {
+        }
+        ~DocumentSink()
+        {
+          if (this->stream_)
+            std::fclose(this->stream_);
+        }
+        TextDocumentResult open(PlatformContext *context, const file::File &file)
+        {
+          using namespace platform::file;
+          if (file.base() == file::File::BASE_REFUSED || !context || !context->openFile(file, this->handle_))
+            return TEXT_DOCUMENT_OPEN_FAILED;
+          const PrepareResult prepared = PrepareTextDocumentDestination(this->handle_);
+          if (prepared != PREPARE_OK)
+            return prepared == PREPARE_NOT_TEXT ? TEXT_DOCUMENT_NOT_TEXT : TEXT_DOCUMENT_PREPARE_FAILED;
+          this->stream_ = OpenWriteTruncate(this->handle_);
+          return this->stream_ ? TEXT_DOCUMENT_OK : TEXT_DOCUMENT_OPEN_FAILED;
+        }
+        void fail(TextDocumentResult result)
+        {
+          if (this->result_ == TEXT_DOCUMENT_OK)
+            this->result_ = result;
+        }
+        bool write(const char *data, std::size_t size)
+        {
+          if (this->result_ == TEXT_DOCUMENT_OK
+              && (std::fwrite(data, 1, size, this->stream_) != size || std::ferror(this->stream_)))
+            this->fail(TEXT_DOCUMENT_WRITE_FAILED);
+          return this->result_ == TEXT_DOCUMENT_OK;
+        }
+        TextDocumentResult finish()
+        {
+          if (!platform::file::FlushWrite(this->stream_, this->handle_))
+            this->fail(TEXT_DOCUMENT_FLUSH_FAILED);
+          if (std::fclose(this->stream_) != 0)
+            this->fail(TEXT_DOCUMENT_CLOSE_FAILED);
+          this->stream_ = 0;
+          return this->result_;
+        }
+
+      private:
+        DocumentSink(const DocumentSink &);
+        DocumentSink &operator=(const DocumentSink &);
+        platform::file::FileHandle handle_;
+        std::FILE *stream_;
+        TextDocumentResult result_;
+      };
+
+      TextDocumentResult readFailure(TextReadRefusal reason)
+      {
+        switch (reason)
+        {
+        case TEXT_READ_MALFORMED:
+          return TEXT_DOCUMENT_NOT_TEXT;
+        case TEXT_READ_RESOURCE:
+          return TEXT_DOCUMENT_ALLOCATION;
+        case TEXT_READ_NOT_READY:
+          return TEXT_DOCUMENT_UNATTACHED;
+        case TEXT_READ_RANGE:
+          // Whole-body reads with our fixed capacity cannot refuse a range.
+          // Release builds return NOT_TEXT in pass 1, WRITE_FAILED in pass 2.
+          assert(false && "save reader range");
+          return TEXT_DOCUMENT_NOT_TEXT;
+        }
+        return TEXT_DOCUMENT_NOT_TEXT;
+      }
+
       // Drop only the leading signature; interior U+FEFF remains ordinary row text.
       const unsigned char kTextDocumentBom[] = {0xef, 0xbb, 0xbf};
 
@@ -259,23 +335,64 @@ namespace loka
           bytes.append(kTextDocumentNewline);
         bytes.append(row.data(), row.size());
       }
-      FileHandle handle;
-      if (file.base() == loka::file::File::BASE_REFUSED || !context || !context->openFile(file, handle))
-        return TEXT_DOCUMENT_OPEN_FAILED;
-      const PrepareResult prepared = platform::file::PrepareTextDocumentDestination(handle);
-      if (prepared != PREPARE_OK)
-        return prepared == PREPARE_NOT_TEXT ? TEXT_DOCUMENT_NOT_TEXT : TEXT_DOCUMENT_PREPARE_FAILED;
-      std::FILE *stream = platform::file::OpenWriteTruncate(handle);
-      if (!stream)
-        return TEXT_DOCUMENT_OPEN_FAILED;
-      TextDocumentResult result = TEXT_DOCUMENT_OK;
-      if (std::fwrite(bytes.data(), 1, bytes.size(), stream) != bytes.size() || std::ferror(stream))
-        result = TEXT_DOCUMENT_WRITE_FAILED;
-      if (!platform::file::FlushWrite(stream, handle) && result == TEXT_DOCUMENT_OK)
-        result = TEXT_DOCUMENT_FLUSH_FAILED;
-      if (std::fclose(stream) != 0 && result == TEXT_DOCUMENT_OK)
-        result = TEXT_DOCUMENT_CLOSE_FAILED;
-      return result;
+      DocumentSink sink;
+      const TextDocumentResult opened = sink.open(context, file);
+      if (opened != TEXT_DOCUMENT_OK)
+        return opened;
+      sink.write(bytes.data(), bytes.size());
+      return sink.finish();
+    }
+
+    TextDocumentResult
+    WriteTextDocument(PlatformContext *context, const loka::file::File &file, const TextDocument &document)
+    {
+      if (!document.fact())
+        return TEXT_DOCUMENT_UNATTACHED;
+      const unsigned long revision = document.fact()->get().textRevision();
+      char chunk[512];
+      unsigned long count = 0;
+      {
+        TextReader validation(document);
+        TextReadResult result;
+        while ((result = validation.read(chunk, sizeof chunk, count)) == TEXT_READ_MORE)
+        {
+        }
+        if (result == TEXT_READ_REFUSED)
+          return readFailure(validation.refusal());
+      }
+#ifdef TEST_BUILD
+      testing::betweenTextDocumentSavePasses();
+#endif
+      if (!document.fact() || document.fact()->get().textRevision() != revision)
+        return TEXT_DOCUMENT_UNATTACHED;
+      DocumentSink sink;
+      const TextDocumentResult opened = sink.open(context, file);
+      if (opened != TEXT_DOCUMENT_OK)
+        return opened;
+      TextReader reader(document);
+      TextReadResult result;
+      while ((result = reader.read(chunk, sizeof chunk, count)) == TEXT_READ_MORE)
+      {
+        std::size_t start = 0;
+        for (std::size_t i = 0; i < count; ++i)
+        {
+          if (chunk[i] != '\n')
+            continue;
+          if (!sink.write(chunk + start, i - start)
+              || !sink.write(kTextDocumentNewline, sizeof kTextDocumentNewline - 1))
+            return sink.finish();
+          start = i + 1;
+        }
+        if (!sink.write(chunk + start, count - start))
+          return sink.finish();
+      }
+      if (result == TEXT_READ_REFUSED)
+      {
+        // Also diagnose impossible RANGE in pass 2; every refusal maps to WRITE_FAILED.
+        readFailure(reader.refusal());
+        sink.fail(TEXT_DOCUMENT_WRITE_FAILED);
+      }
+      return sink.finish();
     }
   } // namespace app
 } // namespace loka
