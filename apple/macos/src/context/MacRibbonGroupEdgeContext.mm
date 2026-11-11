@@ -60,12 +60,16 @@ namespace
   NSColor *ground = nil;
   loka::macos::QueryMacGroundColor(loka::app::SURFACE_GROUND_WINDOW, ground);
   // The legacy spellings keep the Tiger-era APIs usable with the new SDKs.
+#if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
   NSColor *edge = [NSColor controlShadowColor];
   NSColor *edgeRGB = [edge colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
   NSColor *groundRGB = [ground colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+#if defined(__clang__)
 #pragma clang diagnostic pop
+#endif
   if ([self edge] == loka::app::RIBBON_GROUP_EDGE_BOTTOM || !edgeRGB || !groundRGB)
   {
     [edge setFill];

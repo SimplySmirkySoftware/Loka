@@ -127,7 +127,7 @@ namespace
   /** Layout and screen draws query once; AppKit owns ancestor conversion. */
   MacPhotoGeometry PhotoGeometry(NSView *view)
   {
-    MacPhotoGeometry geometry = {};
+    MacPhotoGeometry geometry = MacPhotoGeometry();
     geometry.local = [view visibleRect];
     geometry.window = [view window];
     NSRect pixels = geometry.local;
@@ -185,7 +185,7 @@ namespace
       [this->photo_ release];
       this->photo_ = nil;
       this->phase_ = EMPTY;
-      const MacPhotoGeometry empty = {};
+      const MacPhotoGeometry empty = MacPhotoGeometry();
       this->geometry_ = empty;
     }
     void installCapture(NSBitmapImageRep *rep)
