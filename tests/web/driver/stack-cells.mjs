@@ -111,8 +111,14 @@ export async function runStackCells(client, navigate) {
     fixture._fixture_configure(-13,0);return web.start();
   })()`);
   assert.equal(initial,0);
-  await client.evaluate('restoreMeasure();fixture._web_wake(2,performance.now())');
-  assert.equal(await client.evaluate('document.querySelectorAll("button").length'),2);
+  const buttons='[...document.querySelectorAll("button")].map(e=>({text:e.textContent,h:parseFloat(e.style.height)||0}))';
+  const refused=await client.evaluate(buttons);
+  assert(refused.length===2 && refused.every(b=>b.text==='' && b.h===0), JSON.stringify(refused));
+  // Negative control: with LOKA_WEB_NEGATIVE_KEEP_REFUSAL set the refusal stays and this cell must fail.
+  if(!process.env.LOKA_WEB_NEGATIVE_KEEP_REFUSAL) await client.evaluate('restoreMeasure()');
+  await client.evaluate('fixture._web_wake(2,performance.now())');
+  const recovered=await client.evaluate(buttons);
+  assert(recovered.length===2 && recovered.every(b=>b.text==='Go' && b.h>0), JSON.stringify(recovered));
   console.log('AlignedRowEstimate initial refusal browser passed');
   await stop();
 }

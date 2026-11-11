@@ -420,19 +420,16 @@ width consultation can recurse through wrappers and rescan when shrinking.
 Natural Web text consultations normalize and measure each time. Retry revisits
 the existing Scene root. No metrics, retry flag or last-height member is retained.
 
-Build-verified: Linux x86_64 C++98 native testing/Release and ASan builds,
-Emscripten 7.0.0 testing-web, and production LokaHelloWeb. Host fake and wasm Node
-cells passed; the full native suite's build-picker script remains blocked by its
-WSL/PowerShell path conversion. ASan execution passed with leak detection disabled;
-LeakSanitizer cannot supply a verdict under the sandbox's ptrace environment.
+Build-verified: Linux x86_64 C++98 native testing, Release and ASan builds,
+Emscripten 7.0.0 testing-web, and production LokaHelloWeb, with the host fake and
+wasm Node cells. ASan ran with leak detection disabled, so it gives no leak verdict.
 
-Browser-verified: none of the new Stack geometry cells in this sandbox. The
-Chromium driver was attempted but its listening socket was refused with
-`listen EPERM`. The prepared cells cover alignment, degradation and scroll
-origin/extent recovery, wrapping, axis changes, column offers, scroll reveal, and
-a same-root HelloWorld 420 → 399 → 420 sequence with the growing message's clip
-record. They still require an unrestricted driver run; compilation is not
-browser runtime evidence.
+Browser-verified (Chromium 157 on Linux, through the driver): the Stack cells for
+alignment, estimate degradation and recovery, scroll extent and origin after a
+degraded commit, wrapping at two widths, axis changes, column offers, scroll
+reveal, and a same-root HelloWorld 420 → 399 → 420 sequence with the growing
+message's clip record. A missing Chromium is a reported skip, not verification.
+Other browsers and the VS Code preview are not verified for these cells.
 
 Scroll reproduction adds `LOKA_WEB_CAPTURE_SCROLL=1` for `scroll.golden`,
 `node tests/web/js/boundary.test.mjs` for deterministic adapter read-back and
