@@ -1,5 +1,6 @@
 #include <algorithm>
 #include "WebWindow.hpp"
+#include "WebStackLayoutHandler.hpp"
 #include "WebScrollContext.hpp"
 #include "WebTextDescriptor.hpp"
 #include "WebScenePlatformController.hpp"
@@ -25,7 +26,6 @@ using namespace loka::app;
 using namespace loka::app::scene;
 namespace
 {
-  const loka::app::layout::RailSpacing Spacing(12, 4, 9);
   template <class N, class C, loka::web::Kind K> class Handler : public RetainedNodeHandler<Handler<N, C, K>, N, C>
   {
   public:
@@ -115,7 +115,8 @@ WebScenePlatformController::WebScenePlatformController(WebSession &session,
   this->layout_.height = Narrow(height);
   this->layout_.lineHeight = 16;
   this->layout_.spacing = 4;
-  loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(this->layouts_, 0, 0, Spacing);
+  loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(this->layouts_, 0, 0, WebLayoutSpacing);
+  this->layouts_.registerHandler(new WebStackLayoutHandler(*this));
 }
 WebScenePlatformController::~WebScenePlatformController()
 {
@@ -261,7 +262,7 @@ int WebScenePlatformController::layoutNode(Node *node, const LayoutState &receiv
   if (!node || node->lifecycleFact() != NODE_FACT_ATTACHED)
     return received.y;
   LayoutState state = received;
-  state.spacing = Narrow(loka::app::layout::resolveLayoutGap(node, received.spacing, Spacing));
+  state.spacing = Narrow(loka::app::layout::resolveLayoutGap(node, received.spacing, WebLayoutSpacing));
   if (node->asScrollViewNode())
   {
     WebResource *root = this->session_.routes().find(this->root_);
@@ -465,7 +466,7 @@ WebScenePlatformController::ScrollResult WebScenePlatformController::layoutScrol
   if (!ctx)
     return refused;
   short knownWidth = 0;
-  const bool known = loka::app::layout::queryContentOverflowWidth(node, Spacing, this, knownWidth);
+  const bool known = loka::app::layout::queryContentOverflowWidth(node, WebLayoutSpacing, this, knownWidth);
   const int knownOverflowWidth = known ? knownWidth : 0;
   const WebScrollbarGeometry &gutter = this->session_.scrollbarGeometry();
   const int viewportWidth = std::max(0, state.width - gutter.vertical());

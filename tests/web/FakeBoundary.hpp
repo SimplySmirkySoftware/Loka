@@ -55,6 +55,9 @@ namespace webtest
   extern void (*probe)(const char *, uint32_t);
   extern unsigned measureCalls, metricCalls, measureBytes, textBuilds, textScans;
   extern int failMeasure, measureStatus, measuredWidth;
+  extern int failMetrics, failAdvance, metricAscent, metricDescent;
+  extern std::vector<std::vector<int> > metricDescriptors, advanceDescriptors;
+  extern std::vector<std::string> measurementOrder, measuredText;
   extern int scrollStatus, appliedX, appliedY, gutterVertical, gutterHorizontal;
   extern bool geometryMeasurable;
   void reset();

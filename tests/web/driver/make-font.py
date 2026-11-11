@@ -25,7 +25,7 @@ def checksum(data):
     return sum(struct.unpack('>' + 'I' * (len(data) // 4), data)) & 0xffffffff
 
 
-def font():
+def font(ascii_labels=False):
     # Five identical rectangle outlines; hmtx alone discriminates language.
     glyph = s16(1, 0, 0, 400, 700) + u16(3, 0) + bytes([1]*4)
     glyph += s16(0, 400, 0, -400) + s16(0, 0, 700, 0)
@@ -41,8 +41,12 @@ def font():
     tables['maxp'] = u32(0x10000) + u16(5, 4, 1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0)
     # A/V kerning is a controlled range-measurement discriminator; x is narrow.
     mappings = [(65, 1), (86, 2), (97, 1), (120, 3), (65535, 0)]
+    if ascii_labels:
+        mappings = [(cp, 2 if cp == 86 else 3 if cp == 120 else 1) for cp in range(32, 127)] + [(65535, 0)]
     ends = [cp for cp, _ in mappings]
-    cmap = u16(4, 16+8*len(mappings), 0, 2*len(mappings), 8, 2, 2)
+    power = len(mappings).bit_length() - 1
+    search = 2 * (1 << power)
+    cmap = u16(4, 16+8*len(mappings), 0, 2*len(mappings), search, power, 2*len(mappings)-search)
     cmap += u16(*ends) + u16(0) + u16(*ends)
     cmap += u16(*((glyph-cp)&65535 for cp, glyph in mappings)) + u16(*([0]*len(mappings)))
     tables['cmap'] = u16(0, 1, 3, 1) + u32(12) + cmap
@@ -99,4 +103,4 @@ if __name__ == '__main__':
     if not path.is_relative_to(root / 'build'):
         raise SystemExit('font output must be below this worktree build/')
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(font())
+    path.write_bytes(font("--ascii-labels" in sys.argv[2:]))

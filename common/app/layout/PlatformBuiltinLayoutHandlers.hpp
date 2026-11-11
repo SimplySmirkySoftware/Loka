@@ -118,6 +118,44 @@ namespace loka
         }
       };
 
+      /** Shared Stack dispatch, preserving the caller-owned column range and spans.
+          Cost: handler once per reached visit; common computations walk this
+          Stack's children, including natural consultations and column repair. */
+      inline int LayoutStack(loka::app::scene::Node *node,
+                             const loka::app::scene::LayoutState &state,
+                             const RowLayoutMetrics &metrics,
+                             const RailSpacing &spacing,
+                             loka::app::scene::IPlatformLayoutTraversal *traversal,
+                             const LazyWindow *range = 0,
+                             StackSpans *spans = 0)
+      {
+        loka::app::StackNode *stack = node ? node->asStackNode() : 0;
+        if (!stack || !traversal)
+        {
+          return state.y;
+        }
+        if (stack->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN)
+        {
+          return loka::app::layout::computeColumnLayoutResultY(stack,
+                                                               state,
+                                                               traversal,
+                                                               &DispatchTraversalLayoutChild,
+                                                               resolveLayoutGap(stack, state.spacing, spacing),
+                                                               &AcceptTraversalLayoutY,
+                                                               range,
+                                                               spans);
+        }
+        return loka::app::layout::computeRowLayoutResultY(stack,
+                                                          state,
+                                                          metrics,
+                                                          spacing,
+                                                          traversal,
+                                                          traversal,
+                                                          &DispatchTraversalLayoutChild,
+                                                          resolveLayoutGap(stack, state.spacing, spacing),
+                                                          &AcceptTraversalLayoutY);
+      }
+
       class StackPlatformLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
       {
       public:
@@ -138,31 +176,7 @@ namespace loka
                                const loka::app::layout::LazyWindow *range = 0,
                                loka::app::layout::StackSpans *spans = 0)
         {
-          loka::app::StackNode *stack = node ? node->asStackNode() : 0;
-          if (!stack || !traversal)
-          {
-            return state.y;
-          }
-          if (stack->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN)
-          {
-            return loka::app::layout::computeColumnLayoutResultY(stack,
-                                                                 state,
-                                                                 traversal,
-                                                                 &DispatchTraversalLayoutChild,
-                                                                 resolveLayoutGap(stack, state.spacing, this->spacing_),
-                                                                 &AcceptTraversalLayoutY,
-                                                                 range,
-                                                                 spans);
-          }
-          return loka::app::layout::computeRowLayoutResultY(stack,
-                                                            state,
-                                                            this->metrics_,
-                                                            this->spacing_,
-                                                            traversal,
-                                                            traversal,
-                                                            &DispatchTraversalLayoutChild,
-                                                            resolveLayoutGap(stack, state.spacing, this->spacing_),
-                                                            &AcceptTraversalLayoutY);
+          return LayoutStack(node, state, this->metrics_, this->spacing_, traversal, range, spans);
         }
 
       private:
