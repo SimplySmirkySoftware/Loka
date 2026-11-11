@@ -631,7 +631,8 @@ directory after visiting the examples. `loka_add_web_app` registers only callers
 beneath the repository root's `example/` directory, including nested projects;
 the build graph must visit a directory for it to register. Membership is
 lexical (the calling source directory's path), not resolved filesystem
-containment: a symlink beneath `example/` is not followed. Browser fixtures such
+containment: a caller reached through a symlink beneath `example/` can register
+even when the symlink points outside that directory. Browser fixtures such
 as `LokaWebCounter` are excluded. No consumer reads this catalog yet.
 
 Schema v1 is `{"version":1,"apps":[{"id","name","target","exportName","sourceDir","js"}]}`.

@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Build the real Web examples and compare each preset's catalog to artifacts."""
+"""Build the real Web examples and compare each preset's catalog to artifacts.
+
+This integration test removes and rebuilds example JS/Wasm outputs in both
+preset build directories; stop browser drivers, previews, and other builds
+using those directories before running it.
+"""
 import json
 from pathlib import Path
 import shutil
