@@ -6,8 +6,14 @@ namespace loka
 {
   namespace app
   {
+    namespace scene
+    {
+      class TextStoreRow;
+      class TextStoreReading;
+    } // namespace scene
     namespace detail
     {
+      class TextBodyWrite;
       /** Single writer/taker, parallel to FocusPublisher; only Window enters completion or refresh. */
       class TextDocumentPublisher
       {
@@ -21,6 +27,13 @@ namespace loka
         static void refresh(scene::SceneTextDocuments &documents, scene::IPlatformController &controller);
         static void
         publish(scene::TextDocumentRegistration &row, scene::IPlatformController &controller, Requests requests);
+        static TextBodyWrite writeBody(scene::TextDocumentRegistration &row,
+                                       scene::IPlatformController &controller,
+                                       Requests requests,
+                                       scene::TextStoreRow *store,
+                                       bool read,
+                                       const scene::TextStoreReading &first);
+        static void replyBodyWrite(scene::TextDocumentRegistration &row, const TextBodyWrite &write);
         /** One row of complete or refresh; refresh first asks a linked row to commit.
             A member of the befriended class, so GCC 4.0.1 grants it the registration's
             private phase, which the nested Visitor would not get. */
