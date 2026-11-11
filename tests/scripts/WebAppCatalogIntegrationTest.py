@@ -16,6 +16,13 @@ def main():
     expected = [('HelloWorld', 'LokaHelloWeb'), ('MineSweeper', 'LokaMineWeb')]
     for preset, directory in (('web', 'web'), ('testing-web', 'testing')):
         subprocess.run(['emcmake', 'cmake', '--preset', preset], cwd=ROOT, check=True)
+        # Remove the expected pairs first: a stale pair left by an earlier build
+        # must not stand in for output that this build wrote somewhere else.
+        for name, target in expected:
+            for suffix in ('.js', '.wasm'):
+                stale = ROOT / 'build/wasm' / directory / 'example' / name / (target + suffix)
+                if stale.exists():
+                    stale.unlink()
         subprocess.run(['cmake', '--build', '--preset', preset, '-j8', '--target',
                         *[target for _, target in expected]], cwd=ROOT, check=True)
         binary = ROOT / 'build/wasm' / directory
