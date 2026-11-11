@@ -132,6 +132,10 @@ public:
   /** Cost: owner miss once per visit; prepares own bytes, metrics, two breaker passes and joined rows.
       Width memo lives only during this build; WORD lookahead can visit quadratic bytes. */
   static int build(const loka::core::String &, const WebTextConstraint &, bool button, WebTextSnapshot *&out);
+  /** Cost: Stack handler once per reached aligned-row visit; one default-key
+      metrics boundary call, no normalization, allocation, or row walk.
+      Both outputs commit together only after line and chrome range checks. */
+  static int rowEstimate(short &line, short &button);
   /** Cost: natural query once; one temporary normalized run and one service query, no publication. */
   static bool natural(const loka::core::String &, const WebTextConstraint &, bool button, bool height, short &out);
 };

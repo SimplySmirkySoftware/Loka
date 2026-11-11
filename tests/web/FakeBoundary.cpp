@@ -23,7 +23,13 @@ namespace webtest
     completed = failCreate = failHidden = failTextAdmit = failTextStyle = 0;
     probe = 0;
     measureCalls = metricCalls = measureBytes = textBuilds = textScans = 0;
-    failMeasure = 0;
+    failMeasure = failMetrics = failAdvance = 0;
+    metricAscent = 10;
+    metricDescent = 3;
+    metricDescriptors.clear();
+    advanceDescriptors.clear();
+    measurementOrder.clear();
+    measuredText.clear();
     measureStatus = WEB_MEASURE_REFUSED;
     measuredWidth = -1;
   }
@@ -118,6 +124,8 @@ extern "C"
   }
   void web_set_rect(uint32_t token, int x, int y, int width, int height)
   {
+    webtest::resources[token].x = x;
+    webtest::resources[token].y = y;
     webtest::resources[token].width = width;
     webtest::resources[token].height = height;
     std::ostringstream args;
@@ -279,6 +287,13 @@ namespace webtest
 {
   unsigned measureCalls = 0, metricCalls = 0, measureBytes = 0, textBuilds = 0, textScans = 0;
   int failMeasure = 0, measureStatus = WEB_MEASURE_REFUSED, measuredWidth = -1;
+  int failMetrics = 0, failAdvance = 0, metricAscent = 10, metricDescent = 3;
+  std::vector<std::vector<int> > metricDescriptors, advanceDescriptors;
+  std::vector<std::string> measurementOrder, measuredText;
+  bool ScheduledFailure(int &count)
+  {
+    return count < 0 || (count > 0 && --count == 0);
+  }
   int MeasureStatus()
   {
     if (failMeasure < 0 || (failMeasure > 0 && --failMeasure == 0))
@@ -286,23 +301,30 @@ namespace webtest
     return WEB_MEASURE_OK;
   }
 } // namespace webtest
-extern "C" int web_measure(const int *, const char *, unsigned len, int *out)
+extern "C" int web_measure(const int *descriptor, const char *text, unsigned len, int *out)
 {
+  webtest::advanceDescriptors.push_back(std::vector<int>(descriptor, descriptor + 9));
+  webtest::measurementOrder.push_back("advance");
+  webtest::measuredText.push_back(std::string(text, len));
   ++webtest::measureCalls;
   webtest::measureBytes += len;
-  const int status = webtest::MeasureStatus();
+  const int status =
+      webtest::ScheduledFailure(webtest::failAdvance) ? webtest::measureStatus : webtest::MeasureStatus();
   if (status == WEB_MEASURE_OK)
     *out = webtest::measuredWidth >= 0 ? webtest::measuredWidth : static_cast<int>(len * 7);
   return status;
 }
-extern "C" int web_metrics(const int *, int *ascent, int *descent)
+extern "C" int web_metrics(const int *descriptor, int *ascent, int *descent)
 {
+  webtest::metricDescriptors.push_back(std::vector<int>(descriptor, descriptor + 9));
+  webtest::measurementOrder.push_back("metrics");
   ++webtest::metricCalls;
-  const int status = webtest::MeasureStatus();
+  const int status =
+      webtest::ScheduledFailure(webtest::failMetrics) ? webtest::measureStatus : webtest::MeasureStatus();
   if (status == WEB_MEASURE_OK)
   {
-    *ascent = 10;
-    *descent = 3;
+    *ascent = webtest::metricAscent;
+    *descent = webtest::metricDescent;
   }
   return status;
 }
