@@ -388,6 +388,67 @@ namespace loka
     } // namespace scene
     namespace detail
     {
+      /** Completed body-write result; birth reading is present only for a landed write. */
+      class TextBodyWrite
+      {
+      public:
+        enum Landed
+        {
+          LANDED_NONE,
+          LANDED_REPLACEMENT
+        };
+        static TextBodyWrite NothingTaken()
+        {
+          return TextBodyWrite(
+              LANDED_NONE, TextReplacement(), scene::Reply<TextReplacement>(), scene::TextStoreReading());
+        }
+        static TextBodyWrite Refused(const TextReplacement &replacement, TextReplaceResult reason)
+        {
+          return TextBodyWrite(LANDED_NONE,
+                               replacement,
+                               scene::Reply<TextReplacement>::Refused(replacement, reason),
+                               scene::TextStoreReading());
+        }
+        static TextBodyWrite ReplacementLanded(const TextReplacement &replacement,
+                                               const scene::Reply<TextReplacement> &reply,
+                                               const scene::TextStoreReading &reading)
+        {
+          return TextBodyWrite(LANDED_REPLACEMENT, replacement, reply, reading);
+        }
+        Landed landed() const
+        {
+          return this->landed_;
+        }
+        const TextReplacement &replacement() const
+        {
+          return this->replacement_;
+        }
+        const scene::Reply<TextReplacement> &reply() const
+        {
+          return this->reply_;
+        }
+        const scene::TextStoreReading &reading() const
+        {
+          assert(this->landed() != LANDED_NONE);
+          return this->reading_;
+        }
+
+      private:
+        TextBodyWrite(Landed landed,
+                      const TextReplacement &replacement,
+                      const scene::Reply<TextReplacement> &reply,
+                      const scene::TextStoreReading &reading)
+            : landed_(landed),
+              replacement_(replacement),
+              reply_(reply),
+              reading_(reading)
+        {
+        }
+        const Landed landed_;
+        const TextReplacement replacement_;
+        const scene::Reply<TextReplacement> reply_;
+        const scene::TextStoreReading reading_;
+      };
       /** Publish-local reply authority; no seat survives the document link. */
       class TextDocumentReplyAccess
       {
@@ -470,6 +531,50 @@ namespace loka
         Visitor visitor(controller, KEEP_REQUESTS);
         documents.visit(visitor);
       }
+      TextBodyWrite TextDocumentPublisher::writeBody(scene::TextDocumentRegistration &row,
+                                                     scene::IPlatformController &controller,
+                                                     Requests requests,
+                                                     scene::TextStoreRow *store,
+                                                     bool read,
+                                                     const scene::TextStoreReading &first)
+      {
+        if (requests != TAKE_REQUESTS || row.phase_.value() == scene::TextStorePhase::STORE_AWAITED)
+          return TextBodyWrite::NothingTaken();
+        TextDocument &document = *row.document_.remote();
+        const TextReplacement pending = document.replacement_.get();
+        if (pending.stage() == TextReplacement::NONE)
+          return TextBodyWrite::NothingTaken();
+        document.replacement_.set(TextReplacement());
+        TextReplaceResult reason = TEXT_REPLACE_UNAVAILABLE;
+        if (row.phase_.value() == scene::TextStorePhase::STORE_LINKED && read)
+        {
+          if (first.marked())
+            reason = TEXT_REPLACE_COMPOSING;
+          else
+          {
+            TextStoreSource source(pending);
+            scene::TextStoreRow *fresh = 0;
+            scene::TextStoreReading reading;
+            const scene::TextStoreBirth birth = controller.createTextStore(source, store, fresh, reading);
+            reason = replacementRefusal(birth);
+            if (birth == scene::TEXT_STORE_BORN)
+            {
+              assert(fresh);
+              row.connectStore(*fresh);
+              store->retire();
+              TextReplacement applied(pending);
+              applied.placement_ = source.appliedPlacement();
+              return TextBodyWrite::ReplacementLanded(pending, scene::formReply(pending, applied, reason), reading);
+            }
+          }
+        }
+        return TextBodyWrite::Refused(pending, reason);
+      }
+      void TextDocumentPublisher::replyBodyWrite(scene::TextDocumentRegistration &row, const TextBodyWrite &write)
+      {
+        if (write.replacement().stage() != TextReplacement::NONE && row.document_.remote())
+          TextDocumentReplyAccess::seat(row.document_.remote()->replacement_).set(write.reply(), true);
+      }
       void TextDocumentPublisher::publish(scene::TextDocumentRegistration &row,
                                           scene::IPlatformController &controller,
                                           Requests requests)
@@ -482,46 +587,13 @@ namespace loka
           return;
         const TextDocumentFact previous = document.fact_.get();
         const scene::WriteSeat<TextDocumentFact> fact = document.fact_.writeSeat();
-        scene::TextStoreReading first, second;
+        scene::TextStoreReading first;
         scene::TextStoreRow *store = row.store();
         const bool read = store && controller.readTextStore(*store, first);
-        TextReplacement pending;
-        scene::Reply<TextReplacement> reply;
-        bool replaced = false;
-        if (requests == TAKE_REQUESTS && row.phase_.value() != scene::TextStorePhase::STORE_AWAITED)
-        {
-          pending = document.replacement_.get();
-          if (pending.stage() != TextReplacement::NONE)
-          {
-            document.replacement_.set(TextReplacement());
-            TextReplaceResult reason = TEXT_REPLACE_UNAVAILABLE;
-            if (row.phase_.value() == scene::TextStorePhase::STORE_LINKED && read)
-            {
-              if (first.marked())
-                reason = TEXT_REPLACE_COMPOSING;
-              else
-              {
-                TextStoreSource source(pending);
-                scene::TextStoreRow *fresh = 0;
-                const scene::TextStoreBirth birth = controller.createTextStore(source, store, fresh, second);
-                reason = replacementRefusal(birth);
-                if (birth == scene::TEXT_STORE_BORN)
-                {
-                  assert(fresh);
-                  row.connectStore(*fresh);
-                  store->retire();
-                  replaced = true;
-                  TextReplacement applied(pending);
-                  applied.placement_ = source.appliedPlacement();
-                  reply = scene::formReply(pending, applied, reason);
-                }
-              }
-            }
-            if (!replaced)
-              reply = scene::Reply<TextReplacement>::Refused(pending, reason);
-          }
-        }
-        const unsigned long revision = advanceRevision(previous.textRevision(), (read && first.changed()) || replaced);
+        const TextBodyWrite write = writeBody(row, controller, requests, store, read, first);
+        const TextBodyWrite::Landed landed = write.landed();
+        const unsigned long revision = advanceRevision(
+            previous.textRevision(), (read && first.changed()) || (landed != TextBodyWrite::LANDED_NONE));
         // No gate or early return after consuming the first reading.
         if (requests == TAKE_REQUESTS && !(read && first.marked())
             && row.phase_.value() != scene::TextStorePhase::STORE_AWAITED)
@@ -538,7 +610,10 @@ namespace loka
           }
         }
         store = row.store();
-        const bool reread = replaced || (store && controller.readTextStore(*store, second));
+        scene::TextStoreReading rereading;
+        const bool reread =
+            (landed != TextBodyWrite::LANDED_NONE) || (store && controller.readTextStore(*store, rereading));
+        const scene::TextStoreReading &second = landed != TextBodyWrite::LANDED_NONE ? write.reading() : rereading;
         scene::TextChangeNote changes;
         if (read)
           changes.note(first);
@@ -546,7 +621,8 @@ namespace loka
           changes.note(second);
         const scene::TextStoreReading combined = changes.take();
         const unsigned long finalRevision = advanceRevision(
-            previous.textRevision(), (read && first.changed()) || replaced || (reread && second.changed()));
+            previous.textRevision(),
+            (read && first.changed()) || (landed != TextBodyWrite::LANDED_NONE) || (reread && second.changed()));
         TextDocumentState state = TEXT_DOCUMENT_AWAITING_STORE;
         switch (row.phase_.value())
         {
@@ -556,9 +632,9 @@ namespace loka
           state = TEXT_DOCUMENT_UNAVAILABLE;
           break;
         case scene::TextStorePhase::STORE_LINKED:
-          state = replaced ? TEXT_DOCUMENT_READY
-                  : store  ? (combined.marked() ? TEXT_DOCUMENT_MARKED : TEXT_DOCUMENT_READY)
-                           : TEXT_DOCUMENT_UNAVAILABLE;
+          state = landed != TextBodyWrite::LANDED_NONE ? TEXT_DOCUMENT_READY
+                  : store ? (combined.marked() ? TEXT_DOCUMENT_MARKED : TEXT_DOCUMENT_READY)
+                          : TEXT_DOCUMENT_UNAVAILABLE;
           break;
         }
         const scene::TextStoreReading &last = reread ? second : first;
@@ -570,22 +646,23 @@ namespace loka
                                         : TextPosition::None();
         TextChangedRange range;
         // Birth carries the whole native range even though it reports no pending edit.
-        const bool reported = replaced ? second.queryRange(range) : combined.queryRange(range);
-        assert(!replaced || (reported && range.start() == 0));
+        const bool reported =
+            landed != TextBodyWrite::LANDED_NONE ? second.queryRange(range) : combined.queryRange(range);
+        assert(landed == TextBodyWrite::LANDED_NONE || (reported && range.start() == 0));
         const TextPosition changedStart =
             reported ? TextDocument::position(finalRevision, range.start()) : TextPosition::None();
         const TextPosition insertedEnd =
             reported ? TextDocument::position(finalRevision, range.start() + range.insertedLength())
                      : TextPosition::None();
         file::File source;
-        if (replaced)
-          pending.querySource(source);
-        const TextDocumentOrigin origin = replaced ? TextDocumentOrigin(source, finalRevision) : previous.origin();
+        if (landed == TextBodyWrite::LANDED_REPLACEMENT)
+          write.replacement().querySource(source);
+        const TextDocumentOrigin origin =
+            landed == TextBodyWrite::LANDED_REPLACEMENT ? TextDocumentOrigin(source, finalRevision) : previous.origin();
         const TextDocumentFact next(state, finalRevision, caret, anchor, changedStart, insertedEnd, origin);
         if (next != previous)
           fact.set(next);
-        if (pending.stage() != TextReplacement::NONE && row.document_.remote())
-          TextDocumentReplyAccess::seat(row.document_.remote()->replacement_).set(reply, true);
+        replyBodyWrite(row, write);
       }
     } // namespace detail
   } // namespace app

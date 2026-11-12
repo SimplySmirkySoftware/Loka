@@ -1324,6 +1324,24 @@ namespace
     awaitedDocument = 0;
     awaitedScene = 0;
   }
+  void replacementWithdrawalDuringFactPin()
+  {
+    Fixture f;
+    TextDocument &doc = f.text();
+    WithdrawDocument withdrawal(doc);
+    unsigned replies = 0;
+    doc.fact()->bind(&WithdrawDocument::run, &withdrawal, false);
+    doc.replaceReply()->bind(&count, &replies, false);
+    LOKA_VERIFY(doc.replace(bodyReplacement("withdraw during publication")) == POST_ACCEPTED);
+    // The fact observer cuts the link before the publisher takes a reply seat.
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(withdrawal.calls == 1);
+    LOKA_VERIFY(doc.fact()->get().textRevision() == 1);
+    LOKA_VERIFY(replies == 0 && doc.replaceReply()->get().kind() == Reply<TextReplacement>::NO_REPLY);
+    LOKA_VERIFY(doc.replace(TextReplacement::Empty()) == POST_INVALID);
+    doc.fact()->unbind(&WithdrawDocument::run, &withdrawal);
+    doc.replaceReply()->unbind(&count, &replies);
+  }
   void replacementCancellationPins()
   {
     for (unsigned event = 0; event < 3; ++event)
@@ -1519,6 +1537,7 @@ void testTextWholeReplacementContracts()
   replacementPlacementPins();
   replacementExhaustionPins();
   replacementCancellationPins();
+  replacementWithdrawalDuringFactPin();
   replacementAwaitedPin();
   replacementOriginPins();
 }
