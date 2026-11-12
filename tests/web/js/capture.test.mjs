@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import vm from 'node:vm';
+import {readFileSync} from 'node:fs';
 import {mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -229,9 +230,13 @@ async function poll(check, message, ms = 3000) {
   }
 }
 
+// A killed descendant whose new parent does not reap it stays visible as a zombie
+// (state Z), so on Linux a zombie counts as terminated rather than as running.
 function gone(pid) {
-  try { process.kill(pid, 0); return false; }
+  try { process.kill(pid, 0); }
   catch (error) { if (error.code === 'ESRCH') return true; throw error; }
+  try { return readFileSync('/proc/' + pid + '/stat', 'utf8').split(') ').pop()[0] === 'Z'; }
+  catch { return false; }
 }
 
 function kill(pid) {
@@ -263,7 +268,7 @@ for (const cause of ['abort', 'timeout']) test('real browser ' + cause + ' waits
       const result = await Promise.race([outcome, deadline]);
       assert.match(result.error?.message || '', cause === 'abort' ? /test abort/ : /timed out/);
       assert.equal(gone(pids[0]), true, 'promise settles after launcher close');
-      await poll(() => pids.every(gone), 'launcher and descendant must both reach ESRCH');
+      await poll(() => pids.every(gone), 'launcher and descendant must both be terminated');
     } finally {
       clearTimeout(watchdog);
       for (const pid of pids.filter(pid => Number.isInteger(pid) && pid > 0)) kill(pid);
