@@ -1,6 +1,8 @@
 /** Module-local DOM owner. Each import addresses its own resource or timer row.
  * Buffers are consumed synchronously; callbacks retain session/token identities. */
 addToLibrary({
+  /** Cost: bootstrap once after admissions; resolves the current module option, no resource rows. */
+  web_skin: () => LokaWebStyle.resolveSkin(Module['lokaSkin']),
   $WebDOM: {
     text: null,
     resources: new Map(), tasks: new Map(), next: 1,

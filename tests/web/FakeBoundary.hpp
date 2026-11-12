@@ -59,7 +59,9 @@ namespace webtest
   extern std::vector<std::vector<int> > metricDescriptors, advanceDescriptors;
   extern std::vector<std::string> measurementOrder, measuredText;
   extern int scrollStatus, appliedX, appliedY, gutterVertical, gutterHorizontal;
-  extern bool geometryMeasurable;
+  extern bool geometryMeasurable, textService;
+  extern int skinSelection;
+  extern unsigned skinPulls;
   void reset();
   void fire(unsigned handle, double now);
   unsigned task(int kind);

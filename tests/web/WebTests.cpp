@@ -1,5 +1,6 @@
 #include "WebTextDescriptor.hpp"
 #include "WebSession.hpp"
+#include "WebSkins.hpp"
 #include "WebWindow.hpp"
 #include "WebTestAccess.hpp"
 #include "FakeBoundary.hpp"
@@ -935,6 +936,57 @@ namespace
     LOKA_VERIFY(false && "admission must precede Config construction");
     return 0;
   }
+  void SkinStartTest()
+  {
+    webtest::Fixture fixture;
+    for (int invalid = 0; invalid != 2; ++invalid)
+    {
+      Reset(fixture);
+      webtest::skinSelection = invalid ? WEB_SKIN_COUNT : -1;
+      WebSession session;
+      LOKA_VERIFY(session.spacing().verticalGap() == 12);
+      LOKA_VERIFY(session.start(&UnexpectedConfig, 0) == WebSession::FAILED);
+      LOKA_VERIFY(webtest::skinPulls == 1 && webtest::resources.empty() && Access::routesEmpty(session));
+      LOKA_VERIFY(webtest::textService);
+      LOKA_VERIFY(session.click(1, 0) == WebSession::REFUSED_CLOSED);
+      LOKA_VERIFY(session.start(&UnexpectedConfig, 1) == WebSession::FAILED);
+      Shutdown(session);
+      LOKA_VERIFY(webtest::completed == 1 && Access::disposed(session) && !webtest::textService);
+    }
+    for (int admission = 0; admission != 2; ++admission)
+    {
+      Reset(fixture);
+      webtest::geometryMeasurable = admission != 0;
+      webtest::failTextAdmit = admission;
+      WebSession session;
+      LOKA_VERIFY(session.start(&UnexpectedConfig, 0) == WebSession::FAILED);
+      LOKA_VERIFY(webtest::skinPulls == 0);
+      Shutdown(session);
+    }
+    Reset(fixture);
+    webtest::skinSelection = 2;
+    WebSession selected;
+    LOKA_VERIFY(selected.start(&CreateRoster, 0) == WebSession::STARTED);
+    const unsigned initialRoots = static_cast<unsigned>(fixture.nodes.size());
+    webtest::skinSelection = 3;
+    selected.wake(IMMEDIATE, 1);
+    LOKA_VERIFY(fixture.nodes.size() > initialRoots && webtest::skinPulls == 1);
+    unsigned roots = 0;
+    for (std::map<uint32_t, webtest::Resource>::const_iterator i = webtest::resources.begin();
+         i != webtest::resources.end();
+         ++i)
+    {
+      if (i->second.kind != ROOT)
+        continue;
+      ++roots;
+      WebWindow *window = selected.routes().find(i->first)->root;
+      LOKA_VERIFY(&window->controller()->spacing() == &selected.spacing());
+      LOKA_VERIFY(window->controller()->spacing().standardWindowMargin() == 16);
+    }
+    LOKA_VERIFY(roots > 1);
+    Shutdown(selected);
+    std::puts("SkinStart signed bounds/admission ordering/completion passed");
+  }
   void BootstrapTest()
   {
     webtest::Fixture fixture;
@@ -1152,12 +1204,13 @@ int main(int argc, char **argv)
   RUN(IdleTest);
   RUN(TextProtocolRefusalTest);
   RUN(TextDescriptorTest);
+  RUN(SkinStartTest);
   RUN(BootstrapTest);
   RUN(OldModuleTest);
   RUN(CloseDuringTailTest);
   RUN(RootVisibilityTest);
   RUN(TwoRootTest);
 #undef RUN
-  std::puts("30 Web test groups passed (20 legacy, 6 projection, 1 scroll, 1 stack, 1 grid, 1 Cell)");
+  std::puts("31 Web test groups passed (20 legacy, 6 projection, 1 scroll, 1 stack, 1 grid, 1 Cell, 1 skin)");
   return 0;
 }

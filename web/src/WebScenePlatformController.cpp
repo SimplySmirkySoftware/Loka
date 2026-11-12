@@ -117,7 +117,7 @@ WebScenePlatformController::WebScenePlatformController(WebSession &session,
   this->layout_.height = Narrow(height);
   this->layout_.lineHeight = 16;
   this->layout_.spacing = 4;
-  loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(this->layouts_, 0, 0, WebLayoutSpacing);
+  loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(this->layouts_, 0, 0, this->session_.spacing());
   this->layouts_.registerHandler(new WebStackLayoutHandler(*this));
   this->layouts_.registerHandler(new WebGridLayoutHandler());
 }
@@ -301,7 +301,7 @@ int WebScenePlatformController::layoutNode(Node *node, const LayoutState &receiv
   if (!node || node->lifecycleFact() != NODE_FACT_ATTACHED)
     return received.y;
   LayoutState state = received;
-  state.spacing = Narrow(loka::app::layout::resolveLayoutGap(node, received.spacing, WebLayoutSpacing));
+  state.spacing = Narrow(loka::app::layout::resolveLayoutGap(node, received.spacing, this->session_.spacing()));
   if (node->asScrollViewNode())
   {
     WebResource *root = this->session_.routes().find(this->root_);
@@ -502,7 +502,7 @@ WebScenePlatformController::ScrollResult WebScenePlatformController::layoutScrol
   if (!ctx)
     return refused;
   short knownWidth = 0;
-  const bool known = loka::app::layout::queryContentOverflowWidth(node, WebLayoutSpacing, this, knownWidth);
+  const bool known = loka::app::layout::queryContentOverflowWidth(node, this->session_.spacing(), this, knownWidth);
   const int knownOverflowWidth = known ? knownWidth : 0;
   const WebScrollbarGeometry &gutter = this->session_.scrollbarGeometry();
   const int viewportWidth = std::max(0, state.width - gutter.vertical());
@@ -561,4 +561,9 @@ bool WebScenePlatformController::applyScroll(ScrollViewNode &node,
 {
   WebScrollContext *ctx = static_cast<WebScrollContext *>(node.getContext());
   return ctx && ctx->apply(target);
+}
+
+const loka::app::layout::RailSpacing &WebScenePlatformController::spacing() const
+{
+  return this->session_.spacing();
 }

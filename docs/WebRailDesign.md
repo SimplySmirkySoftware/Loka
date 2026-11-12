@@ -68,7 +68,7 @@ PR 1 initially projected one-line Text through INaturalSizeSource with fixed met
 
 Buttons are native `<button type="button">` elements. Mouse, Space and Enter use the same click export. Browser focus is read at completion; no keyboard or focus-event export is added. Layout containers other than ScrollView have no DOM elements.
 
-EditText, TextEditor, PopupMenu, ImageView, RectSurface, ScrollBar and CardBand are explicit refused handlers. A reached ScrollView visit settles once after projection, including refusal; a deferred visit leaves its request pending. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. IME, general pointer input, skins and hot reload remain outside this increment.
+EditText, TextEditor, PopupMenu, ImageView, RectSurface, ScrollBar and CardBand are explicit refused handlers. A reached ScrollView visit settles once after projection, including refusal; a deferred visit leaves its request pending. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. IME, general pointer input and hot reload remain outside this increment. Spacing-only skins are specified below.
 
 ## Host contract
 
@@ -727,3 +727,76 @@ array; stale artifacts cannot restore removed registrations. Fields preserve
 spaces, non-ASCII text and semicolons. The serializer escapes backslash, quote,
 backspace, tab, newline, form feed and carriage return, and refuses other C0
 controls representable in CMake strings (NUL is not representable).
+
+
+## Spacing-only skins
+
+The factory option `lokaSkin` selects only the Web rail's immutable `RailSpacing`.
+The ordered `webSkins` table in `tools/style-vocab.json` generates the C++ rows
+and the JavaScript name resolver:
+
+| Name | Vertical gap | Horizontal gap | Standard window margin value |
+| --- | ---: | ---: | ---: |
+| `web` (default) | 12 | 4 | 9 |
+| `win32` | 6 | 6 | 10 |
+| `macos` | 6 | 6 | 16 |
+| `classic` | 8 | 8 | 12 |
+
+For example, await the module factory with `{lokaSkin: 'macos', locateFile}`,
+then call `module.web.start()`. BOOTSTRAP first admits scrollbar geometry and
+text/schema compatibility. Only after both succeed does `web_skin()` read that
+module's current `Module['lokaSkin']`, exactly once, before PlatformContext,
+Config or App construction. Names are case-sensitive. Missing, unknown and
+non-string names resolve to `web`, including inherited-property names such as
+`constructor` and `__proto__`. A signed import index below zero or at least
+COUNT is instead a protocol failure: it constructs none of those owners,
+returns the existing FAILED result and schedules the ordinary shutdown task.
+Completion releases the already-admitted text service.
+
+Each WebSession starts with a non-null pointer to the static `web` row and
+replaces it at most once after the bounds check. Controllers borrow the session's
+const reference; the builtin Box handler copies that value at construction.
+Later windows use the same selection. Changing the option after startup has no
+effect, and concurrently live modules select independently. There is no live
+skin switch, selection cache in JavaScript, allocation, observer or new clock.
+Cost: one startup import and at most four generated name comparisons; each
+layout consumer reads in O(1), with no additional tree walk.
+
+The existing admission fingerprint now also covers
+`webSkinSelection = {default: 0, names: [...]}`: array order defines name-to-index
+identity and length defines COUNT. A renamed or reordered table changes the
+fingerprint and refuses mismatched JavaScript/Wasm before root creation. Text
+wire version 2 and its nine words are unchanged. Spacing numbers are consumed
+only by C++ and remain outside the fingerprint; changing only those numbers
+leaves it unchanged. This detects accidental skew, not adversarial collisions.
+
+A skin leaves Button and Cell sizing rules, padding and borders unchanged
+(their allocated dimensions can still change with the space the new gaps
+leave), and does not change fonts, colours, scrollbar geometry, DPI policy,
+or explicit gap overrides. It does not
+apply a window content margin at the root. HelloWorld's inner ScrollView Box
+uses the selected standard margin and its default gaps change, while the
+measured root width breakpoint remains 400 (399 is one column; 400 and 420 are
+two). MineSweeper's New Game-to-board gap changes, moving the board and changing
+its remaining height. The root size and the board's Cell chrome are unchanged.
+
+Skin build-verified: Linux x86_64 C++98 testing, ASan, and NDEBUG release;
+Emscripten 7.0.0 Debug fixture and Release `LokaHelloWeb` / `LokaMineWeb`.
+The host and Node/Wasm fake suites pass, including the unchanged instruction
+goldens, and the full native suite passes. The ASan web/layout tests ran with
+leak detection disabled, so they give no leak verdict. The spacing mutations
+compile and reach their discriminating assertions.
+
+`lokaSkin` is a plain property of the module argument, read through
+`Module['lokaSkin']` when `web_skin()` runs. It is not listed in
+`INCOMING_MODULE_JS_API`: Emscripten accepts only its own API names there and
+warns about any other entry.
+
+Skin browser-verified (Chromium on Linux, through the driver), for each of
+`web`, `win32`, `macos` and `classic`: the fixture's gaps, an explicit gap
+override that no skin changes, and a selection that stays frozen after start;
+HelloWorld at measured root content-box widths 399 / 400 / 420 with its inner
+padding and an unmoved two-column threshold; MineSweeper's Button-to-board gap
+with clicks and New Game still working. Two modules with different skins stay
+independent while both are alive. Without an installed Chromium the driver
+prints a skip.

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {readFileSync} from 'node:fs';
 const dir=new URL('../../../web/js/',import.meta.url);
 const vocab=readFileSync(new URL('style-vocab.js',dir),'utf8');
@@ -145,3 +147,34 @@ for(const parentFirst of [true,false]) {
   context.WebDOM.resources.delete(40);
 }
 console.log('scroll adapter: parent-first and child-first release passed');
+
+for (const [name, index] of [[undefined,0],['web',0],['win32',1],['macos',2],['classic',3],
+  ['Web',0],['Win32',0],['MACOS',0],['CLASSIC',0],['unknown',0],['constructor',0],['toString',0],['__proto__',0],['',0],
+  [1,0],[null,0],[{},0],[['macos'],0],[true,0]]) {
+  context.Module.lokaSkin=name;
+  assert.equal(imports.web_skin(),index,'skin resolved at pull: '+String(name));
+}
+console.log('skins: names, fallback and pull-time option passed');
+
+// Build real mapping-skewed schemas using the generator; admission must refuse
+// before canvas/service or resource creation, even though the text fields agree.
+for (const mutation of ['reorder','rename']) {
+  const generated=spawnSync('python3',['-c',`
+import importlib.util, json
+from pathlib import Path
+root=Path.cwd()
+spec=importlib.util.spec_from_file_location('g',root/'tools/ci/gen_style_vocab.py')
+g=importlib.util.module_from_spec(spec);spec.loader.exec_module(g)
+v=json.loads((root/'tools/style-vocab.json').read_text())
+if '${mutation}' == 'reorder': v['webSkins'][1:3]=reversed(v['webSkins'][1:3])
+else: v['webSkins'][1]['name']='renamed'
+print(g.generate_web(v))
+`],{cwd:fileURLToPath(new URL('../../../',import.meta.url)),encoding:'utf8'});
+  assert.equal(generated.status,0,generated.stderr);
+  vm.runInContext(generated.stdout,context);
+  context.WebDOM.resources.clear();context.WebDOM.text=null;
+  assert.equal(imports.web_text_admit(fingerprint,expected.count),false,'skin '+mutation+' skew refuses');
+  assert.equal(context.WebDOM.text,null);
+  assert.equal(context.WebDOM.resources.size,0);
+}
+console.log('skins: generated reorder/rename skew refused before resources');
