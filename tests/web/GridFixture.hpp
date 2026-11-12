@@ -148,7 +148,11 @@ namespace webtest
     }
     virtual void compose(AppComposition &c)
     {
-      c << WindowDef(WindowProps().size(100, 80).scene(loka::app::scene::Boundary<GridFixture>()));
+      c << WindowDef(WindowProps()
+                         .contentMargin(gridCell() == GRID_ROOT ? loka::app::layout::LayoutGap()
+                                                                : loka::app::layout::LayoutGap::of(0))
+                         .size(100, 80)
+                         .scene(loka::app::scene::Boundary<GridFixture>()));
     }
   };
   inline AppConfigurable *CreateGrid(PlatformContext *platform)

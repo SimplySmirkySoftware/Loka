@@ -1,4 +1,5 @@
 #include <algorithm>
+#include "app/layout/BoxLayout.hpp"
 #include "WebWindow.hpp"
 #include "WebStackLayoutHandler.hpp"
 #include "WebGridLayoutHandler.hpp"
@@ -102,19 +103,17 @@ private:
   WebScenePlatformController &controller_;
   short bottom_;
 };
-WebScenePlatformController::WebScenePlatformController(WebSession &session,
-                                                       loka::web::Token root,
-                                                       int width,
-                                                       int height)
+WebScenePlatformController::WebScenePlatformController(
+    WebSession &session, loka::web::Token root, int width, int height, int rootMargin)
     : session_(session),
       root_(root),
+      rootMargin_(rootMargin),
       tree_(0),
       layout_(),
       retired_(0),
       projectionParents_(reinterpret_cast<void *>(static_cast<uintptr_t>(root)))
 {
-  this->layout_.width = Narrow(width);
-  this->layout_.height = Narrow(height);
+  this->setRootOffer(width, height);
   this->layout_.lineHeight = 16;
   this->layout_.spacing = 4;
   loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(this->layouts_, 0, 0, this->session_.spacing());
@@ -202,10 +201,18 @@ void WebScenePlatformController::requestRelayout()
 {
   this->requestSceneRelayout(this->tree_);
 }
+void WebScenePlatformController::setRootOffer(int width, int height)
+{
+  // Deliberate platform twin of Win32/Mac root offer assembly: margin is an
+  // offer inset, not a clipping boundary or a scroll-content origin.
+  this->layout_.x = Narrow(this->rootMargin_);
+  this->layout_.y = Narrow(this->rootMargin_);
+  this->layout_.width = Narrow(loka::app::layout::insetExtent(width, this->rootMargin_, this->rootMargin_));
+  this->layout_.height = Narrow(loka::app::layout::insetExtent(height, this->rootMargin_, this->rootMargin_));
+}
 void WebScenePlatformController::resize(int width, int height)
 {
-  this->layout_.width = Narrow(width);
-  this->layout_.height = Narrow(height);
+  this->setRootOffer(width, height);
   this->requestRelayout();
 }
 bool WebScenePlatformController::readNativeFocus(NodeContext *&out)

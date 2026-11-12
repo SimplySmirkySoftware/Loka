@@ -766,6 +766,37 @@ backspace, tab, newline, form feed and carriage return, and refuses other C0
 controls representable in CMake strings (NUL is not representable).
 
 
+## Root window content margin
+
+WebWindow resolves `resolveWindowContentMargin(this, session.spacing())` once
+when constructing its controller. The controller retains one immutable resolved
+`rootMargin_`. Construction and resize share `setRootOffer`: origin `(m, m)`,
+width `insetExtent(width, m, m)`, height `insetExtent(height, m, m)`.
+An undersized dimension clamps to zero without moving the origin. This is the
+intentional platform twin of native root-offer assembly, using the existing
+Window contract and common inset operation.
+
+The offer is not a containment or clipping guarantee. Leaf fallbacks, fixed
+sizes and overflow rules still apply. Root DOM sizing and overflow policy stay
+unchanged; descendant geometry can change scrollable overflow. `nativeFrame`
+continues to report the measured root content box before margin, at `(0, 0)`.
+A root ScrollView receives the inset seat; its content-width query excludes the
+window margin and children retain local content coordinates. Gutter admission
+and the reduced seat determine its axes, viewport and range.
+
+Scene replacement retains the controller's margin and latest resized offer.
+Later windows resolve their own immutable margin against the frozen session
+skin. Windowless startup still constructs no controller. Resolution costs O(1)
+once per window; offer calculation costs O(1) per construction/resize, with no
+new tree walk, allocation, observer, callback, or cleanup path.
+
+Earlier build/browser evidence in this document predates this root-margin
+change and describes its then-current fixtures and geometry. In particular,
+the earlier Counter/Scroll goldens, Grid browser coordinates, and skin evidence
+must not be read as verification of the inset root offer. Current host/Wasm
+acceptance lives in `RootMarginTest` and `SkinStartTest`; browser cells require
+an independent driver run to establish document overflow and native hit testing.
+
 ## Spacing-only skins
 
 The factory option `lokaSkin` selects only the Web rail's immutable `RailSpacing`.
@@ -810,14 +841,18 @@ leaves it unchanged. This detects accidental skew, not adversarial collisions.
 A skin leaves Button and Cell sizing rules, padding and borders unchanged
 (their allocated dimensions can still change with the space the new gaps
 leave), and does not change fonts, colours, scrollbar geometry, DPI policy,
-or explicit gap overrides. It does not
-apply a window content margin at the root. HelloWorld's inner ScrollView Box
+or explicit gap overrides. The selected standard window margin is applied at
+the root when Window contentMargin is unspecified; explicit zero stays zero.
+HelloWorld explicitly uses contentMargin(0), so its inner ScrollView Box
 uses the selected standard margin and its default gaps change, while the
 measured root width breakpoint remains 400 (399 is one column; 400 and 420 are
 two). MineSweeper's New Game-to-board gap changes, moving the board and changing
-its remaining height. The root size and the board's Cell chrome are unchanged.
+its remaining height. New Game begins at the resolved root margin; the board's
+available width and height are reduced by twice that margin. The root size and
+the board's Cell chrome are unchanged.
 
-Skin build-verified: Linux x86_64 C++98 testing, ASan, and NDEBUG release;
+Skin build-verified (before root-margin application): Linux x86_64 C++98
+testing, ASan, and NDEBUG release;
 Emscripten 7.0.0 Debug fixture and Release `LokaHelloWeb` / `LokaMineWeb`.
 The host and Node/Wasm fake suites pass, including the unchanged instruction
 goldens, and the full native suite passes. The ASan web/layout tests ran with
@@ -829,7 +864,8 @@ compile and reach their discriminating assertions.
 `INCOMING_MODULE_JS_API`: Emscripten accepts only its own API names there and
 warns about any other entry.
 
-Skin browser-verified (Chromium on Linux, through the driver), for each of
+Skin browser-verified (before root-margin application; Chromium on Linux,
+through the driver), for each of
 `web`, `win32`, `macos` and `classic`: the fixture's gaps, an explicit gap
 override that no skin changes, and a selection that stays frozen after start;
 HelloWorld at measured root content-box widths 399 / 400 / 420 with its inner

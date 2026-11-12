@@ -241,8 +241,12 @@ try {
     const root=document.querySelector('body > div[data-loka-token]'),s=root.firstElementChild,c=s.firstElementChild;
     window.scrollCell={root,s,c};
     return {native:s.scrollTop,fact:fixture._fixture_scroll_fact(1),vertical:s.offsetWidth-s.clientWidth,horizontal:s.offsetHeight-s.clientHeight,
-      width:s.clientWidth,reportedWidth:fixture._fixture_scroll_fact(2),document:parseFloat(c.style.width)};
+      seat:[parseFloat(s.style.left),parseFloat(s.style.top),parseFloat(s.style.width),parseFloat(s.style.height)],height:s.clientHeight,reportedHeight:fixture._fixture_scroll_fact(3),width:s.clientWidth,reportedWidth:fixture._fixture_scroll_fact(2),document:parseFloat(c.style.width)};
   })()`);
+  assert.deepEqual(scrollInfo.seat,[19,19,182,82]);
+  assert.equal(scrollInfo.width,182-scrollInfo.vertical);
+  assert.equal(scrollInfo.height,82-scrollInfo.horizontal);
+  assert.equal(scrollInfo.height,scrollInfo.reportedHeight);
   assert.equal(scrollInfo.native,scrollInfo.fact+7,'bootstrap nonzero origin after reveal');
   assert.equal(scrollInfo.width,scrollInfo.reportedWidth);
   assert.equal(scrollInfo.document,400);
@@ -396,7 +400,7 @@ try {
     return {result,widths:[...document.querySelectorAll('body > div span')].map(e=>e.style.width)};
   })()`);
   assert.equal(initial.result,0);
-  assert.deepEqual(initial.widths,['300px','300px']);
+  assert.deepEqual(initial.widths,['282px','282px']);
   const tokens=await client.evaluate(`({buttons:[...document.querySelectorAll('button')].map(e=>+e.dataset.lokaToken),
     roots:[...document.querySelectorAll('body > div')].map(e=>+e.dataset.lokaToken)})`);
   const button=tokens.buttons[0];
@@ -442,10 +446,10 @@ try {
       {width:'${width}px',height:'${height}px'})`);
     for(let attempt=0; attempt<100; ++attempt) {
       const applied=await client.evaluate(`document.querySelector('[data-loka-token="${root}"] span').style.width`);
-      if(applied===(width-20)+'px') break;
+      if(applied===(width-38)+'px') break;
       await new Promise(resolve=>setTimeout(resolve,20));
     }
-    assert.equal(await client.evaluate(`document.querySelector('[data-loka-token="${root}"] span').style.width`),(width-20)+'px');
+    assert.equal(await client.evaluate(`document.querySelector('[data-loka-token="${root}"] span').style.width`),(width-38)+'px');
     assert.equal(await client.evaluate(`web.resize(${root},${width},${height})`),0);
   }
   await client.evaluate(`fixture._fixture_command(2,${tokens.roots[0]})`);

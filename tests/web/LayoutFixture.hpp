@@ -238,7 +238,12 @@ namespace webtest
     }
     virtual void compose(AppComposition &c)
     {
-      c << WindowDef(WindowProps().size(220, 120).scene(loka::app::scene::Boundary<LayoutFixture>()));
+      c << WindowDef(WindowProps()
+                         .contentMargin(layoutCell() == SKIN_STACK || layoutCell() == SKIN_MARGIN
+                                            ? loka::app::layout::LayoutGap()
+                                            : loka::app::layout::LayoutGap::of(0))
+                         .size(220, 120)
+                         .scene(loka::app::scene::Boundary<LayoutFixture>()));
     }
   };
   inline AppConfigurable *CreateLayout(PlatformContext *platform)

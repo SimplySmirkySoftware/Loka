@@ -39,7 +39,7 @@ namespace
   public:
     std::vector<LayoutState> refusedSeats;
     CountingController(WebSession &session, int width, int height)
-        : WebScenePlatformController(session, 0, width, height)
+        : WebScenePlatformController(session, 0, width, height, 0)
     {
     }
     virtual bool prepareProjectedLayout(Node *node, LayoutState &state)
@@ -209,14 +209,14 @@ namespace
         LOKA_VERIFY(webtest::skinPulls == 1);
         if (cell == webtest::SKIN_STACK)
         {
-          LOKA_VERIFY(Label("b").x - Label("a").width == horizontal[skin]);
-          LOKA_VERIFY(Label("c").y - Label("a").height == gaps[skin]);
-          LOKA_VERIFY(Label("d").x - Label("c").width == 3);
+          LOKA_VERIFY(Label("b").x - Label("a").x - Label("a").width == horizontal[skin]);
+          LOKA_VERIFY(Label("c").y - Label("a").y - Label("a").height == gaps[skin]);
+          LOKA_VERIFY(Label("d").x - Label("c").x - Label("c").width == 3);
         }
         else if (cell == webtest::SKIN_MARGIN)
         {
-          LOKA_VERIFY(Label("margin").x == margins[skin] && Label("margin").y == margins[skin]);
-          LOKA_VERIFY(Label("margin").width == 215 - 2 * margins[skin]);
+          LOKA_VERIFY(Label("margin").x == 2 * margins[skin] && Label("margin").y == 2 * margins[skin]);
+          LOKA_VERIFY(Label("margin").width == 215 - 4 * margins[skin]);
         }
         else if (cell == webtest::SKIN_INHERITED)
           LOKA_VERIFY(Label("second").y - Label("first").height == gaps[skin]);
