@@ -132,7 +132,7 @@ uses the driver's lookup or `CHROMIUM`; missing inputs or failed starts are erro
 The tool uses a 5,000 ms virtual-time budget and checks the host's successful-start
 marker, invalidated by script errors or unhandled rejections; this keeps it independent of the driver's embedded CDP client. Captures
 are observations for PRs, not a verdict, and show the module in Chromium, not the
-VS Code webview. The pure checks run with
+VS Code webview. The capture tests (planning, host page and real-process runner) run with
 `node --test tests/web/js/capture.test.mjs`, a direct invocation like the other
 JS pins.
 
