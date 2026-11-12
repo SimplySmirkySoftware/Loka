@@ -121,6 +121,18 @@ Build `LokaWebTests` with the existing testing, testing-release and testing-asan
 
 The driver requires Node 22.x from 22.18, or Node 24 or newer (not Node 23). With emsdk 7.0.0 sourced, use `emcmake cmake --preset testing-web`, then build `build/wasm/testing`. The node fixture alone links NODERAWFS. The browser fixture links production Web/common libraries without TEST_BUILD and keeps EXIT_RUNTIME disabled. Run `node tests/web/driver/run.mjs build/wasm/testing/web`; absence of Chromium is an explicit skip, and `CHROMIUM=<executable>` names a browser outside PATH. No npm installation is needed.
 
+For PR before/after observations, run
+`node tests/web/driver/capture.mjs [web build dir]` (default `build/wasm/web`)
+after building the catalogued examples. It writes each app × skin as an app-only
+420×330 PNG under the fixed `build/web-captures/` directory. Chromium discovery
+uses the driver's lookup or `CHROMIUM`; missing inputs or failed starts are errors.
+The tool uses a 5,000 ms virtual-time budget and checks the host's successful-start
+marker; this keeps it independent of the driver's embedded CDP client. Captures
+are observations for PRs, not a verdict, and show the module in Chromium, not the
+VS Code webview. The pure checks run with
+`node --test tests/web/js/capture.test.mjs`, a direct invocation like the other
+JS pins.
+
 Production build: `emcmake cmake --preset web && cmake --build --preset web
 --target LokaHelloWeb LokaWebCounter`. Run
 `CHROMIUM=/path/to/chrome node tests/web/driver/run.mjs build/wasm/testing/web`.
