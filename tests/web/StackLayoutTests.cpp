@@ -188,6 +188,54 @@ namespace
     webtest::fire(webtest::task(SHUTDOWN), 1000);
     LOKA_VERIFY(webtest::resources.empty());
   }
+  void SkinConsumers()
+  {
+    const int gaps[] = {12, 6, 6, 8};
+    const int horizontal[] = {4, 6, 6, 8};
+    const int margins[] = {9, 10, 16, 12};
+    for (int skin = 0; skin != 4; ++skin)
+    {
+      for (int cell = webtest::SKIN_STACK; cell <= webtest::SKIN_OVERFLOW; ++cell)
+      {
+        webtest::reset();
+        webtest::skinSelection = skin;
+        webtest::layoutCell() = static_cast<webtest::LayoutCell>(cell);
+        WebSession session;
+        LOKA_VERIFY(session.start(&webtest::CreateLayout, 0) == WebSession::STARTED);
+        LOKA_VERIFY(webtest::skinPulls == 1);
+        webtest::skinSelection = (skin + 1) % 4;
+        const uint32_t root = webtest::token(ROOT);
+        LOKA_VERIFY(session.resize(root, 215, 120, 1) == WebSession::ACCEPTED);
+        LOKA_VERIFY(webtest::skinPulls == 1);
+        if (cell == webtest::SKIN_STACK)
+        {
+          LOKA_VERIFY(Label("b").x - Label("a").width == horizontal[skin]);
+          LOKA_VERIFY(Label("c").y - Label("a").height == gaps[skin]);
+          LOKA_VERIFY(Label("d").x - Label("c").width == 3);
+        }
+        else if (cell == webtest::SKIN_MARGIN)
+        {
+          LOKA_VERIFY(Label("margin").x == margins[skin] && Label("margin").y == margins[skin]);
+          LOKA_VERIFY(Label("margin").width == 215 - 2 * margins[skin]);
+        }
+        else if (cell == webtest::SKIN_INHERITED)
+          LOKA_VERIFY(Label("second").y - Label("first").height == gaps[skin]);
+        else
+        {
+          const uint32_t scroll = webtest::token(SCROLL);
+          LOKA_VERIFY(webtest::resources[scroll].documentWidth == (skin == 0 ? 215 : 210 + horizontal[skin]));
+          {
+            loka::core::Operation turn;
+            webtest::layoutFixture()->request.set(ScrollTarget::Origin(100, 0));
+          }
+          session.wake(IMMEDIATE, 2);
+          LOKA_VERIFY(webtest::resources[scroll].originX == (skin == 0 ? 0 : horizontal[skin] - 5));
+        }
+        Shutdown(session);
+      }
+    }
+    std::puts("SkinConsumers stack/override/box/inherited/overflow/clamp passed");
+  }
   void SessionDegrade()
   {
     webtest::reset();
@@ -666,6 +714,7 @@ void WebStackLayoutTests()
   WrappedRowResize();
   SessionDegrade();
   InitialLeafRefusal();
+  SkinConsumers();
   ColumnRemainingHeight();
   RowScrollReveal();
   RowMidFailure();

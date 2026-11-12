@@ -122,7 +122,7 @@ namespace loka
       if (starts)
       {
         TextStyleSpan &descriptor = this->spans_[span];
-        descriptor.segment = segmentIndex;
+        descriptor.source = TextSegmentRange(segmentIndex);
         descriptor.start = this->length_;
         descriptor.style = segment.style;
         ++filledSpans;
@@ -138,7 +138,10 @@ namespace loka
         row.span = span;
         ++this->length_;
       }
+      // Deliberate contributor-range twin: ToolboxAttributedTextTable::reconcileProjection in
+      // apple/toolbox/src/context/ToolboxAttributedTextTable.cpp.
       this->spans_[span].end = this->length_;
+      this->spans_[span].source = this->spans_[span].source.through(segmentIndex);
       return true;
     }
     SyntheticTextWidthSource::~SyntheticTextWidthSource() {}

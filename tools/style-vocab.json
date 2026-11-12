@@ -42,6 +42,12 @@
     "TextStyle": ["fontSize", "weight", "italic", "underline", "color", "family"],
     "BlockStyle": ["wrap", "truncation", "align"]
   },
+  "webSkins": [
+    {"name": "web", "spacing": [12, 4, 9]},
+    {"name": "win32", "spacing": [6, 6, 10]},
+    {"name": "macos", "spacing": [6, 6, 16]},
+    {"name": "classic", "spacing": [8, 8, 12]}
+  ],
   "webMeasureStatus": {"OK": 0, "REFUSED": 1, "PROTOCOL": 2},
   "webButtonGeometry": {"insetX": 8, "insetY": 4, "border": 1},
   "wire": {

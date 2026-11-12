@@ -77,6 +77,7 @@ namespace loka
       unsigned long offset_;
       bool held_;
       friend class TextDocument;
+      friend class TextSplice;
       friend struct testing::TextPositionTestAccess;
     };
 

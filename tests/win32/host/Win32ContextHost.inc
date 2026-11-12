@@ -9,8 +9,13 @@
 
 namespace win32_host
 {
+  RECT paintClip = {0, 0, 100, 100};
   int failFontAllocations = 0, fontAllocations = 0, drawMeasures = 0;
   int styleReads = 0, fontReads = 0, positions = 0;
+  bool refuseClientRect = false, refuseRelease = false, refuseSnapshot = false;
+  HGDIOBJ restoreFont = 0;
+  int refusedRestores = 0, restoreAttempts = 0, acquisitions = 0, releaseAttempts = 0, releases = 0;
+  std::map<HDC, int> borrowedDCs;
   bool failDC = false, failMetrics = false, failConversion = false;
   std::vector<HWND> windows;
   WNDPROC attributedProc = 0, rectSurfaceProc = 0;
@@ -86,10 +91,20 @@ void Win32ScenePlatformController::applyDisplayFontToNativeSubtree(const loka::w
 
 HDC GetDC(HWND h)
 {
-  return win32_host::failDC || !h ? 0 : &h->dc;
+  if (win32_host::failDC || !h)
+    return 0;
+  ++win32_host::acquisitions;
+  ++win32_host::borrowedDCs[&h->dc];
+  return &h->dc;
 }
-int ReleaseDC(HWND, HDC)
+int ReleaseDC(HWND, HDC dc)
 {
+  ++win32_host::releaseAttempts;
+  if (win32_host::refuseRelease)
+    return 0;
+  LOKA_VERIFY(win32_host::borrowedDCs[dc] > 0);
+  --win32_host::borrowedDCs[dc];
+  ++win32_host::releases;
   return 1;
 }
 LONG_PTR GetWindowLongPtrW(HWND h, int key)
@@ -121,6 +136,13 @@ LRESULT SendMessageW(HWND h, UINT message, WPARAM w, LPARAM l)
 }
 BOOL GetClientRect(HWND h, RECT *r)
 {
+  if (win32_host::refuseClientRect)
+  {
+    // Refusal still writes a defined (empty) rect: callers that ignore the
+    // result (Win32RectSurfaceContext.cpp WM_PAINT) must not read garbage.
+    r->left = r->top = r->right = r->bottom = 0;
+    return FALSE;
+  }
   *r = h->rect;
   r->right -= r->left;
   r->bottom -= r->top;
@@ -181,8 +203,7 @@ BOOL EndPaint(HWND, const PAINTSTRUCT *)
 }
 int GetClipBox(HDC, RECT *r)
 {
-  r->left = r->top = 0;
-  r->right = r->bottom = 100;
+  *r = win32_host::paintClip;
   return SIMPLEREGION;
 }
 BOOL EqualRect(const RECT *a, const RECT *b)
