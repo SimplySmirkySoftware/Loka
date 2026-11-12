@@ -40,7 +40,7 @@ function fixture(trusted = true, folder: string | null = '/workspace', present: 
   const isClosed = () => live === 'closed';
   const ports: MutablePorts = {
     admitted: () => trusted, folder: () => folder ?? undefined,
-    prepare: () => { reads.push('catalog'); return {directory: '/workspace/' + directory,
+    prepare: () => { reads.push('catalog'); return {skin: 'web', directory: '/workspace/' + directory,
       app: {id: 'Target', target: 'Target', name: 'Label', sourceDir: 'example/Label', js: 'Demo.js', exportName: 'Factory'}}; },
     resolve: posix.resolve, directory: posix.dirname,
     existsSync: file => { reads.push(file); return typeof present === 'boolean' ? present : !file.endsWith(present); },
@@ -486,4 +486,16 @@ test('connect throwing after all three doors drops queued work, retires once and
   }), error => error === original);
   captured.reload(); captured.close();
   assert.equal(connections, 1); assert.equal(retired, 1); assert.equal(effects, 0);
+});
+
+test('each replacement carries a fresh prepared skin into its document', () => {
+  let skin = 'win32';
+  const f = fixture(true, '/workspace', true, ports => {
+    const prepare = ports.prepare;
+    ports.prepare = () => ({...prepare(), skin});
+  });
+  assert.match(f.panel.html, /lokaSkin: "win32"/);
+  skin = 'classic'; f.preview.reload(); f.receive('completed');
+  assert.match(f.panel.html, /lokaSkin: "classic"/);
+  assert.equal(f.assignments(), 2);
 });

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {renderPreviewHtml} from '../src/previewHtml.ts';
 import type {PreviewInput} from '../src/previewHtml.ts';
 
-const input: PreviewInput = {kind: 'module', id: 'document', nonce: 'N', cspSource: "'self'",
+const input: PreviewInput = {kind: 'module', skin: 'web', id: 'document', nonce: 'N', cspSource: "'self'",
   jsUri: 'https://resource.invalid/Demo.js', wasmUri: 'https://resource.invalid/Demo.wasm', exportName: 'Demo'};
 test('document pins CSP, nonce, cache identity, language absence, CSS order, script order', () => {
   const html = renderPreviewHtml(input);

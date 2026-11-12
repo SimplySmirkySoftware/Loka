@@ -3,17 +3,17 @@ import assert from 'node:assert/strict';
 import {createContext, runInContext} from 'node:vm';
 import {renderPreviewHtml} from '../src/previewHtml.ts';
 
-function page() {
+function page(skin = 'web') {
   const messages: {type: string; id: string; status?: number}[] = [];
   const listeners = new Map<string, (event: unknown) => void>();
   const context = createContext({acquireVsCodeApi: () => ({postMessage: (m: typeof messages[0]) => messages.push(m)}),
     addEventListener: (name: string, listener: (event: unknown) => void) => listeners.set(name, listener)});
   runInContext('window = globalThis', context);
-  const html = renderPreviewHtml({kind: 'module', id: 'doc', nonce: 'nonce', cspSource: "'self'",
+  const html = renderPreviewHtml({kind: 'module', skin, id: 'doc', nonce: 'nonce', cspSource: "'self'",
     exportName: 'Demo', jsUri: 'Demo.js', wasmUri: 'Demo.wasm'});
   const scripts = [...html.matchAll(/<script nonce="nonce">([\s\S]*?)<\/script>/g)].map(m => m[1]);
   runInContext(scripts[0], context);
-  return {messages, context, boot: () => runInContext(scripts[1], context),
+  return {html, messages, context, boot: () => runInContext(scripts[1], context),
     dispose: () => listeners.get('message')!({data: {id: 'doc', type: 'dispose'}}),
     error: () => listeners.get('error')!({message: 'observer error'})};
 }
@@ -78,4 +78,23 @@ test('PENDING observer error then disposal waits for acquisition and real comple
   assert.equal(p.messages.filter(m => m.type === 'completed').length, 0);
   complete(); await tick();
   assert.equal(p.messages.filter(m => m.type === 'completed').length, 1);
+});
+
+for (const skin of ['win32', '</script>"\'\u2028\u2029']) {
+  test('factory receives exact skin and unchanged wasm URI: ' + JSON.stringify(skin), async () => {
+    const p = page(skin);
+    assert.equal((p.html.match(/<\/script>/g) || []).length, 3, 'skin cannot terminate script');
+    let options: {lokaSkin: string; locateFile(): string} | undefined;
+    p.context.Demo = (value: typeof options) => {
+      options = value;
+      return {web: {completed: new Promise(() => {}), start: () => 0, dispose() {}}};
+    };
+    p.boot(); await tick();
+    assert.equal(options?.lokaSkin, skin, 'exact skin passed to factory');
+    assert.equal(options?.locateFile(), 'Demo.wasm?v=doc');
+  });
+}
+test('message document has no skin or factory', () => {
+  const html = renderPreviewHtml({kind: 'message', id: 'doc', nonce: 'nonce', cspSource: "'self'", text: 'message'});
+  assert.doesNotMatch(html, /lokaSkin|<script/);
 });

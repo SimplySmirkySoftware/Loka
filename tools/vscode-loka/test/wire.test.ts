@@ -14,7 +14,7 @@ function fixture(t: {after(fn: () => void): void}) {
 }
 test('commands reach owners; panel options, resource roots, URI and task cwd are exact', async t => {
   const f = fixture(t);
-  assert.deepEqual([...f.commands.keys()], ['loka.preview.open', 'loka.preview.build', 'loka.preview.reload', 'loka.preview.configure', 'loka.preview.selectExample']);
+  assert.deepEqual([...f.commands.keys()], ['loka.preview.open', 'loka.preview.build', 'loka.preview.reload', 'loka.preview.configure', 'loka.preview.selectExample', 'loka.preview.selectSkin']);
   f.command('reload'); assert.equal(f.panels.length, 0);
   f.command('open'); f.command('open'); const p = f.panels[0];
   assert.equal(f.panels.length, 1); assert.equal(p.reveals, 1);
@@ -142,7 +142,7 @@ for (const successor of [false, true]) {
   test(`throwing first subscription still releases second and closes A; current B=${successor}`, t => {
     const f = adapterFixture(t), a = f.make(); let closes = 0;
     const timers = new Set<() => void>();
-    const doors = createPreview(a, {admitted: () => true, folder: () => f.root, prepare: () => ({directory: f.root, app: f.apps[0]}),
+    const doors = createPreview(a, {admitted: () => true, folder: () => f.root, prepare: () => ({directory: f.root, skin: 'web', app: f.apps[0]}),
       resolve: join, directory: dirname, existsSync: () => true,
       asWebviewUri: file => a.asWebviewUri(file), cspSource: a.cspSource, identity: () => 'id',
       clock: {after(_ms, callback) { timers.add(callback); return callback; }, cancel(timer) { timers.delete(timer); }},
@@ -479,4 +479,112 @@ test('successful Build with no panel does not create one', async t => {
   const f = fixture(t); f.command('build'); const execution = {};
   f.resolve(execution); await settle(); f.ended(execution);
   assert.equal(f.panels.length, 0); assert.equal(f.statuses.at(-1), 'Loka: Built TargetA');
+});
+
+async function chooseSkin(f: ReturnType<typeof fixture>, index: number) {
+  const pending = f.command('selectSkin');
+  f.picks.at(-1)!.resolve(f.picks.at(-1)!.items[index]); await settle();
+  const write = f.writes.at(-1)!;
+  assert.equal(write.key, 'loka.preview.skin:' + f.folder.uri.toString());
+  assert.equal(write.value, ['web', 'win32', 'macos', 'classic'][index]);
+  write.commit(); write.resolve(); await pending;
+}
+function skinDisplayed(f: ReturnType<typeof fixture>, skin: string, writes: number, panel = f.panels.at(-1)!) {
+  assert.equal(panel.htmlWrites, writes);
+  assert.ok(panel.html.includes('lokaSkin: ' + JSON.stringify(skin)), 'prepared skin reaches document: ' + skin);
+}
+test('Skin picker order and requested mark; persistence without panel and fresh replacement', async t => {
+  const f = fixture(t);
+  await chooseSkin(f, 1); assert.equal(f.panels.length, 0);
+  const pending = f.command('selectSkin');
+  assert.deepEqual(f.picks.at(-1)!.items.map(({label, description}) => ({label, description})), [
+    {label: 'web', description: ''}, {label: 'win32', description: 'Requested'},
+    {label: 'macos', description: ''}, {label: 'classic', description: ''},
+  ]);
+  f.picks.at(-1)!.resolve(undefined); await pending;
+  f.command('open'); skinDisplayed(f, 'win32', 1);
+  await chooseSkin(f, 2); f.panels[0].receive('completed'); skinDisplayed(f, 'macos', 2);
+  f.command('reload'); f.panels[0].receive('completed'); skinDisplayed(f, 'macos', 3);
+});
+test('Skin cancellation and save rejection preserve preview; save must settle before reload', async t => {
+  const f = fixture(t); f.command('open'); const p = f.panels[0];
+  let pending = f.command('selectSkin'); f.picks[0].resolve(undefined); await pending;
+  assert.equal(f.writes.length, 0); assert.equal(p.posts.length, 0);
+  pending = f.command('selectSkin'); f.picks[1].resolve(f.picks[1].items[1]); await settle();
+  assert.equal(p.posts.length, 0, 'no reload before save settles'); skinDisplayed(f, 'web', 1);
+  f.writes[0].reject('save refused'); await pending;
+  assert.equal(p.posts.length, 0); skinDisplayed(f, 'web', 1); assert.equal(f.preferences.size, 0);
+  assert.match(f.errors.at(-1)!, /Select Skin failed: save refused/);
+});
+test('Skin captures opening folder key and keeps folder preferences separate', async t => {
+  const f = fixture(t), pending = f.command('selectSkin');
+  const other = {...f.folder, uri: f.api.Uri.file(join(f.root, 'other-folder'))};
+  f.folders([other]); f.picks[0].resolve(f.picks[0].items[1]); await settle();
+  assert.equal(f.writes[0].key, 'loka.preview.skin:' + f.folder.uri.toString());
+  f.writes[0].commit(); f.writes[0].resolve(); await pending;
+  const next = f.command('selectSkin');
+  assert.equal(f.picks[1].items[0].description, 'Requested');
+  f.picks[1].resolve(f.picks[1].items[2]); await settle();
+  assert.equal(f.writes[1].key, 'loka.preview.skin:' + other.uri.toString());
+  f.writes[1].commit(); f.writes[1].resolve(); await next;
+  f.folders([f.folder]); f.command('open'); skinDisplayed(f, 'win32', 1);
+});
+for (const stage of ['picker', 'save']) for (const rejection of [false, true]) {
+  test(`Skin shutdown during ${stage}, rejection=${rejection} contains late continuation`, async t => {
+    const f = fixture(t); f.command('open'); const pending = f.command('selectSkin');
+    if (stage === 'save') { f.picks[0].resolve(f.picks[0].items[1]); await settle(); }
+    f.activation.dispose(); const statuses = f.statuses.length, output = f.output.length;
+    f.hooks.error = () => Promise.reject(new Error('notification refused'));
+    if (stage === 'picker') {
+      if (rejection) f.picks[0].reject('picker refused');
+      else { f.picks[0].resolve(f.picks[0].items[1]); await settle(); }
+    }
+    if (stage === 'save' || !rejection) {
+      if (rejection) f.writes[0].reject('save refused');
+      else { f.writes[0].commit(); f.writes[0].resolve(); }
+    }
+    await assert.doesNotReject(async () => { await pending; });
+    assert.equal(f.preferences.size, rejection ? 0 : 1);
+    assert.equal(f.errors.length, rejection ? 1 : 0);
+    assert.equal(f.statuses.length, statuses); assert.equal(f.output.length, output);
+    assert.equal(f.panels[0].posts.length, 0); assert.equal(f.panels[0].htmlWrites, 1);
+    assert.ok(f.subscriptions.every(s => !s.active));
+  });
+}
+for (const stage of ['picker', 'save']) {
+  test(`Skin close/reopen during ${stage} reloads current panel`, async t => {
+    const f = fixture(t); f.command('open'); const a = f.panels[0], pending = f.command('selectSkin');
+    if (stage === 'save') { f.picks[0].resolve(f.picks[0].items[1]); await settle(); }
+    a.destroy(); f.command('open');
+    if (stage === 'picker') { f.picks[0].resolve(f.picks[0].items[1]); await settle(); }
+    f.writes[0].commit(); f.writes[0].resolve(); await pending;
+    assert.equal(a.posts.length, 0); assert.equal(f.panels[1].posts.length, 1, 'current panel reloaded');
+    f.panels[1].receive('completed'); skinDisplayed(f, 'win32', 2);
+  });
+}
+for (const completion of ['ack', 'timeout']) {
+  test(`Skin multiple selections during DISPOSING use latest save on ${completion}`, async t => {
+    t.mock.timers.enable({apis: ['setTimeout']});
+    const f = fixture(t); f.command('open'); await chooseSkin(f, 1); await chooseSkin(f, 2);
+    assert.equal(f.panels[0].posts.length, 1); skinDisplayed(f, 'web', 1);
+    if (completion === 'ack') f.panels[0].receive('completed'); else t.mock.timers.tick(2000);
+    skinDisplayed(f, 'macos', 2);
+  });
+}
+test('Skin no-folder error and untrusted save use no workspace files or tasks', async t => {
+  const f = fixture(t); f.folders([]); await f.command('selectSkin');
+  assert.deepEqual(f.errors, ['Open a workspace folder']); assert.equal(f.picks.length, 0);
+  f.folders([f.folder]); f.trust(false);
+  f.api.workspace.getConfiguration = () => { assert.fail('Skin must not read settings/catalog when untrusted'); };
+  await chooseSkin(f, 1); assert.equal(f.tasks.length, 0); assert.equal(f.panels.length, 0);
+  f.command('open'); assert.match(f.panels[0].html, /Trust the workspace/);
+  assert.doesNotMatch(f.panels[0].html, /<script/);
+});
+test('Skin reload failure and reporting rejection remain inside command', async t => {
+  const f = fixture(t); f.command('open');
+  f.hooks.status = () => { throw new Error('reload failed'); };
+  f.hooks.error = () => Promise.reject(new Error('report failed'));
+  await assert.doesNotReject(() => chooseSkin(f, 1));
+  assert.match(f.errors.at(-1)!, /Select Skin failed: Error: reload failed/);
+  f.hooks.status = () => {};
 });
