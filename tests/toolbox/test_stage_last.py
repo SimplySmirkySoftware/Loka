@@ -17,7 +17,8 @@ class StageLastTests(unittest.TestCase):
         for name in ('tests/toolbox/run-scenario.sh', 'scripts/retro68-env.sh', 'scripts/env-file.sh',
                      'scripts/rig/toolbox/scenario_run_provenance.py',
                      'scripts/rig/toolbox/classic_golden_identity.py',
-                     'scripts/rig/golden_identity_guard.py', 'tests/scenarios/scenarios.txt'):
+                     'scripts/rig/golden_identity_guard.py', 'scripts/rig/source-tree-stamp.sh',
+                     'tests/scenarios/scenarios.txt'):
             target = self.root / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, target)
@@ -49,6 +50,14 @@ class StageLastTests(unittest.TestCase):
         result = subprocess.run(args, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         return result
+
+    def publish_source_stamp(self):
+        # The runner refuses a vehicle without a stamp from this source tree
+        # (#1802) before disk staging; publish after the fixture's last edit.
+        # Like the build: withdraw before compiling, publish after linking.
+        for operation in ('withdraw', 'publish'):
+            self.command(['bash', str(self.root / 'scripts/rig/source-tree-stamp.sh'), operation,
+                          str(self.appl.with_suffix('.source-stamp.txt')), str(self.root)])
 
     def runner(self, *flags):
         return subprocess.run(['bash', str(self.root / 'tests/toolbox/run-scenario.sh'),
@@ -119,6 +128,7 @@ class StageLastTests(unittest.TestCase):
         disk = self.root / 'scripts/mame-dev-disk.sh'
         disk.write_text('#!/usr/bin/env bash\nexit 88\n')
         disk.chmod(0o755)
+        self.publish_source_stamp()
         result = self.runner()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('mame stage failed: development disk creation failed', result.stderr)
@@ -127,6 +137,7 @@ class StageLastTests(unittest.TestCase):
         # A receipt write failure must fail its named stage before disk staging.
         helper = self.helper.read_text()
         self.helper.write_text(helper.replace('run(parser.parse_args())', 'raise OSError("fixture write failure")'))
+        self.publish_source_stamp()
         result = self.runner()
         self.assertIn('provenance stage failed:', result.stderr)
         self.assertIn('fixture write failure', result.stderr)

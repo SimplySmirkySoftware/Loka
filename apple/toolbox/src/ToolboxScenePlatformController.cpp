@@ -945,6 +945,7 @@ bool ToolboxScenePlatformController::queryEditTextGeometryForTesting(
   TEHandle te = this->editControls_[index].te;
   if (!te || !*te)
     return false;
+  out.selectionEnd = (**te).selEnd;
   out.destination = (**te).destRect;
   out.view = (**te).viewRect;
   out.placement = this->editControls_[index].placement;

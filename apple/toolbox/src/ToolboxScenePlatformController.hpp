@@ -566,6 +566,7 @@ public:
   /** Native TE geometry and last applied interaction placement, without re-ensuring. */
   struct EditTextGeometry
   {
+    short selectionEnd;
     Rect destination;
     Rect view;
     ToolboxNativePlacement placement;

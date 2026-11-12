@@ -227,7 +227,7 @@ local function editorBarTransport()
                     -- This point is just above the down arrow; adding 16 gives
                     -- bottom - 8, the centre of its 16-pixel square.
                     return left + 8 - signed(window + 10), bottom - 24 - signed(window + 8),
-                        top - signed(window + 8), signed(control + 18), maximum
+                        top - signed(window + 8), signed(control + 18), maximum, window
                 end
                 handle = ptr(control)
             end
@@ -431,6 +431,113 @@ if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/text-editor-scroll" then
     move(0, 0)
     end)
     if not gestureOk then say("editor gesture failed: %s", tostring(gestureError)) end
+end
+
+if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/clip-edge-tracking" then
+    local button = field(":macadb:MOUSE0", "Mouse Button 0")
+    local gestureOk, gestureError = pcall(function()
+        local mem, barPoint, awaitBar = editorBarTransport()
+        local function ptr(address) return mem:read_u32(address) & 0xFFFFFF end
+        local function signed(address)
+            local n = mem:read_u16(address)
+            return n >= 32768 and n - 65536 or n
+        end
+        local function move(x, y)
+            mem:write_u16(0x828, y); mem:write_u16(0x82A, x)
+            mem:write_u16(0x82C, y); mem:write_u16(0x82E, x)
+            mem:write_u8(0x8CE, mem:read_u8(0x8CF))
+            emu.wait(0.2)
+        end
+        local function click(x, y)
+            move(x, y); button:set_value(1); emu.wait(0.3)
+            button:clear_value(); emu.wait(1)
+        end
+        awaitBar(true, 0)
+        emu.wait(3) -- OPEN must have sampled settled ground before input.
+        local x, y, top, _, _, window = barPoint(true)
+        assert(window, "clip cell window missing")
+        local ox, oy = -signed(window + 10), -signed(window + 8)
+        -- Paired with ClipEdgeGeometry in ToolboxClipEdgeTrackingScenario.hpp.
+        -- OPEN guards edit full=(13,14,211,31), clip=(12,12,92,36),
+        -- bar full=(156,60,172,180), clip=(12,60,164,180).
+        local editOutside = {ox + 92, oy + 12, ox + 212, oy + 36}
+        local barOutside = {x, top, x + 8, y + 24}
+        local function pressTitled(title)
+            local handle = ptr(window + 140)
+            for _ = 1, 64 do
+                assert(handle ~= 0, title .. " control missing")
+                local c = ptr(handle)
+                -- ControlRecord.contrlTitle is a Str255 at offset 40.
+                local matches = mem:read_u8(c + 40) == #title
+                for i = 1, #title do
+                    matches = matches and mem:read_u8(c + 40 + i) == title:byte(i)
+                end
+                if matches then
+                    click(ox + (signed(c + 10) + signed(c + 14)) // 2,
+                          oy + (signed(c + 8) + signed(c + 12)) // 2)
+                    return
+                end
+                handle = ptr(c)
+            end
+            error(title .. " control walk bound exceeded")
+        end
+        local function acknowledge() pressTitled("Next") end
+        local function drag(label, sx, sy, ex, ey, outside)
+            local leaked = false
+            move(sx, sy)
+            local before, width, height = captureSnapshotPixels(video)
+            button:set_value(1); emu.wait(0.3) -- ADB stamps mouseDown at post time.
+            for step = 1, 5 do
+                local cx, cy = sx + (ex - sx) * step // 5, sy + (ey - sy) * step // 5
+                move(cx, cy); emu.wait(0.2)
+                local frame, w, h = captureSnapshotPixels(video)
+                assert(w == width and h == height, "snapshot dimensions changed")
+                local changed = 0
+                for py = outside[2], outside[4] - 1 do
+                    for px = outside[1], outside[3] - 1 do
+                        -- The 16x16 cursor sits within 16 px of its hot spot, both in
+                        -- this frame (cx, cy) and in the pre-press frame (sx, sy).
+                        local nearCursor = (px >= cx - 16 and px < cx + 16 and py >= cy - 16 and py < cy + 16)
+                            or (px >= sx - 16 and px < sx + 16 and py >= sy - 16 and py < sy + 16)
+                        if not nearCursor
+                            and snapshotPixel(frame, width, px, py) ~= snapshotPixel(before, width, px, py) then
+                            changed = changed + 1
+                        end
+                    end
+                end
+                -- Drawing past the clip can be erased again before the tracking
+                -- call returns (M1: TEClick under the port clip), so the app's
+                -- own samples cannot see it; only these held frames can. The verdict travels through the app: the caller presses Leak
+                -- for a drag with any changed held frame (held.outside.leaks).
+                say("clip %s held frame=%d outside.changed=%d", label, step, changed)
+                if changed > 0 then leaked = true end
+            end
+            -- Hold still after the release: the ADB driver posts mouseUp on its
+            -- next poll, and a cursor already outside the thumb's slop rect
+            -- would make TrackControl cancel the drag (text-editor-scroll uses
+            -- exactly that to cancel on purpose).
+            button:clear_value(); emu.wait(0.5); move(600, 450); emu.wait(2)
+            return leaked
+        end
+        local editLeaked = drag("edit", ox + 16, oy + 20, ox + 198, oy + 20, editOutside)
+        -- Native input must leave the bar at zero. Next acknowledges even a
+        -- rejected click, so unchanged is not confused with a missing gesture.
+        click(x + 4, y + 16); acknowledge()
+        click(x - 4, y + 16); click(x - 4, y + 16); acknowledge()
+        local _, _, _, value, maximum = barPoint(true)
+        assert(value and value > 0 and value < maximum, "arrow did not leave a draggable thumb")
+        local thumbY = top + 24 + math.floor((y - top - 24) * value / maximum)
+        local thumbLeaked = drag("thumb", x - 4, thumbY, x - 4, y, barOutside)
+        -- One Leak press per leaking drag, before the THUMB phase's Next.
+        if editLeaked then pressTitled("Leak") end
+        if thumbLeaked then pressTitled("Leak") end
+        acknowledge()
+        -- Park the cursor at the screen origin before the capture, as the
+        -- editor gesture cells and laptop-arrow do.
+        move(0, 0)
+    end)
+    button:clear_value()
+    if not gestureOk then say("clip-edge gesture failed: %s", tostring(gestureError)) end
 end
 
 -- Completion transport: reading a marker from the development HFS disk while
