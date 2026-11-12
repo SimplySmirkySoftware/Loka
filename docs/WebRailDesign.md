@@ -564,7 +564,8 @@ A nonempty saved identity absent from a valid catalog diagnoses **Select Example
 it never falls back silently. Missing or empty selection uses `apps[0]`, without
 sorting or promising HelloWorld as the default. Explicit identity survives
 reordering. Validation precedes task creation and resource URI derivation, using
-the producer's lexical path rules. The build directory is the resource root;
+the producer's lexical path rules. The build directory is the lexical containment root for catalog paths;
+the selected JavaScript file’s directory is the webview resource root;
 JavaScript, companion Wasm and factory name come from the validated row. Missing
 artifacts diagnose **Build**. Open reveals an existing panel; Reload replaces it.
 
@@ -594,19 +595,21 @@ The following limitations are intentional and pinned by the shell tests:
   containment. Only the first workspace folder participates; no folder picker
   is provided.
 
-Source tests pass under Node 24 and exercise these contracts with strict injected
-ports. The native `testing` preset is build-verified on Linux x86_64; the full
-CTest run passes except for the known sandbox-only native build-picker failure.
-This does not establish extension compilation or native VS Code behavior. The new
-MineSweeper browser-driver cell uses `renderPreviewHtml`, observes its real
-factory, startup, completion and zero resources after disposal, and prints
-`preview shell mine: passed` on success. It still requires an external browser
-run. This change has not yet been build-verified as an extension artifact:
-TypeScript checking, CommonJS emission and the artifact test require the pinned
-development dependencies. No new VS Code runtime verification is claimed.
-The earlier HelloWorld hand run applies only to the previous shell. F5 folder
-and Remote WSL authority, process environment inheritance, and the complete
-Configure → Select → Build → preview flow require the owner's host hand run.
+Verified on Linux x86_64 with Node 24.19.0 and Emscripten 7.0.0: `npm run check` and `npm run build` exited 0,
+`node test/artifact.cjs` passed, `node --test` over the extension tests passed,
+and the mutation script with type checking enabled killed every mutant.
+The extension artifact is build-verified. Native `ctest --preset testing`
+exited 0; with Node available, `scriptVscodeLoka`, `scriptVscodeLokaLauncher`
+and `scriptScenarioTools` pass, while without emsdk,
+`scriptWebAppCatalogIntegration` prints its skip. The browser driver passed,
+including `preview shell mine`. `cmake --build <build/wasm/web> --target
+LokaMineWeb` compiled and linked with an environment stripped of every emsdk
+variable (`PATH=/usr/bin:/bin`).
+
+Nothing in this change is runtime-verified inside VS Code yet: F5 with the
+folder argument, Remote WSL authority, ProcessExecution inside the task service,
+and the trust refusal still require the owner's host hand run. The earlier
+HelloWorld hand run recorded for PR 5b predates these commands.
 
 ### Cell projection and MineSweeper preview
 

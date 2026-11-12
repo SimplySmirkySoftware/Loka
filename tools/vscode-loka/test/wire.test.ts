@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {pathToFileURL} from 'node:url';
-import {join} from 'node:path';
+import {dirname, join} from 'node:path';
 import {wire, createPanelAdapter} from '../src/wire.ts';
 import {fakeHost} from './fake.ts';
 import {createPreview} from '../src/preview.ts';
@@ -21,7 +21,7 @@ test('commands reach owners; panel options, resource roots, URI and task cwd are
   assert.deepEqual(p.creation, {enableScripts: false, retainContextWhenHidden: true, localResourceRoots: []});
   const options = p.options as {enableScripts: boolean; localResourceRoots: {fsPath: string}[]};
   assert.equal(options.enableScripts, true);
-  assert.deepEqual(options.localResourceRoots.map(u => u.fsPath), [f.root]);
+  assert.deepEqual(options.localResourceRoots.map(u => u.fsPath), [join(f.root, 'module')]);
   const files = ['Demo.js', 'Demo.wasm'].map(name => join(f.root, 'module', name));
   assert.deepEqual(p.conversions, files.map(file => pathToFileURL(file).href));
   for (const file of files) assert.ok(p.html.includes('https://resource.invalid' + file + '?v='));
@@ -36,6 +36,12 @@ test('commands reach owners; panel options, resource roots, URI and task cwd are
   const execution = {}; f.resolve(execution); await Promise.resolve(); f.ended(execution);
   assert.equal(p.posts.length, 2);
 });
+test('selected JS subdirectory is the exact resource root, not the build directory', t => {
+  const f = fixture(t); f.command('open');
+  assert.deepEqual((f.panels[0].options as {localResourceRoots: {fsPath: string}[]})
+    .localResourceRoots.map(u => u.fsPath), [join(f.root, 'module')]);
+  displayed(f, 0, 1);
+});
 test('fresh admission blocks both owners then trust passes without rewiring', t => {
   const f = fixture(t); f.trust(false); f.command('build'); f.command('open');
   assert.equal(f.tasks.length, 0); assert.doesNotMatch(f.panels[0].html, /<script/);
@@ -49,6 +55,7 @@ test('Open A, Build, close A, Open B: same Build reloads B and second Build stay
   assert.equal(f.tasks.length, 1);
   const execution = {}; f.resolve(execution); await Promise.resolve(); f.ended(execution); f.taskEnded(execution);
   assert.equal(a.posts.length, 0); assert.equal(b.posts.length, 1);
+  b.receive('completed'); displayed(f, 0, 2, b);
 });
 for (const where of ['options', 'html', 'disposeRegistration', 'messageRegistration'] as const) {
   test(`first ${where} native destruction closes before any later write and clears current`, t => {
@@ -136,7 +143,7 @@ for (const successor of [false, true]) {
     const f = adapterFixture(t), a = f.make(); let closes = 0;
     const timers = new Set<() => void>();
     const doors = createPreview(a, {admitted: () => true, folder: () => f.root, prepare: () => ({directory: f.root, app: f.apps[0]}),
-      resolve: join, existsSync: () => true,
+      resolve: join, directory: dirname, existsSync: () => true,
       asWebviewUri: file => a.asWebviewUri(file), cspSource: a.cspSource, identity: () => 'id',
       clock: {after(_ms, callback) { timers.add(callback); return callback; }, cancel(timer) { timers.delete(timer); }},
       output() {}, status() {}, error() {}, fault() {},
@@ -286,13 +293,13 @@ test('rejecting disposal thenable reports once even when output throws', async t
 });
 
 const settle = async () => { for (let i = 0; i < 4; ++i) await Promise.resolve(); };
-function displayed(f: ReturnType<typeof fixture>, index: number, writes: number, panel = f.panels.at(-1)!) {
+function displayed(f: ReturnType<typeof fixture>, index: number, writes: number, panel = f.panels.at(-1)!, directory = f.root) {
   const app = f.apps[index];
   assert.equal(panel.htmlWrites, writes);
   assert.match(panel.html, new RegExp('window\\["' + app.exportName + '"\\]'));
-  assert.ok(panel.html.includes('https://resource.invalid' + join(f.root, app.js) + '?v='));
-  assert.ok(panel.html.includes('https://resource.invalid' + join(f.root, app.js.replace(/\.js$/, '.wasm')) + '?v='));
-  assert.deepEqual((panel.options as {localResourceRoots: {fsPath: string}[]}).localResourceRoots.map(u => u.fsPath), [f.root]);
+  assert.ok(panel.html.includes('https://resource.invalid' + join(directory, app.js) + '?v='));
+  assert.ok(panel.html.includes('https://resource.invalid' + join(directory, app.js.replace(/\.js$/, '.wasm')) + '?v='));
+  assert.deepEqual((panel.options as {localResourceRoots: {fsPath: string}[]}).localResourceRoots.map(u => u.fsPath), [dirname(join(directory, app.js))]);
 }
 async function choose(f: ReturnType<typeof fixture>, index: number) {
   const pending = f.command('selectExample');
@@ -380,6 +387,7 @@ test('picker captures folder key; overlapping Select follows actual commits, not
   assert.equal(f.writes[2].key, 'loka.preview.example:' + f.folder.uri.toString());
   f.writes[2].commit(); f.writes[2].resolve(); await late;
   f.folders([f.folder]);
+  f.panels[0].receive('completed'); displayed(f, 0, 3);
 });
 test('Build A and Select B: B may load before A completes and A completion reloads B', async t => {
   const f = fixture(t); f.command('open'); f.command('build');
@@ -409,17 +417,19 @@ for (const change of ['remove', 'path', 'reorder', 'directory']) {
       for (const ext of ['js', 'wasm']) copyFileSync(join(f.root, 'other/Payload.' + ext), join(f.root, 'changed/other/Payload.' + ext));
     }
     displayed(f, 0, 1); f.command('open'); displayed(f, 0, 1);
-    f.panels[0].receive('completed'); assert.equal(f.panels[0].htmlWrites, 2);
-    if (change === 'remove') { assert.match(f.panels[0].html, /Select Example/); assert.doesNotMatch(f.panels[0].html, /<script/); }
-    else if (change === 'directory') {
-      assert.ok(f.panels[0].html.includes(join(f.root, 'changed/other/Payload.js')));
-      assert.ok(f.panels[0].html.includes(join(f.root, 'changed/other/Payload.wasm')));
-      assert.deepEqual((f.panels[0].options as {localResourceRoots: {fsPath: string}[]}).localResourceRoots.map(u => u.fsPath), [join(f.root, 'changed')]);
-    } else displayed(f, 1, 2);
+    const checkReplacement = (writes: number) => {
+      if (change === 'remove') {
+        assert.equal(f.panels[0].htmlWrites, writes);
+        assert.ok(f.panels[0].html.includes('Selected example is absent; use Select Example'));
+        assert.doesNotMatch(f.panels[0].html, /<script/);
+        assert.deepEqual(f.panels[0].options, {enableScripts: false, localResourceRoots: []});
+      } else displayed(f, 1, writes, f.panels[0], change === 'directory' ? join(f.root, 'changed') : f.root);
+    };
+    f.panels[0].receive('completed'); checkReplacement(2);
     assert.deepEqual((f.tasks[0] as {execution: {args: string[]}}).execution.args, ['--build', f.root, '--target', 'TargetA']);
     const execution = {}; f.resolve(execution); await settle(); f.ended(execution);
     if (change !== 'remove') f.panels[0].receive('completed');
-    assert.equal(f.panels[0].htmlWrites, 3);
+    checkReplacement(3);
   });
 }
 test('picker may save removed identity; Build refuses Select diagnostic and Configure remains usable', async t => {

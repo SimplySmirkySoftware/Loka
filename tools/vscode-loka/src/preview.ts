@@ -24,6 +24,7 @@ export type PreviewPorts<T> = Readonly<{
   folder(): string | undefined;
   prepare(): Readonly<{app: App; directory: string}> | Diagnostic;
   resolve(folder: string, relative: string): string;
+  directory(file: string): string;
   existsSync(file: string): boolean;
   asWebviewUri(file: string): string;
   cspSource: string;
@@ -124,7 +125,7 @@ class Preview<T> {
             input = {kind: 'message', id, nonce, cspSource: this.ports.cspSource,
               text: 'Build the module JavaScript and Wasm files first'};
           } else {
-            roots = [prepared.directory];
+            roots = [this.ports.directory(js)];
             input = {kind: 'module', id, nonce, cspSource: this.ports.cspSource,
               jsUri: this.ports.asWebviewUri(js), wasmUri: this.ports.asWebviewUri(wasm),
               exportName: prepared.app.exportName};

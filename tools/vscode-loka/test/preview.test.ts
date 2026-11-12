@@ -42,7 +42,7 @@ function fixture(trusted = true, folder: string | null = '/workspace', present: 
     admitted: () => trusted, folder: () => folder ?? undefined,
     prepare: () => { reads.push('catalog'); return {directory: '/workspace/' + directory,
       app: {id: 'Target', target: 'Target', name: 'Label', sourceDir: 'example/Label', js: 'Demo.js', exportName: 'Factory'}}; },
-    resolve: posix.resolve,
+    resolve: posix.resolve, directory: posix.dirname,
     existsSync: file => { reads.push(file); return typeof present === 'boolean' ? present : !file.endsWith(present); },
     asWebviewUri: file => 'https://resource.invalid' + file, cspSource: "'self'",
     identity: () => 'id-' + ++serial,

@@ -1,6 +1,6 @@
 import type * as vscode from 'vscode';
 import {existsSync, readFileSync} from 'node:fs';
-import {resolve} from 'node:path';
+import {dirname, resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {createPreview} from './preview.ts';
 import type {PreviewDoors, PreviewPanel} from './preview.ts';
@@ -173,7 +173,7 @@ export function wire(api: typeof vscode, context: vscode.ExtensionContext): vsco
           {enableScripts: false, retainContextWhenHidden: true, localResourceRoots: []}),
         {get: () => current, set: value => { current = value; }}, fault);
       createPreview(adapter, {
-        admitted, folder: () => folder()?.uri.fsPath, prepare, resolve, existsSync,
+        admitted, folder: () => folder()?.uri.fsPath, prepare, resolve, directory: dirname, existsSync,
         asWebviewUri: file => adapter.asWebviewUri(file), cspSource: adapter.cspSource,
         identity: randomUUID, clock: {after: (ms, callback) => setTimeout(callback, ms), cancel: clearTimeout},
         output: message => output.appendLine(message), status: report,
