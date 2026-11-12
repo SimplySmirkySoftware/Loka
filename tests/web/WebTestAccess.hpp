@@ -18,6 +18,10 @@ namespace loka
           return platform.session_;
         }
 #ifdef TEST_BUILD
+        static const loka::app::scene::LayoutState &rootOffer(const WebScenePlatformController &controller)
+        {
+          return controller.layout_;
+        }
         static int scrollVisit(WebResourceContext &context, const loka::app::scene::LayoutState &seat)
         {
           return context.controller().layoutNode(context.owner(), seat);
