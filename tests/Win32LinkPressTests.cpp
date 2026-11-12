@@ -29,7 +29,7 @@ namespace
                              GetModuleHandleW(0),
                              0);
       other = CreateWindowExW(
-          WS_EX_NOACTIVATE, L"STATIC", L"Cover", WS_POPUP, 0, 0, 200, 100, 0, 0, GetModuleHandleW(0), 0);
+          WS_EX_NOACTIVATE, L"STATIC", L"Cover", WS_POPUP | SS_NOTIFY, 0, 0, 200, 100, 0, 0, GetModuleHandleW(0), 0);
       LOKA_VERIFY(root && other);
     }
     ~PressWindows()
@@ -179,7 +179,7 @@ namespace
   {
     wchar_t name[32];
     if (GetClassNameW(hwnd, name, 32) && lstrcmpW(name, L"#32770") == 0)
-      PostMessageW(hwnd, WM_COMMAND, IDOK, 0);
+      PostMessageW(hwnd, WM_CLOSE, 0, 0);
     return TRUE;
   }
   unsigned pressModalTicks = 0;
@@ -236,11 +236,13 @@ void testWin32LinkPressCover()
   injectButton(MOUSEEVENTF_LEFTUP);
   awaitMouse(counts.ups, 1);
   LOKA_VERIFY(f.writes == 1);
-  // Positive routing control: the same real UP without capture reaches the cover.
+  // Positive routing control: without capture, a real click at the same point reaches the cover
+  // (SS_NOTIFY makes the cover hit-test as its client). A lone UP with no DOWN is not delivered.
   LOKA_VERIFY(!GetCapture());
+  injectButton(MOUSEEVENTF_LEFTDOWN);
   injectButton(MOUSEEVENTF_LEFTUP);
   awaitMouse(counts.coverUps, 1);
-  LOKA_VERIFY(f.writes == 1);
+  LOKA_VERIFY(f.writes == 1 && counts.downs == 1 && counts.ups == 1);
 }
 void testWin32LinkPressPassThroughLabel()
 {
