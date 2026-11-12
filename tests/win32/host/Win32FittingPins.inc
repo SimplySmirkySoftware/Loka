@@ -5,17 +5,31 @@ namespace loka
     class Win32AttributedTextAccess
     {
     public:
+      static bool known(const Win32AttributedTextContext &context)
+      {
+        return context.presented_.isKnown();
+      }
+      static void expectInvalidated(Win32AttributedTextContext &context, bool active)
+      {
+        Win32PressedRun run;
+        LOKA_VERIFY(!context.links_.candidate_.take(run));
+        LOKA_VERIFY((context.links_.active_ != 0) == active);
+        if (active)
+          LOKA_VERIFY(context.links_.active_->invalidated());
+      }
       static void
       present(Win32AttributedTextContext &context, const loka::app::AttributedString &value, const RECT &seat)
       {
         context.presented_.commit(Win32PresentedText(value, seat), context.paintScope());
       }
+      // Predicate-only bypass: production cannot keep a known presentation after clearing rows.
       static bool eligibleWithoutRows(Win32AttributedTextContext &context, const LinkHit &hit)
       {
-        loka::app::TextLineBreaker *rows = context.table_.lines_;
-        context.table_.lines_ = 0;
-        const bool eligible = context.linkHitEligible(hit);
-        context.table_.lines_ = rows;
+        loka::app::TextLineBreaker *rows = context.links_.table_.lines_;
+        context.links_.table_.lines_ = 0;
+        Win32PressedRun run;
+        const bool eligible = context.queryEligibleRun(hit, run);
+        context.links_.table_.lines_ = rows;
         return eligible;
       }
       static HitAnswer prepare(Win32AttributedTextContext &context, POINT point, LinkHit &out)
@@ -24,7 +38,8 @@ namespace loka
       }
       static bool eligible(const Win32AttributedTextContext &context, const LinkHit &hit)
       {
-        return context.linkHitEligible(hit);
+        Win32PressedRun run;
+        return context.queryEligibleRun(hit, run);
       }
       static void draw(Win32AttributedTextContext &context, HDC dc, const RECT &seat)
       {
@@ -40,7 +55,7 @@ namespace loka
       }
       static const Win32AttributedTextTable &table(const Win32AttributedTextContext &context)
       {
-        return context.table_;
+        return context.links_.table();
       }
       static std::size_t spans(const Win32AttributedTextTable &table)
       {

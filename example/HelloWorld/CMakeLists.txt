@@ -131,12 +131,14 @@ if(WIN32)
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/Win32CardPainter.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32AttributedTextContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32AttributedTextTable.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32LinkPress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32ScrollViewContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32NativeResourceRetirementTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32CardPainterTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32NodeHandlerEnsureTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32LiveResizeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32InputDoorTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32LinkPressTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32ScrollViewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32ZStackUnitTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32ClipBoxTests.cpp

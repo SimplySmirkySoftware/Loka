@@ -783,6 +783,19 @@ loka_compile_pin(request-wall-direct-splice-reply
   ACCEPTS pins/accepts_request-wall-direct-splice-reply.cpp
 )
 
+foreach(pin IN ITEMS win32-link-press-table win32-attributed-text-input-body)
+  loka_compile_pin(${pin}
+    REFUSES pins/refuses_${pin}.cpp
+    ACCEPTS pins/accepts_${pin}.cpp)
+  foreach(kind IN ITEMS refuses accepts)
+    target_include_directories(compilePin_${pin}_${kind} PRIVATE
+      ${PROJECT_SOURCE_DIR}/tests/win32/host ${PROJECT_SOURCE_DIR}/tests
+      ${PROJECT_SOURCE_DIR}/win32/src)
+    target_compile_options(compilePin_${pin}_${kind} PRIVATE
+      -include ${PROJECT_SOURCE_DIR}/tests/win32/host/Win32TextHost.hpp)
+  endforeach()
+endforeach()
+
 loka_compile_pin(request-text-splice-private
   REFUSES pins/refuses_text_splice_private.cpp
   ACCEPTS pins/accepts_text_splice_private.cpp

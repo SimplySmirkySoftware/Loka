@@ -2,7 +2,7 @@
 #define LOKA_WIN32_ATTRIBUTED_TEXT_CONTEXT_HPP
 #include "Win32RetirableContext.hpp"
 #include "../Win32TextEnvironment.hpp"
-#include "Win32AttributedTextTable.hpp"
+#include "Win32LinkPress.hpp"
 #include "app/nodes/AttributedText.hpp"
 #include "app/scene/projection/PaintFact.hpp"
 #include "app/scene/projection/PlatformNodeHandler.hpp"
@@ -53,12 +53,14 @@ private:
   static void EnsureClassRegistered();
   static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
   HitAnswer prepareLinkHit(POINT client, LinkHit &out);
-  bool linkHitEligible(const LinkHit &hit) const;
+  bool queryEligibleRun(const LinkHit &hit, Win32PressedRun &out) const;
+  void handleLinkButton(UINT, LPARAM);
+  friend class Win32InputDoor;
   void clearMeasurement();
   void draw(HDC, const RECT &);
   void relayout(int, int, int, int);
   loka::app::AttributedTextNode *node_;
-  Win32AttributedTextTable table_;
+  Win32LinkPressTable links_;
   loka::app::scene::PaintFact<Win32PresentedText> presented_;
 };
 void RegisterWin32AttributedTextNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &);

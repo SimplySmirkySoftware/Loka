@@ -1,6 +1,7 @@
 #include "../Win32Ground.hpp"
 #include "Win32AttributedTextContext.hpp"
 #include "../Win32ScenePlatformController.hpp"
+#include "../Win32InputDoor.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
 #include <climits>
@@ -57,7 +58,7 @@ Win32AttributedTextContext::Win32AttributedTextContext(Win32ScenePlatformControl
 }
 Win32AttributedTextContext::~Win32AttributedTextContext()
 {
-  assert(!this->hwnd() && !this->table_.valid() && "terminal delivery precedes context reclaim");
+  assert(!this->hwnd() && !this->links_.table().valid() && "terminal delivery precedes context reclaim");
 }
 void *Win32AttributedTextContext::operator new(std::size_t size) throw()
 {
@@ -82,6 +83,7 @@ void Win32AttributedTextContext::onNativeFact(loka::app::scene::NodeLifecycleFac
       ShowWindow(this->hwnd(), SW_SHOW);
     return;
   }
+  this->links_.invalidatePress();
   this->presented_.invalidate();
   if (this->hwnd())
     ShowWindow(this->hwnd(), SW_HIDE);
@@ -103,7 +105,7 @@ void Win32AttributedTextContext::onPropsApplied()
 }
 void Win32AttributedTextContext::clearMeasurement()
 {
-  this->table_.clear();
+  this->links_.clear();
   this->presented_.invalidate();
   if (this->hwnd())
     this->relayout(0, 0, 0, 0);
@@ -118,12 +120,13 @@ short Win32AttributedTextContext::layout(loka::app::scene::IPlatformController *
   this->presented_.invalidate();
   const loka::win32::Win32DisplayScale &scale = this->controller()->displayScale();
   const int constraint = scale.nativeLength(state.x, state.x + state.width).px;
-  if (state.inputs != loka::app::scene::NODE_DIRTY_NONE || !this->table_.reusable(constraint))
+  if (state.inputs != loka::app::scene::NODE_DIRTY_NONE || !this->links_.table().reusable(constraint))
   {
     HDC dc = this->hwnd() ? GetDC(this->hwnd()) : 0;
-    const bool built = dc && this->node_ && this->node_->props.text_
-                       && this->table_.build(this->node_->props.text_->get(),
-                                             this->node_->props.blockStyle_, constraint, dc, *this->controller());
+    const bool built =
+        dc && this->node_ && this->node_->props.text_
+        && this->links_.rebuild(
+            this->node_->props.text_->get(), this->node_->props.blockStyle_, constraint, dc, *this->controller());
     if (dc)
       ReleaseDC(this->hwnd(), dc);
     if (!built)
@@ -132,8 +135,8 @@ short Win32AttributedTextContext::layout(loka::app::scene::IPlatformController *
       this->clearMeasurement();
     }
   }
-  const int height = this->table_.height();
-  const int width = state.width > 0 ? state.width : this->table_.width();
+  const int height = this->links_.table().height();
+  const int width = state.width > 0 ? state.width : this->links_.table().width();
   state.height = Coordinate(height);
   this->relayout(state.x, state.y, Coordinate(width), state.height);
   Win32ScenePlatformController::requestTransparentChildRepaint(this->hwnd());
@@ -159,13 +162,13 @@ Win32AttributedTextContext::queryPaintDamage(const loka::app::scene::PaintQuery 
   if (query.placement != PLACEMENT_ELIGIBLE || query.scope != paintScope() || !GetClientRect(this->hwnd(), &rect)
       || IsRectEmpty(&rect))
     return PaintAnswer::refused(PAINT_REFUSED_PLACEMENT_UNSETTLED);
-  if (!this->table_.valid() || !this->node_ || !this->node_->props.text_
-      || this->node_->props.text_->get() != this->table_.value())
+  if (!this->links_.table().valid() || !this->node_ || !this->node_->props.text_
+      || this->node_->props.text_->get() != this->links_.table().value())
     return PaintAnswer::refused(PAINT_REFUSED_PROPS_UNRECONCILED);
   if (!this->presented_.isKnown())
     return PaintAnswer::refused(PAINT_REFUSED_HISTORY_UNKNOWN);
   PaintDamage damage = {query.scope, rect.left, rect.top, 0, 0, PAINT_COVERAGE_PAINT_ONLY};
-  if (this->table_.value() != this->presented_.value().text)
+  if (this->links_.table().value() != this->presented_.value().text)
   {
     damage.width = rect.right - rect.left;
     damage.height = rect.bottom - rect.top;
@@ -196,6 +199,22 @@ LRESULT CALLBACK Win32AttributedTextContext::WndProc(HWND hwnd, UINT msg, WPARAM
   }
   switch (msg)
   {
+  case WM_LBUTTONDOWN:
+  case WM_LBUTTONUP:
+    if (!self)
+      break;
+    Win32InputDoor::attributedTextButton(*self, msg, lParam);
+    return 0;
+  case WM_CAPTURECHANGED:
+    if (!self)
+      break;
+    if (lParam != reinterpret_cast<LPARAM>(hwnd))
+      self->links_.losePress();
+    return 0;
+  case WM_CANCELMODE:
+    if (self)
+      self->links_.losePress();
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
   case WM_SETFONT:
     // The controller broadcasts before swapping/deleting its font table.
     // Do not rebuild here: the replacement is not yet installed.
@@ -230,18 +249,39 @@ LRESULT CALLBACK Win32AttributedTextContext::WndProc(HWND hwnd, UINT msg, WPARAM
 }
 void Win32AttributedTextContext::draw(HDC dc, const RECT &rect)
 {
-  this->presented_.invalidate();
   if (!dc || IsRectEmpty(&rect))
+  {
+    this->presented_.invalidate();
     return;
+  }
   RECT clip;
   const bool complete = GetClipBox(dc, &clip) == SIMPLEREGION && EqualRect(&clip, &rect);
-  // Transparent like Text: the parent repaint supplies ground. Only a complete,
-  // successful foreground paint certifies presentation; partial paints do not.
-  if (!this->table_.valid() || !this->node_ || !this->node_->props.text_
-      || this->table_.value() != this->node_->props.text_->get())
+  // Only complete success establishes knowledge. Successful partial drawing
+  // preserves an already known presentation only at the same value and seat.
+  if (!this->links_.table().valid() || !this->node_ || !this->node_->props.text_
+      || this->links_.table().value() != this->node_->props.text_->get())
+  {
+    this->presented_.invalidate();
     return;
-  if (this->table_.draw(dc, rect, this->node_->props.blockStyle_) && complete)
-    this->presented_.commit(Win32PresentedText(this->table_.value(), rect), paintScope());
+  }
+  if (!this->links_.table().draw(dc, rect, this->node_->props.blockStyle_))
+  {
+    this->presented_.invalidate();
+    return;
+  }
+  if (complete)
+  {
+    this->presented_.commit(Win32PresentedText(this->links_.table().value(), rect), paintScope());
+    return;
+  }
+  if (this->presented_.isKnown())
+  {
+    const Win32PresentedText &presented = this->presented_.value();
+    if (presented.text.hasSameSegmentValues(this->links_.table().value())
+        && presented.seatWidth == rect.right - rect.left && presented.seatHeight == rect.bottom - rect.top)
+      return;
+  }
+  this->presented_.invalidate();
 }
 void RegisterWin32AttributedTextNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &registry)
 {
@@ -257,7 +297,7 @@ HitAnswer Win32AttributedTextContext::prepareLinkHit(POINT client, LinkHit &out)
   if (!dc)
     return HIT_REFUSED;
   LinkHit local = LinkHit();
-  HitAnswer answer = this->table_.hitAt(dc, seat, this->node_->props.blockStyle_, client, local);
+  HitAnswer answer = this->links_.table().hitAt(dc, seat, this->node_->props.blockStyle_, client, local);
   if (!ReleaseDC(this->hwnd(), dc))
     return HIT_REFUSED;
   if (answer == HIT_LINK)
@@ -265,18 +305,89 @@ HitAnswer Win32AttributedTextContext::prepareLinkHit(POINT client, LinkHit &out)
   return answer;
 }
 
-bool Win32AttributedTextContext::linkHitEligible(const LinkHit &hit) const
+bool Win32AttributedTextContext::queryEligibleRun(const LinkHit &hit, Win32PressedRun &out) const
 {
   if (!loka::app::scene::IsAttachedCurrentContext(this) || !this->node_ || !this->node_->props.text_
-      || !this->table_.valid() || !this->presented_.isKnown())
+      || !this->links_.table().valid() || !this->presented_.isKnown())
     return false;
   const Win32PresentedText &presented = this->presented_.value();
   const loka::app::AttributedString &current = this->node_->props.text_->get();
-  if (!presented.text.hasSameSegmentValues(this->table_.value()) || !this->table_.value().hasSameSegmentValues(current)
-      || hit.seatWidth != presented.seatWidth || hit.seatHeight != presented.seatHeight)
+  if (!presented.text.hasSameSegmentValues(this->links_.table().value())
+      || !this->links_.table().value().hasSameSegmentValues(current) || hit.seatWidth != presented.seatWidth
+      || hit.seatHeight != presented.seatHeight)
     return false;
   loka::app::AttributedString::LinkRun run;
   // queryLinkRun success guarantees run.first <= firstSegment and run.last < segmentCount(), so run.last >= lastSegment
   // implies both bounds.
-  return current.queryLinkRun(hit.firstSegment, run) && run.last >= hit.lastSegment;
+  if (!current.queryLinkRun(hit.firstSegment, run) || run.last < hit.lastSegment)
+    return false;
+  out = Win32PressedRun(run);
+  return true;
+}
+
+namespace
+{
+  enum Win32CaptureRelease
+  {
+    CAPTURE_RELEASED,
+    CAPTURE_NOT_HELD,
+    CAPTURE_RELEASE_FAILED
+  };
+  Win32CaptureRelease releaseOwnedCapture(HWND hwnd)
+  {
+    if (GetCapture() != hwnd)
+      return CAPTURE_NOT_HELD;
+    return ReleaseCapture() ? CAPTURE_RELEASED : CAPTURE_RELEASE_FAILED;
+  }
+} // namespace
+void Win32AttributedTextContext::handleLinkButton(UINT message, LPARAM lParam)
+{
+  Win32LinkPressProcedure p(this->links_);
+  if (!p.admitted())
+    return;
+  const POINT point = {static_cast<short>(lParam & 0xffff), static_cast<short>((lParam >> 16) & 0xffff)};
+  Win32PressedRun run;
+  LinkHit hit = LinkHit();
+  if (message == WM_LBUTTONDOWN)
+  {
+    p.takeCandidate(run);
+    if (this->prepareLinkHit(point, hit) != HIT_LINK)
+    {
+      releaseOwnedCapture(this->hwnd());
+      return;
+    }
+    if (!this->queryEligibleRun(hit, run) || p.invalidated())
+    {
+      releaseOwnedCapture(this->hwnd());
+      return;
+    }
+    p.placeCandidate(run);
+    SetCapture(this->hwnd());
+    Win32PressedRun again;
+    if (!p.invalidated() && p.candidateHolds(run) && GetCapture() == this->hwnd() && this->queryEligibleRun(hit, again)
+        && again == run)
+      return;
+    p.takeCandidate(run);
+    releaseOwnedCapture(this->hwnd());
+    return;
+  }
+  if (!p.takeCandidate(run))
+  {
+    releaseOwnedCapture(this->hwnd());
+    return;
+  }
+  const HitAnswer answer = this->prepareLinkHit(point, hit);
+  switch (releaseOwnedCapture(this->hwnd()))
+  {
+  case CAPTURE_NOT_HELD:
+  case CAPTURE_RELEASE_FAILED:
+    return;
+  case CAPTURE_RELEASED:
+    break;
+  }
+  Win32PressedRun now;
+  const bool deliver = !p.invalidated() && answer == HIT_LINK && this->queryEligibleRun(hit, now) && now == run;
+  p.close();
+  if (deliver)
+    this->node_->writeActivatedLink(run.first());
 }

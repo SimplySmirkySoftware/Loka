@@ -21,6 +21,117 @@ namespace win32_host
   WNDPROC attributedProc = 0, rectSurfaceProc = 0;
   std::vector<HBRUSH> fills;
 } // namespace win32_host
+namespace loka
+{
+  namespace testing
+  {
+    int captureAcquisitionFailures = 0, captureReleaseFailures = 0, cancelReleaseFailures = 0;
+    void failCaptureAcquisitions(int count)
+    {
+      captureAcquisitionFailures = count;
+    }
+    void failCaptureReleases(int count)
+    {
+      captureReleaseFailures = count;
+    }
+    void failCancelReleases(int count)
+    {
+      cancelReleaseFailures = count;
+    }
+  } // namespace testing
+} // namespace loka
+namespace win32_host
+{
+  enum PressPhase
+  {
+    PRESS_SET_CAPTURE,
+    PRESS_RELEASE_CAPTURE,
+    PRESS_CLIENT_RECT,
+    PRESS_GET_DC,
+    PRESS_HIDE
+  };
+  struct PressHook
+  {
+    PressPhase phase;
+    void (*call)(void *);
+    void *data;
+    PressHook()
+        : phase(PRESS_SET_CAPTURE),
+          call(0),
+          data(0)
+    {
+    }
+    void arm(PressPhase at, void (*callback)(void *), void *argument)
+    {
+      phase = at;
+      call = callback;
+      data = argument;
+    }
+    void run(PressPhase at)
+    {
+      if (!call || at != phase)
+        return;
+      void (*callback)(void *) = call;
+      void *argument = data;
+      call = 0;
+      data = 0;
+      callback(argument);
+    }
+  } pressHook;
+  HWND captureOwner = 0;
+  int coverQueries = 0;
+  int captureGets = 0, captureSets = 0, captureReleases = 0, clientRectCalls = 0, dcCalls = 0;
+  void modalCancel(HWND capturer)
+  {
+    SendMessageW(capturer, WM_CANCELMODE, 0, 0);
+  }
+  void menuCapture(HWND owner)
+  {
+    SetCapture(owner);
+  }
+} // namespace win32_host
+HWND WindowFromPoint(POINT)
+{
+  ++win32_host::coverQueries;
+  return 0;
+}
+HWND GetCapture()
+{
+  ++win32_host::captureGets;
+  return win32_host::captureOwner;
+}
+HWND SetCapture(HWND hwnd)
+{
+  using namespace win32_host;
+  ++captureSets;
+  HWND previous = captureOwner;
+  if (loka::testing::captureAcquisitionFailures > 0)
+  {
+    --loka::testing::captureAcquisitionFailures;
+    return previous;
+  }
+  captureOwner = hwnd;
+  if (previous)
+    SendMessageW(previous, WM_CAPTURECHANGED, 0, reinterpret_cast<LPARAM>(hwnd));
+  pressHook.run(PRESS_SET_CAPTURE);
+  return previous;
+}
+BOOL ReleaseCapture()
+{
+  using namespace win32_host;
+  ++captureReleases;
+  if (loka::testing::captureReleaseFailures > 0)
+  {
+    --loka::testing::captureReleaseFailures;
+    return FALSE;
+  }
+  HWND previous = captureOwner;
+  captureOwner = 0;
+  if (previous)
+    SendMessageW(previous, WM_CAPTURECHANGED, 0, 0);
+  pressHook.run(PRESS_RELEASE_CAPTURE);
+  return TRUE;
+}
 // Deliberate platform-seam twin: keep this sequence in step with
 // Win32ScenePlatformController::updateDisplayScale / ensureDisplayFont and
 // applyDisplayFontToNativeSubtree in win32/src/Win32ScenePlatformController.cpp.
@@ -91,6 +202,8 @@ void Win32ScenePlatformController::applyDisplayFontToNativeSubtree(const loka::w
 
 HDC GetDC(HWND h)
 {
+  ++win32_host::dcCalls;
+  win32_host::pressHook.run(win32_host::PRESS_GET_DC);
   if (win32_host::failDC || !h)
     return 0;
   ++win32_host::acquisitions;
@@ -136,6 +249,8 @@ LRESULT SendMessageW(HWND h, UINT message, WPARAM w, LPARAM l)
 }
 BOOL GetClientRect(HWND h, RECT *r)
 {
+  ++win32_host::clientRectCalls;
+  win32_host::pressHook.run(win32_host::PRESS_CLIENT_RECT);
   if (win32_host::refuseClientRect)
   {
     // Refusal still writes a defined (empty) rect: callers that ignore the
@@ -169,8 +284,10 @@ BOOL InvalidateRect(HWND, const RECT *, BOOL)
   ++win32_host::colorInvalidations;
   return TRUE;
 }
-BOOL ShowWindow(HWND, int)
+BOOL ShowWindow(HWND, int command)
 {
+  if (command == SW_HIDE)
+    win32_host::pressHook.run(win32_host::PRESS_HIDE);
   return TRUE;
 }
 HINSTANCE GetModuleHandleW(LPCWSTR)
@@ -189,8 +306,15 @@ int RegisterClassW(const WNDCLASSW *wc)
     win32_host::attributedProc = wc->lpfnWndProc;
   return 1;
 }
-LRESULT DefWindowProcW(HWND, UINT, WPARAM, LPARAM)
+LRESULT DefWindowProcW(HWND hwnd, UINT message, WPARAM, LPARAM)
 {
+  if (message == WM_CANCELMODE && GetCapture() == hwnd)
+  {
+    if (loka::testing::cancelReleaseFailures > 0)
+      --loka::testing::cancelReleaseFailures;
+    else
+      ReleaseCapture();
+  }
   return 0;
 }
 HDC BeginPaint(HWND h, PAINTSTRUCT *)
@@ -408,6 +532,8 @@ HWND Win32ScenePlatformController::createNativeChildWindow(DWORD,
 }
 void Win32ScenePlatformController::queueNativeRetirement(HWND h)
 {
+  if (win32_host::captureOwner == h)
+    win32_host::captureOwner = 0;
   win32_host::windows.erase(std::find(win32_host::windows.begin(), win32_host::windows.end(), h));
   LOKA_VERIFY(GetPropW(h, L"Loka.Text.Color") == 0);
   LOKA_VERIFY(GetPropW(h, L"Loka.TextContext") == 0);

@@ -1190,7 +1190,8 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   add_executable(LokaWin32AttributedTextHostTests
     tests/win32/host/Win32AttributedTextHostTests.cpp
     tests/TestingHooks.cpp
-    win32/src/context/Win32AttributedTextTable.cpp)
+    win32/src/context/Win32AttributedTextTable.cpp
+    win32/src/context/Win32LinkPress.cpp)
   target_include_directories(LokaWin32AttributedTextHostTests PRIVATE tests/win32/host tests win32/src)
   target_compile_options(LokaWin32AttributedTextHostTests PRIVATE
     -include ${PROJECT_SOURCE_DIR}/tests/win32/host/Win32TextHost.hpp)

@@ -9,6 +9,7 @@
 #include "context/Win32ScrollViewContext.hpp"
 #include "context/Win32CellContext.hpp"
 #include "context/Win32TextEditorContext.hpp"
+#include "context/Win32AttributedTextContext.hpp"
 
 /** Complete synchronous Win32 input operations. The stack borrow restores
     without pumping; Win32App::flushIterationTail remains the completion.
@@ -49,6 +50,10 @@ public:
   static LRESULT textEditorInput(Win32TextEditorContext &c, UINT message, WPARAM wp, LPARAM lp)
   {
     return Invocation(*c.controller())(c, &Win32TextEditorContext::handleInputMessage, message, wp, lp);
+  }
+  static void attributedTextButton(Win32AttributedTextContext &c, UINT message, LPARAM lp)
+  {
+    Invocation (*c.controller())(c, &Win32AttributedTextContext::handleLinkButton, message, lp);
   }
   static void textEditorRetry(Win32TextEditorContext &c)
   {
