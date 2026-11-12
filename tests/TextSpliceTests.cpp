@@ -86,9 +86,9 @@ void testTextSpliceRefusals()
   const char *invalid[] = {"\xc0\xaf", "\xed\xa0\x80", "\xf4\x90\x80\x80", "\xe2\x82"};
   for (unsigned i = 0; i < 4; ++i)
   {
-    LOKA_VERIFY(
-        TextSplice::FromUtf8(position(1), position(3), invalid[i], std::strlen(invalid[i]), TextPlacement::Start(), out)
-        == TEXT_DOCUMENT_NOT_TEXT);
+    const unsigned long length = static_cast<unsigned long>(std::strlen(invalid[i]));
+    LOKA_VERIFY(TextSplice::FromUtf8(position(1), position(3), invalid[i], length, TextPlacement::Start(), out)
+                == TEXT_DOCUMENT_NOT_TEXT);
     LOKA_VERIFY(!(out != before));
   }
   // Allocation refusal precedes UTF-8 validation; a refused attempt owns no scratch.
