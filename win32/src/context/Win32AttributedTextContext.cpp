@@ -256,7 +256,7 @@ HitAnswer Win32AttributedTextContext::prepareLinkHit(POINT client, LinkHit &out)
   HDC dc = GetDC(this->hwnd());
   if (!dc)
     return HIT_REFUSED;
-  LinkHit local;
+  LinkHit local = LinkHit();
   HitAnswer answer = this->table_.hitAt(dc, seat, this->node_->props.blockStyle_, client, local);
   if (!ReleaseDC(this->hwnd(), dc))
     return HIT_REFUSED;

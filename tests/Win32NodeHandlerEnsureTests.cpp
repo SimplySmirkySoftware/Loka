@@ -3895,7 +3895,7 @@ void testWin32LinkHitGeometry()
       const TextLineRecord &line = AttributedAccess::table(context).lines().line(0);
       const int offset = mode == 0 ? 0 : mode == 1 ? (rect.right - line.width) / 2 : rect.right - line.width;
       POINT point = {offset, 0};
-      LinkHit hit;
+      LinkHit hit = LinkHit();
       LOKA_VERIFY(AttributedAccess::prepare(context, point, hit) == HIT_LINK);
       point.x = offset - 1;
       LOKA_VERIFY(AttributedAccess::prepare(context, point, hit) == HIT_NONE);
@@ -3920,7 +3920,7 @@ void testWin32LinkHitGeometry()
     context.layout(&controller, seat);
     paintHitContext(context);
     POINT point = {0, 0};
-    LinkHit hit;
+    LinkHit hit = LinkHit();
     LOKA_VERIFY(AttributedAccess::prepare(context, point, hit) == HIT_LINK);
     RECT rect;
     LOKA_VERIFY(GetClientRect(context.paintHwnd(), &rect));

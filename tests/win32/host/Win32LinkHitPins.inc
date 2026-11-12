@@ -237,7 +237,7 @@ namespace
     reset();
     restoreAttempts = 0;
     restoreFont = original;
-    LinkHit hit;
+    LinkHit hit = LinkHit();
     LOKA_VERIFY(FittingAccess::prepare(*context, point, hit) == HIT_LINK);
     LOKA_VERIFY(selections == 0 && restoreAttempts == 0);
     const POINT outside = {-1, 0};
@@ -292,7 +292,7 @@ namespace
     FittingAccess::place(*context, 0, 0, 100, 100);
     const RECT seat = {0, 0, 100, 100};
     const POINT point = {0, 0};
-    LinkHit hit;
+    LinkHit hit = LinkHit();
     LOKA_VERIFY(FittingAccess::prepare(*context, point, hit) == HIT_LINK);
     fittingPin("host_eligible_unpainted_partial_failed_complete");
     LOKA_VERIFY(!FittingAccess::eligible(*context, hit));
@@ -310,7 +310,7 @@ namespace
     root.rect.left = 30;
     root.rect.top = 40;
     LOKA_VERIFY(FittingAccess::eligible(*context, hit));
-    LinkHit fresh;
+    LinkHit fresh = LinkHit();
     LOKA_VERIFY(FittingAccess::prepare(*context, point, fresh) == HIT_LINK && FittingAccess::eligible(*context, fresh));
     fittingPin("host_eligible_relayout_without_then_with_repaint");
     FittingAccess::place(*context, 20, 30, 100, 100);
@@ -400,7 +400,7 @@ namespace
       const RECT seat = {0, 0, 100, 100};
       FittingAccess::draw(*context, &context->paintHwnd()->dc, seat);
       const POINT point = {0, 0};
-      LinkHit hit;
+      LinkHit hit = LinkHit();
       LOKA_VERIFY(FittingAccess::prepare(*context, point, hit) == HIT_LINK);
       LOKA_VERIFY(hit.firstSegment == 0 && hit.lastSegment == (refusal ? 1u : 2u));
       LOKA_VERIFY(FittingAccess::eligible(*context, hit));

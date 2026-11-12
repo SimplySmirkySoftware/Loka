@@ -523,7 +523,7 @@ Win32AttributedTextTable::hitAt(HDC dc, const RECT &seat, const BlockStyle &bloc
       continue;
     const WidthSource source(*this);
     FittedLine fitted;
-    LinkHit local;
+    LinkHit local = LinkHit();
     HitAnswer answer;
     if (this->needsEllipsis(*line, seat.right - seat.left, block))
     {
