@@ -492,48 +492,124 @@ the first Button to the whole offer and preserves the excess Buttons' previous
 rects and visibility, with the fourth Button's click route still working;
 restoring as 4x1 lays the same Buttons out again). Without an installed Chromium the driver prints a skip.
 
-### VS Code shell (PR 5a / 5b)
+### VS Code shell
 
 The shell procedures live in `tools/vscode-loka/src/previewHtml.ts` (documents),
-`src/preview.ts` (panel lifetime), and `src/build.ts` (task lifetime).
-PR 5b supplies the native VS Code ports, manifest contributions, and F5 launch configuration.
-Externally destroyed documents (panel close or window reload) terminate abruptly:
-there is no host disposal call and no completion acknowledgement.
+`src/preview.ts` (panel lifetime), `src/build.ts` (task lifetime), and
+`src/catalog.ts` (synchronous catalog decoding and current-example resolution).
+`src/wire.ts` supplies the native VS Code ports. Externally destroyed documents
+(panel close or window reload) terminate abruptly: there is no host disposal
+call and no completion acknowledgement.
 
 Each owner uses an event queue: nested calls only enqueue, so the current event
 may still install a document, post disposal, or launch a task before a queued
-close/dispose takes effect. Build retains early end facts and reconciles them by
-execution identity at acquisition, preferring process results; rejection or
-disposal drops them. Unexpected exceptions stop that owner's queue permanently;
+close/dispose takes effect. The task owner retains early end facts and reconciles
+them by execution identity at acquisition, preferring process results; rejection
+or disposal drops them. Unexpected exceptions stop that owner's queue permanently;
 recovery requires reopening the panel or reloading the window. Panel access uses
-an `install` / `postDispose` capability seam: the adapter must revoke capability
-synchronously on native disposal before posting CLOSE. PR 5a pins this contract
-with a strict fake; PR 5b connects native listeners before the first installation.
-Native disposal and fault retirement share a capability-taking cleanup path.
+an `install` / `postDispose` capability seam: the adapter revokes capability
+synchronously on native disposal before posting CLOSE. Native disposal and fault
+retirement share a capability-taking cleanup path.
 
+Only `workspaceFolders[0]` is used. Open the repository in Remote WSL with
+Node/npm and the Emscripten tools available to tasks. With extension dependencies
+installed, select **Loka: Preview Extension** and press F5. The unchanged
+prelaunch task runs a clean `npm run build`; a failed build stops launch (do not
+choose Debug Anyway). The launch passes `${workspaceFolder}` as a separate
+argument to open the repository in the Extension Development Host. Opening a
+source file does not open or select a preview.
 
-Open the repository in Remote WSL with Node/npm available to tasks. Run
-`npm ci --ignore-scripts` once in `tools/vscode-loka` (and again after lockfile
-changes), select **Loka: Preview Extension**, and press F5. Its pre-launch task
-runs a clean `npm run build`; a failed build stops launch (do not choose Debug
-Anyway). The Extension Development Host window opens without a folder: open the
-repository folder there, then use the **Loka: Open Preview**, **Loka: Build** and
-**Loka: Reload** commands; opening a source file does not open the preview.
-The task shell must already have emsdk available for **Loka: Build**.
-Build and every preview replacement read workspace trust afresh; an untrusted
-workspace runs no task and receives a script-free MESSAGE page.
+The removed `loka.preview.module` and `loka.preview.buildCommand` settings are
+no longer read. Remove those overrides and set `loka.preview.buildDirectory`
+and `loka.preview.configureCommand` together. The former is absolute or relative
+to the first workspace folder; the latter is responsible for configuring that
+directory. The extension neither infers nor rewrites presets. For the repository
+presets, the pairs are:
 
-Build-verified: the pinned TypeScript configuration emits a CommonJS entry;
-the built-artifact check loads it through `require`, activates the extension
-against a strict API fake, and verifies command/listener registration and disposal.
+| Preset | buildDirectory | configureCommand |
+| --- | --- | --- |
+| web | `build/wasm/web` | `emcmake cmake --preset web` |
+| testing-web | `build/wasm/testing` | `emcmake cmake --preset testing-web` |
 
-Runtime-verified (2026-11-11, VS Code 1.143.1, Remote WSL, Extension Development
-Host, by hand): Open Preview started the workspace-built HelloWorld module and its
-buttons responded; a successful **Loka: Build** reloaded the preview; a Build
-with the preview tab hidden reported `Previous document: completed`. Not
-runtime-verified: the untrusted-workspace refusal, the four themes, the outer
-scroll, the cache-busted Wasm refetch and webview resource enforcement.
+Use **Loka: Configure**, **Loka: Select Example**, **Loka: Build**, then
+**Loka: Open Preview**. Configure and Build share one task owner and refuse a
+second operation during acquisition or execution. Configure needs trust and a
+folder, but no catalog; success reports `Configured` without reloading. Build
+reads the catalog and selection at admission and starts a `cmake` process with
+`--build`, the absolute build directory, `--target`, and the selected target as
+separate arguments, with the workspace folder as cwd. Configure uses a shell
+command with the same cwd. Changes to the Configure shell's environment do not
+persist into a later Build task. Build keeps its immutable operation through
+completion, reports the captured target on success, and calls parameterless
+reload on the current panel, if any. It never opens a panel.
 
+Select reads the catalog after trust admission and presents its labels in
+producer order. It saves only the chosen identity in `workspaceState`, under a
+key containing the opening folder's URI. Cancellation does nothing. Successful
+persistence calls the activation's current-slot reload, never a captured panel.
+Picker, persistence, reload and error-notification failures are contained by the
+asynchronous handler. After activation disposal, late preference writes are
+allowed; success touches no panel, status item or output channel, and errors use
+only the window notification service. Overlapping Select commands leave the
+value actually committed to storage, regardless of invocation, picker-close or
+promise-settlement order. No selection phase, generation counter or descriptor
+cache is retained.
+
+Build and every preview replacement read trust afresh. Untrusted workspaces run
+no task and receive a script-free MESSAGE page; Select does not read the catalog.
+Catalog reads and validation are synchronous at Select, Build and replacement
+preparation, with no watcher or editor/configuration listener. Missing, malformed,
+unsupported-version, empty and unreadable catalogs diagnose **Configure**.
+A nonempty saved identity absent from a valid catalog diagnoses **Select Example**;
+it never falls back silently. Missing or empty selection uses `apps[0]`, without
+sorting or promising HelloWorld as the default. Explicit identity survives
+reordering. Validation precedes task creation and resource URI derivation, using
+the producer's lexical path rules. The build directory is the lexical containment root for catalog paths;
+the selected JavaScript file’s directory is the webview resource root;
+JavaScript, companion Wasm and factory name come from the validated row. Missing
+artifacts diagnose **Build**. Open reveals an existing panel; Reload replaces it.
+
+The following limitations are intentional and pinned by the shell tests:
+
+- Build completion and displayed artifacts are not paired. Selecting B during a
+  build of A can load B immediately and A's completion can reload B again. B may
+  be missing, stale or fail startup. Preview status can overwrite the captured
+  target's success report in the shared status item.
+- Replacement resolves selection, settings and a newly validated catalog when
+  preparing installation, including after disposal acknowledgement or the two
+  second timeout. Intermediate selections may never be displayed. Reloads
+  during DISPOSING retain the original deadline and produce no extra disposal
+  post or replacement.
+- Manual settings changes and catalog regeneration leave the current document
+  untouched until the next operation. A picker may save an identity removed
+  after it opened; subsequent resolution diagnoses it. Without explicit
+  selection, catalog reordering or membership changes may change the default.
+- A running task retains its initial target and directory. Success reloads the
+  panel that exists then, resolving the selection and directory at replacement
+  time, including after closing and reopening the panel or changing directories.
+- Reload during Build uses whatever artifacts exist at replacement and browser
+  fetch time. JavaScript and Wasm are not an atomic snapshot: missing, partial
+  or differently aged files can fail to load. The displayed document is not
+  guaranteed to be the completed task's result.
+- These stale/availability outcomes do not bypass trust, schema or lexical path
+  containment. Only the first workspace folder participates; no folder picker
+  is provided.
+
+Verified on Linux x86_64 with Node 24.19.0 and Emscripten 7.0.0: `npm run check` and `npm run build` exited 0,
+`node test/artifact.cjs` passed, `node --test` over the extension tests passed,
+and the mutation script with type checking enabled killed every mutant.
+The extension artifact is build-verified. Native `ctest --preset testing`
+exited 0; with Node available, `scriptVscodeLoka`, `scriptVscodeLokaLauncher`
+and `scriptScenarioTools` pass, while without emsdk,
+`scriptWebAppCatalogIntegration` prints its skip. The browser driver passed,
+including `preview shell mine`. `cmake --build <build/wasm/web> --target
+LokaMineWeb` compiled and linked with an environment stripped of every emsdk
+variable (`PATH=/usr/bin:/bin`).
+
+Nothing in this change is runtime-verified inside VS Code yet: F5 with the
+folder argument, Remote WSL authority, ProcessExecution inside the task service,
+and the trust refusal still require the owner's host hand run. The earlier
+HelloWorld hand run recorded for PR 5b predates these commands.
 
 ### Cell projection and MineSweeper preview
 
@@ -633,7 +709,8 @@ the build graph must visit a directory for it to register. Membership is
 lexical (the calling source directory's path), not resolved filesystem
 containment: a caller reached through a symlink beneath `example/` can register
 even when the symlink points outside that directory. Browser fixtures such
-as `LokaWebCounter` are excluded. No consumer reads this catalog yet.
+as `LokaWebCounter` are excluded. The VS Code preview extension reads this catalog at Select, Build and document
+replacement preparation; it does not maintain a second example list.
 
 Schema v1 is `{"version":1,"apps":[{"id","name","target","exportName","sourceDir","js"}]}`.
 `id` equals the unique `target` (`[A-Za-z0-9_]+`); `name` is the example directory

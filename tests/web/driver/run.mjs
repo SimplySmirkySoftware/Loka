@@ -71,9 +71,9 @@ const server=createServer(async(req,res)=>{
     const mode = new URL(req.url, 'http://localhost').searchParams.get('cell');
     if(file === 'preview.html') {
       data = renderPreviewHtml({kind:'module', id:'preview-document', nonce:'preview-nonce',
-        cspSource: "'self'", exportName:'LokaHelloWeb',
-        jsUri: mode === 'script-fail' ? 'missing-preview.js' : 'preview-module.js',
-        wasmUri: mode === 'wasm-fail' ? 'missing-preview.wasm' : 'LokaHelloWeb.wasm'});
+        cspSource: "'self'", exportName: mode === 'mine' ? 'LokaMineWeb' : 'LokaHelloWeb',
+        jsUri: mode === 'mine' ? 'preview-mine.js' : mode === 'script-fail' ? 'missing-preview.js' : 'preview-module.js',
+        wasmUri: mode === 'mine' ? 'LokaMineWeb.wasm' : mode === 'wasm-fail' ? 'missing-preview.wasm' : 'LokaHelloWeb.wasm'});
       if(mode?.startsWith('nonce-')) {
         let index = 0;
         data = data.replace(/<script nonce="preview-nonce"/g, match =>
@@ -101,8 +101,8 @@ const server=createServer(async(req,res)=>{
         </script>`;
     } else if(file === 'LokaHelloWeb.wasm') data=await readFile(join(helloBuild,file));
     else if(file === 'text-cells.js') data=await readFile(join(driverDir,file));
-    else if(file === 'LokaMineWeb.js' || file === 'skew.js' || file === 'LokaWebCounter.js' || file === 'LokaHelloWeb.js' || file === 'preview-module.js') {
-      data=await readFile(file === 'LokaMineWeb.js' ? join(mineBuild,file) : (file === 'LokaHelloWeb.js' || file === 'preview-module.js') ? join(helloBuild,'LokaHelloWeb.js') : join(build,'LokaWebCounter.js'),'utf8');
+    else if(file === 'LokaMineWeb.js' || file === 'skew.js' || file === 'LokaWebCounter.js' || file === 'LokaHelloWeb.js' || file === 'preview-module.js' || file === 'preview-mine.js') {
+      data=await readFile((file === 'LokaMineWeb.js' || file === 'preview-mine.js') ? join(mineBuild,'LokaMineWeb.js') : (file === 'LokaHelloWeb.js' || file === 'preview-module.js') ? join(helloBuild,'LokaHelloWeb.js') : join(build,'LokaWebCounter.js'),'utf8');
       // Driver-only closure access, never a production export or a C++ test-shaped door.
       const hook=`Module['textTest']={
         service:()=>WebDOM.text,
@@ -118,10 +118,12 @@ const server=createServer(async(req,res)=>{
       const api=/Module\[['"]web['"]\]\s*=/g;
       assert.equal([...data.matchAll(api)].length,1,'one module API assignment');
       data=data.replace(api,match=>hook+match);
-      if(file === 'preview-module.js') data += `
+      if(file === 'preview-module.js' || file === 'preview-mine.js') {
+        const factoryName = file === 'preview-mine.js' ? 'LokaMineWeb' : 'LokaHelloWeb';
+        data += `
         // Driver-only observation of the real module; not a shipped shell API.
-        { const factory = LokaHelloWeb;
-          LokaHelloWeb = options => {
+        { const factory = ${factoryName};
+          ${factoryName} = options => {
             const cell = new URL(location.href).searchParams.get('cell');
             if(cell === 'throw') throw new Error('driver factory throw');
             return factory(options).then(async module => {
@@ -136,6 +138,7 @@ const server=createServer(async(req,res)=>{
           };
         }
       `;
+      }
       if(file === 'skew.js') data=data.replace(/"fingerprint":\d+/, '"fingerprint":0');
     } else data=await readFile(join(build,file));
     const type={'.html':'text/html','.js':'application/javascript','.wasm':'application/wasm'}[extname(file)];
@@ -187,7 +190,7 @@ try {
   }
   const disposePreview = () => client.evaluate(`dispatchEvent(new MessageEvent('message',
     {data:{id:'preview-document',type:'dispose'}}))`);
-  for(const cell of ['normal','pending','wasm-fail','script-fail','throw',
+  for(const cell of ['normal','mine','pending','wasm-fail','script-fail','throw',
       'nonce-0','nonce-1','nonce-2','wasm-csp']) {
     client.errors.length = 0;
     await client.send('Page.navigate', {url:'http://127.0.0.1:'+server.address().port+'/preview.html?cell='+cell});
@@ -203,17 +206,24 @@ try {
       assert.equal(await client.evaluate(`messages.filter(m=>m.type==='absent').length`), 1);
       assert.equal(await client.evaluate(`messages.filter(m=>m.type==='completed').length`), 0);
     } else {
-      if(cell === 'normal') {
+      if(cell === 'normal' || cell === 'mine') {
         await previewWait(`messages.some(m=>m.type==='started' && m.status===0)`);
         assert.equal(await client.evaluate(`messages.filter(m=>m.type==='completed').length`), 0);
         assert.equal(await client.evaluate('railSettled'), false);
-        assert.equal(await client.evaluate("document.body.textContent.includes('clicks: 0')"), true);
-        await client.evaluate("[...document.querySelectorAll('button')].find(e=>e.textContent==='Probe Button').click()");
-        await previewWait("document.body.textContent.includes('clicks: 1')");
+        if(cell === 'mine') {
+          assert.equal(await client.evaluate("document.querySelectorAll('button').length"), 65);
+          assert.equal(await client.evaluate('observedModule.textTest.resources() > 0'), true);
+          await client.evaluate("[...document.querySelectorAll('button')].find(e=>e.textContent==='New Game').click()");
+          assert.equal(await client.evaluate("document.querySelectorAll('button').length"), 65);
+        } else {
+          assert.equal(await client.evaluate("document.body.textContent.includes('clicks: 0')"), true);
+          await client.evaluate("[...document.querySelectorAll('button')].find(e=>e.textContent==='Probe Button').click()");
+          await previewWait("document.body.textContent.includes('clicks: 1')");
+        }
         await disposePreview();
       }
       await previewWait(`messages.filter(m=>m.type==='completed').length === 1`);
-      assert.equal(await client.evaluate('startCalls'), cell === 'normal' ? 1 : 0);
+      assert.equal(await client.evaluate('startCalls'), ['normal', 'mine'].includes(cell) ? 1 : 0);
       assert.equal(await client.evaluate('observedModule.textTest.resources()'), 0);
       assert.deepEqual(client.errors, [], 'preview shell runtime errors');
       assert.equal(await client.evaluate(`messages.filter(m=>m.type==='completed' && !m.settled).length`), 0);
