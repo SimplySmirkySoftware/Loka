@@ -152,8 +152,8 @@ native verification limits are recorded in the #977 Toolbox PR.
 
 B3 page 3b-4 adds AttributedText button DOWN/UP through `Win32InputDoor`.
 The host press pins and `tests/Win32LinkPressTests.cpp` cover this entry;
-Windows runtime verification is pending and is separate from the historical
-#977 evidence above. Capture-loss notifications remain native-only handling.
+the Windows pins were runtime-verified on Windows in the PR that added the
+entry, and that evidence is separate from the historical #977 evidence above. Capture-loss notifications remain native-only handling.
 
 #580 PR 2 extends the Win32 ScrollView input door to `WM_HSCROLL` and horizontal
 wheel messages (`0x020E`, including the whole wheel loop). Its added horizontal
