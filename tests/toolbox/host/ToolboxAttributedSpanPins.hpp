@@ -195,7 +195,7 @@ namespace
     for (std::size_t i = 0; i < 3; ++i)
     {
       const TextStyleSpan &span = SpanAccess::span(table, i);
-      LOKA_VERIFY(span.segment == segments[i] && span.start == starts[i] && span.end == ends[i]);
+      LOKA_VERIFY(span.source.first() == segments[i] && span.start == starts[i] && span.end == ends[i]);
       LOKA_VERIFY(span.style == (i == 1 ? Italic : Bold));
     }
     for (std::size_t i = 0; i < 6; ++i)
@@ -330,11 +330,11 @@ namespace
     LOKA_VERIFY(table.build(Linked("a", Bold, a) + Linked("b", Bold, b), BlockStyle(), 100, controller));
     LOKA_VERIFY(SpanAccess::spans(table) == expected && SpanAccess::fonts(table) == expected);
     LOKA_VERIFY(table.lines().line(0).fragmentCount == expected);
-    LOKA_VERIFY(SpanAccess::span(table, 0).segment == 0 && SpanAccess::span(table, 0).start == 0);
+    LOKA_VERIFY(SpanAccess::span(table, 0).source.first() == 0 && SpanAccess::span(table, 0).start == 0);
     LOKA_VERIFY(SpanAccess::span(table, 0).end == (expected == 1 ? 2u : 1u));
     LOKA_VERIFY(SpanAccess::character(table, 1).span == expected - 1);
     if (expected == 2)
-      LOKA_VERIFY(SpanAccess::span(table, 1).segment == 1 && SpanAccess::span(table, 1).start == 1
+      LOKA_VERIFY(SpanAccess::span(table, 1).source.first() == 1 && SpanAccess::span(table, 1).start == 1
                   && SpanAccess::span(table, 1).end == 2);
     toolbox_host::reset();
     LOKA_VERIFY(table.draw(7, 11, controller, BlockStyle(), 100));
@@ -365,8 +365,27 @@ namespace
                                    + Linked("c", Bold, y) + Linked("", Italic, x) + Linked("", Red, x);
     LOKA_VERIFY(table.build(value, BlockStyle(), 100, controller));
     LOKA_VERIFY(SpanAccess::spans(table) == 2 && SpanAccess::bytes(table) == 3);
-    LOKA_VERIFY(SpanAccess::span(table, 0).segment == 2 && SpanAccess::span(table, 0).end == 2);
-    LOKA_VERIFY(SpanAccess::span(table, 1).segment == 6 && SpanAccess::span(table, 1).start == 2);
+    LOKA_VERIFY(SpanAccess::span(table, 0).source.first() == 2 && SpanAccess::span(table, 0).end == 2);
+    LOKA_VERIFY(SpanAccess::span(table, 1).source.first() == 6 && SpanAccess::span(table, 1).start == 2);
+    LOKA_VERIFY(SpanAccess::span(table, 0).source.last() == 5 && SpanAccess::span(table, 1).source.last() == 6);
+    const AttributedString recipes[] = {Linked("a", Bold, x),
+                                        Linked("a", Bold, x) + Linked("", Bold, y) + Linked("b", Bold, x),
+                                        Linked("", Bold, y) + Linked("a", Bold, x),
+                                        Linked("a", Bold, x) + Linked("", Bold, y),
+                                        Linked("a", Bold, x) + Linked("", Bold, y) + Linked("b", Bold, y)
+                                            + Linked("", Bold, x),
+                                        Linked("a\nb", Bold, x),
+                                        Linked("abcdefgh", Bold, x)};
+    // Deliberate producer twin: testTextSpanLinkBoundaries uses these recipes.
+    for (unsigned recipe = 0; recipe < sizeof(recipes) / sizeof(recipes[0]); ++recipe)
+    {
+      LOKA_VERIFY(table.build(recipes[recipe], BlockStyle().wrap(TEXT_WRAP_CHAR), 5, controller));
+      LOKA_VERIFY(SpanAccess::span(table, 0).source.first() == (recipe == 2 ? 1u : 0u));
+      LOKA_VERIFY(SpanAccess::span(table, 0).source.last() == (recipe == 1 ? 2u : recipe == 2 ? 1u : 0u));
+      if (recipe == 4)
+        LOKA_VERIFY(SpanAccess::spans(table) == 2 && SpanAccess::span(table, 1).source.first() == 2
+                    && SpanAccess::span(table, 1).source.last() == 2);
+    }
     LOKA_VERIFY(table.build(Linked("", Bold, x) + Linked("", Italic, y), BlockStyle(), 100, controller));
     LOKA_VERIFY(SpanAccess::spans(table) == 0 && SpanAccess::bytes(table) == 0);
     const LinkTarget target(loka::core::String("target")), other(loka::core::String("target"));
@@ -377,7 +396,7 @@ namespace
                             BlockStyle(),
                             100,
                             controller));
-    LOKA_VERIFY(SpanAccess::spans(table) == 1 && SpanAccess::span(table, 0).segment == 0);
+    LOKA_VERIFY(SpanAccess::spans(table) == 1 && SpanAccess::span(table, 0).source.first() == 0);
     LOKA_VERIFY(SpanAccess::span(table, 0).end == 3);
   }
   void SpanWall(const std::string &kind)

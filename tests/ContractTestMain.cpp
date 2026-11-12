@@ -1,5 +1,6 @@
 #include "LinkActivationTests.hpp"
 #include "TextReplacementTests.hpp"
+#include "TextSpliceTests.hpp"
 #include "TextDocumentValuesTests.hpp"
 #include "EditMenuTests.hpp"
 #include "TextUtf8Tests.hpp"
