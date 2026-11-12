@@ -9,6 +9,7 @@
 #include "WebTestHooks.hpp"
 #include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
 #include "app/layout/TextShaping.hpp"
+#include "app/layout/FallbackControlMetrics.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
 #include "app/nodes/Text.hpp"
 #include "app/nodes/controls/Button.hpp"
@@ -45,8 +46,9 @@ namespace
       return ctx;
     }
   };
-  Handler<TextNode, WebTextContext, loka::web::TEXT> TextHandler;
-  Handler<ButtonNode, WebButtonContext, loka::web::BUTTON> ButtonHandler;
+  Handler<TextNode, WebElementContext, loka::web::TEXT> TextHandler;
+  Handler<ButtonNode, WebElementContext, loka::web::BUTTON> ButtonHandler;
+  Handler<CellNode, WebElementContext, loka::web::BUTTON> CellHandler;
   Handler<ScrollViewNode, WebScrollContext, loka::web::SCROLL> ScrollHandler;
   RefusedNodeHandler Refused[] = {RefusedNodeHandler(NodeTypeToken<EditTextNode>()),
                                   RefusedNodeHandler(NodeTypeToken<TextEditorNode>()),
@@ -54,7 +56,6 @@ namespace
                                   RefusedNodeHandler(NodeTypeToken<ImageViewNode>()),
                                   RefusedNodeHandler(NodeTypeToken<RectSurfaceNode>()),
                                   RefusedNodeHandler(NodeTypeToken<ScrollBarNode>()),
-                                  RefusedNodeHandler(NodeTypeToken<CellNode>()),
                                   RefusedNodeHandler(NodeTypeToken<CardBandNode>())};
   short Narrow(int n)
   {
@@ -187,6 +188,8 @@ bool WebScenePlatformController::prepareProjectedLayout(Node *node, LayoutState 
     return TextHandler.ensureContext(node, this, state) != 0;
   if (node->asButtonNode())
     return ButtonHandler.ensureContext(node, this, state) != 0;
+  if (node->asCellNode())
+    return CellHandler.ensureContext(node, this, state) != 0;
   for (unsigned i = 0; i < sizeof(Refused) / sizeof(Refused[0]); ++i)
     if (Refused[i].nodeTypeKey() == node->nodeTypeKey())
     {
@@ -218,7 +221,7 @@ namespace
   struct TextInput
   {
     explicit TextInput(Node *node)
-        : button(node && node->asButtonNode()),
+        : singleLine(node && (node->asButtonNode() || node->asCellNode())),
           style(),
           block(),
           text()
@@ -232,30 +235,64 @@ namespace
       }
       else if (ButtonNode *b = node ? node->asButtonNode() : 0)
         state = b->props.text_;
+      else if (CellNode *c = node ? node->asCellNode() : 0)
+      {
+        state = c->props.text_;
+        block = BlockStyle().align(TEXT_ALIGN_CENTER);
+      }
       if (state)
         text = state->get();
     }
-    const bool button;
+    const bool singleLine;
     TextStyle style;
     BlockStyle block;
     loka::core::String text;
   };
+  /** Cost: leaf layout/render/query once; reads only this node's props, no retained borrow. */
+  TextInput ReadLeafText(Node &node)
+  {
+    return TextInput(&node);
+  }
+  /** Cost: ingress/dispatch/render once each; O(1) typed policy, no rows. */
+  bool LeafEnabled(Node &node)
+  {
+    if (ButtonNode *button = node.asButtonNode())
+      return !button->props.enabled_ || button->props.enabled_->get();
+    return node.asCellNode() != 0;
+  }
+  /** Cost: admitted dispatch once; borrows only the current node's emitter until emission. */
+  loka::core::EmitterState *ClickEmitter(Node &node)
+  {
+    if (ButtonNode *button = node.asButtonNode())
+      return button->props.onClick_;
+    if (CellNode *cell = node.asCellNode())
+      return cell->props.onClick_;
+    return 0;
+  }
+  /** Cost: leaf layout once; O(1) own offer/snapshot, before coordinate checks. */
+  int LeafHeight(Node &node, int offeredHeight, const WebTextSnapshot *snapshot)
+  {
+    if (node.asCellNode())
+      return offeredHeight > 0 ? offeredHeight : loka::app::layout::FallbackControlMetrics::kCellHeight;
+    const int measured = snapshot ? snapshot->extent().height : 0;
+    return measured + (node.asButtonNode() && snapshot ? 2 * (kWebButtonInsetY + kWebButtonBorder) : 0);
+  }
 } // namespace
 bool WebScenePlatformController::queryNaturalWidth(Node *node, short &out) const
 {
   if (!node || (!node->asTextNode() && !node->asButtonNode()))
     return false;
-  const TextInput input(node);
+  const TextInput input = ReadLeafText(*node);
   return WebTextLayout::natural(
-      input.text, WebTextConstraint(WebFontKey(input.style), input.block, 0), input.button, false, out);
+      input.text, WebTextConstraint(WebFontKey(input.style), input.block, 0), node->asButtonNode() != 0, false, out);
 }
 bool WebScenePlatformController::queryNaturalHeight(Node *node, short &out) const
 {
   if (!node || (!node->asTextNode() && !node->asButtonNode()))
     return false;
-  const TextInput input(node);
+  const TextInput input = ReadLeafText(*node);
   return WebTextLayout::natural(
-      input.text, WebTextConstraint(WebFontKey(input.style), input.block, 0), input.button, true, out);
+      input.text, WebTextConstraint(WebFontKey(input.style), input.block, 0), node->asButtonNode() != 0, true, out);
 }
 int WebScenePlatformController::layoutNode(Node *node, const LayoutState &received)
 {
@@ -341,21 +378,20 @@ bool WebElementContext::active() const
     return false;
   if (!this->element_.token() || !this->owner() || this->owner()->lifecycleFact() != NODE_FACT_ATTACHED)
     return false;
-  const ButtonNode *button = this->owner()->asButtonNode();
-  return button && (!button->props.enabled_ || button->props.enabled_->get());
+  return LeafEnabled(*this->owner());
 }
 short WebElementContext::layout(IPlatformController *, LayoutState &state)
 {
-  const TextInput input(this->owner());
+  const TextInput input = ReadLeafText(*this->owner());
   const WebTextConstraint constraint(WebFontKey(input.style), input.block, state.width);
   bool reusable = false;
   int status = WEB_MEASURE_OK;
   if (this->projection_.get() && this->projection_.get()->constraint() == constraint)
-    status = this->projection_.get()->matches(input.text, input.button, reusable);
+    status = this->projection_.get()->matches(input.text, input.singleLine, reusable);
   if (status == WEB_MEASURE_OK && !reusable)
   {
     WebTextSnapshot *built = 0;
-    status = WebTextLayout::build(input.text, constraint, input.button, built);
+    status = WebTextLayout::build(input.text, constraint, input.singleLine, built);
     if (status == WEB_MEASURE_OK)
       this->projection_.replace(built);
   }
@@ -364,9 +400,7 @@ short WebElementContext::layout(IPlatformController *, LayoutState &state)
     this->controller_.refuseTextMeasurement(this->owner(), state);
     this->controller_.refuseMeasurement();
   }
-  int height = this->projection_.get() ? this->projection_.get()->extent().height : 0;
-  if (input.button && this->projection_.get())
-    height += 2 * (kWebButtonInsetY + kWebButtonBorder);
+  const int height = LeafHeight(*this->owner(), state.height, this->projection_.get());
   if (!this->controller_.checkCoordinate(height) || !this->controller_.checkCoordinate(state.y + height))
     return state.y;
   state.height = Narrow(height);
@@ -377,9 +411,9 @@ short WebElementContext::layout(IPlatformController *, LayoutState &state)
 }
 void WebElementContext::render(IPlatformController *)
 {
-  const TextInput input(this->owner());
-  if (ButtonNode *button = this->owner()->asButtonNode())
-    web_set_enabled(this->element_.token(), !button->props.enabled_ || button->props.enabled_->get());
+  const TextInput input = ReadLeafText(*this->owner());
+  if (this->owner()->asButtonNode() || this->owner()->asCellNode())
+    web_set_enabled(this->element_.token(), LeafEnabled(*this->owner()));
   const WebTextSnapshot *snapshot = this->projection_.get();
   if (!snapshot)
   {
@@ -410,17 +444,17 @@ bool WebResourceContext::acceptsInstallation() const
   return true;
 #endif
 }
-bool WebButtonContext::click()
+bool WebElementContext::click()
 {
 #ifdef TEST_BUILD
   loka::web::testing::beforeClick(*this);
 #endif
   if (!this->active())
     return false;
-  ButtonNode *node = this->owner()->asButtonNode();
-  if (node->props.onClick_)
+  loka::core::EmitterState *emitter = ClickEmitter(*this->owner());
+  if (emitter)
   {
-    node->props.onClick_->emit();
+    emitter->emit();
     return true;
   }
   return false;

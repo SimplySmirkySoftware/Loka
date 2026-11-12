@@ -68,7 +68,7 @@ PR 1 initially projected one-line Text through INaturalSizeSource with fixed met
 
 Buttons are native `<button type="button">` elements. Mouse, Space and Enter use the same click export. Browser focus is read at completion; no keyboard or focus-event export is added. Layout containers other than ScrollView have no DOM elements.
 
-EditText, TextEditor, PopupMenu, ImageView, RectSurface, ScrollBar, Cell and CardBand are explicit refused handlers. A reached ScrollView visit settles once after projection, including refusal; a deferred visit leaves its request pending. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. IME, general pointer input, skins and hot reload remain outside this increment.
+EditText, TextEditor, PopupMenu, ImageView, RectSurface, ScrollBar and CardBand are explicit refused handlers. A reached ScrollView visit settles once after projection, including refusal; a deferred visit leaves its request pending. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. IME, general pointer input, skins and hot reload remain outside this increment.
 
 ## Host contract
 
@@ -466,8 +466,7 @@ Grid divides its parent's offer; it has no height prop or natural-height repair.
 Root, a column's remaining height, a ScrollView and a fixed Box can supply positive
 height. A zero-height offer places every row at the same y, sharing the current
 native rule. Buttons retain their measured height plus chrome and do not fill
-the offered cell. Grid creates no DOM panel or fixed height. Cell remains refused:
-if every visited child is refused without tripping the coordinate wall, the
+the offered cell. Grid creates no DOM panel or fixed height. If every visited child is refused without tripping the coordinate wall, the
 returned bottom is the last visited row's top (incoming y for an empty Grid).
 Sparse and mixed Grids use the greatest returned child bottom.
 
@@ -476,8 +475,8 @@ children create no DOM on that visit. Shrinking capacity while retaining attache
 Buttons can leave excess children's previous DOM, rects, visibility and input
 routes active. This accepted limitation does not promise hiding or input removal;
 that would need a separate projection-eligibility design. Restoring capacity
-lays out the same retained children again. MineSweeper has no Web entry and its
-Cells still need a separate projection implementation.
+lays out the same retained children again. MineSweeper uses the Cell projection
+and the `LokaMineWeb` entry described below.
 
 Grid build-verified: Linux x86_64 C++98 testing and ASan builds, Emscripten
 7.0.0 testing-web, and production LokaHelloWeb. Host and wasm Node cells passed
@@ -534,3 +533,93 @@ buttons responded; a successful **Loka: Build** reloaded the preview; a Build
 with the preview tab hidden reported `Previous document: completed`. Not
 runtime-verified: the untrusted-workspace refusal, the four themes, the outer
 scroll, the cache-busted Wasm refetch and webview resource enforcement.
+
+
+### Cell projection and MineSweeper preview
+
+Cell uses the existing BUTTON resource and its click listener, through a typed
+`Handler<CellNode, WebElementContext, BUTTON>`. Resource kind describes DOM storage;
+logical node type decides enabled policy, sizing, and text preparation. Text,
+Button and Cell share one context implementation and one click procedure. The
+procedure rechecks admission after the test hook and borrows the current logical
+node's emitter. An enabled Button or a Cell can be active; a Cell with no emitter
+has no action. Text and unknown nodes cannot be active. No receiver caches an
+emitter, enabled flag, or Cell policy.
+
+File-local leaf queries retain nothing. Label preparation normalizes Button and
+Cell to a single line; Button alone receives measured chrome height and remains
+eligible for natural-size queries. Cell refuses both natural queries without
+changing the output. Its CENTER block is part of the constraint before snapshot
+construction; Button retains its default LEFT. Row estimation still treats Cell
+as an unknown child contributing the fallback line height, then gives it the
+final row-height offer. Button's checked chrome arithmetic remains unchanged.
+
+Cell retains the offered width and takes the offered height when positive,
+otherwise `FallbackControlMetrics::kCellHeight`. This choice is independent of
+snapshot availability and goes through the existing leaf height, bottom and
+projection checks before narrowing and writing the rectangle. Grid checks the
+*offered* rectangle, which does not cover a later fallback enlargement. At root,
+a Cell at y=32760 with fallback height 20 writes that rectangle and returns the
+clamped bottom 32767; root does not reject its bottom 32780. Inside ScrollView,
+the content-bottom check refuses before the rect write and prevents extent and
+origin commit. This is an existing root limitation, not a new Grid safety wall.
+
+Measurement REFUSED preserves the last successful snapshot, restores the layout
+inputs, and schedules the existing after-flush retry. An initial failure stays hidden; a retained snapshot
+stays visible. Refusal inside ScrollView conservatively prevents its commit even
+though Cell's height does not require measurement. PROTOCOL retains its existing
+debug assertion and release behavior without retry. No new retry clock exists.
+
+The accepted preview appearance is Web Button chrome: padding, border,
+`appearance:none`, no wrapping, and hidden overflow. At width 27, the content
+width is 9 CSS pixels; a glyph may clip. Narrowing does not truncate snapshot
+bytes. Width remains part of snapshot identity. No styling aims for native Cell
+pixel or metric parity. Tab focus and Space/Enter clicks come from `<button>`;
+action timing is DOM click, rather than the mouse-down timing of some native
+rails. NATURAL Columns offer zero height; ordinary Columns give the remaining
+height, which a Cell fills. Later siblings can receive zero and use fallback.
+Positive ScrollViews offer viewport height. A cramped Grid can have overlapping
+logical fallback rectangles; CSS padding and border can also enlarge the rendered
+border box beyond a small positive style size. These preview outcomes are
+accepted independently of hit testing at normal measured cell centres.
+
+`LokaMineWeb` uses the shared, include-guarded C++98
+`MineSweeperProductionAppConfig` constructor, which samples the time only when
+constructed. Win32, Classic and macOS entries use the same adapter; the macOS
+outer autorelease-pool shutdown handling is unchanged. Fixed-seed test configs
+remain separate. The requested 220 by 240 content area flows through Column and
+Keyed to an eight-by-eight Grid. Window title remains unsupported.
+
+Successful New Game replaces 64 Cell resources and retains the New Game Button.
+Old routes and listeners revoke synchronously, and the existing controller drain
+releases DOM resources after the borrow. Tokens are unsigned 32-bit identities,
+never reused; each successful New Game consumes 64 more, and failed creation can
+also consume tokens. Exhaustion permanently refuses new resources for that module.
+
+Cost: each materialized Cell uses one existing DOM resource, one click listener,
+and one slot holding at most one successful snapshot. Each reached leaf visit
+selects its file-local typed handler once; no per-controller registration is added.
+Leaf policy queries are O(1) and walk no foreign rows. Snapshot matching scans the
+normalized text; rebuilding retains the existing allocation and measurement cost.
+Click admission is checked at ingress and dispatch, with at most one emission.
+Retirement walks only the retiring owner's subtree through the existing path.
+
+Cell build-verified: Linux x86_64 C++98 testing, ASan, and NDEBUG release;
+Emscripten testing plus production `LokaHelloWeb` and `LokaMineWeb` targets.
+Host and wasm `WebCellTests` pass policy, refusal and lifecycle checks, and the
+full native suite passes. ASan ran with leak detection disabled, so it gives no
+leak verdict. Of the native MineSweeper targets that share the adapter header,
+`LokaMine68K` is build-verified (`retro68-68k-release`); `LokaMineWin32`,
+`LokaMineMacOS` and `LokaMinePPC` are built by CI only and were not built
+locally. No native runtime verification is claimed.
+
+Cell browser-verified (Chromium on Linux, through the driver): 64 Cells in
+eight distinct rows and columns with CENTER beside the Button's LEFT; a CDP
+mouse press and release at each measured centre reaches that Cell only, each
+from a fresh generation; Tab focus, Space and Enter; New Game replaces all 64
+(old DOM clicks and old tokens do nothing, each old listener is removed before
+its element is released, once) while the New Game Button is retained; cramped
+roots overlap as described above; a fixed-seed board shows a blank, a number
+and a mine; and the production `LokaMineWeb` module at 220x240 shows 65
+Buttons, runs New Game and disposes. Without an installed Chromium the driver
+prints a skip.

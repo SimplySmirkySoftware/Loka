@@ -8,10 +8,12 @@ import {fileURLToPath} from 'node:url';
 const driverDir=fileURLToPath(new URL('.',import.meta.url));
 import assert from 'node:assert/strict';
 import {runStackCells, runHelloRoundTrip} from './stack-cells.mjs';
+import {runCellCells} from './cell-cells.mjs';
 import {runGridCells} from './grid-cells.mjs';
 import {renderPreviewHtml} from '../../../tools/vscode-loka/src/previewHtml.ts';
 
 const build=resolve(process.argv[2] || 'build/wasm/testing/web');
+const mineBuild=resolve('build/wasm/web/example/MineSweeper');
 const helloBuild=resolve('build/wasm/web/example/HelloWorld');
 const chromium=process.env.CHROMIUM || ['chromium','chromium-browser','google-chrome']
   .find(name=>spawnSync('which',[name],{stdio:'ignore'}).status===0);
@@ -88,14 +90,19 @@ const server=createServer(async(req,res)=>{
         <script nonce="X">LokaHelloWeb({locateFile:name=>name}).then(m=>{
           window.fixture=m;window.web=m.web;window.ready=true;
         }).catch(error=>{window.loadError=String(error)});</script>`;
-    } else if(file === 'hello.html') {
+    } else if(file === 'mine.html') {
+      data=`<!doctype html><body><script src="LokaMineWeb.js"></script><script>
+        LokaMineWeb({locateFile:name=>name}).then(m=>{window.fixture=m;window.web=m.web;window.ready=true});
+        </script>`;
+    } else if(file === 'LokaMineWeb.wasm') data=await readFile(join(mineBuild,file));
+    else if(file === 'hello.html') {
       data=`<!doctype html><body><script src="LokaHelloWeb.js"></script><script>
         LokaHelloWeb({locateFile:name=>name}).then(m=>{window.fixture=m;window.web=m.web;window.ready=true});
         </script>`;
     } else if(file === 'LokaHelloWeb.wasm') data=await readFile(join(helloBuild,file));
     else if(file === 'text-cells.js') data=await readFile(join(driverDir,file));
-    else if(file === 'skew.js' || file === 'LokaWebCounter.js' || file === 'LokaHelloWeb.js' || file === 'preview-module.js') {
-      data=await readFile((file === 'LokaHelloWeb.js' || file === 'preview-module.js') ? join(helloBuild,'LokaHelloWeb.js') : join(build,'LokaWebCounter.js'),'utf8');
+    else if(file === 'LokaMineWeb.js' || file === 'skew.js' || file === 'LokaWebCounter.js' || file === 'LokaHelloWeb.js' || file === 'preview-module.js') {
+      data=await readFile(file === 'LokaMineWeb.js' ? join(mineBuild,file) : (file === 'LokaHelloWeb.js' || file === 'preview-module.js') ? join(helloBuild,'LokaHelloWeb.js') : join(build,'LokaWebCounter.js'),'utf8');
       // Driver-only closure access, never a production export or a C++ test-shaped door.
       const hook=`Module['textTest']={
         service:()=>WebDOM.text,
@@ -284,6 +291,7 @@ try {
   assert.equal(closingScroll.count,2);assert.equal(closingScroll.result,5,'pending-close root refuses scroll while another root remains');
   await client.evaluate('web.dispose();web.completed.then(()=>true)');
   await runGridCells(client, navigate);
+  await runCellCells(client, navigate);
   await runStackCells(client, navigate);
   await runHelloRoundTrip(client, navigate);
   for(const viewportWidth of [800,300]) {
