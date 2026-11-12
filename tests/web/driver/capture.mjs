@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import {execFile, spawnSync} from 'node:child_process';
 import {createServer} from 'node:http';
-import {mkdir, mkdtemp, readFile, realpath, rename, rm, stat} from 'node:fs/promises';
+import {lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, stat} from 'node:fs/promises';
 import {extname, isAbsolute, join, relative, resolve, sep} from 'node:path';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
@@ -56,6 +56,14 @@ export function hostPage(app, skin) {
 <style>html,body{margin:0;overflow:hidden}*{scrollbar-width:none}*::-webkit-scrollbar{display:none}</style>
 </head><body><script>
 (async () => {
+  let failed = false;
+  const fail = error => {
+    failed = true;
+    document.body.setAttribute('data-loka-capture', 'failed');
+    document.body.setAttribute('data-loka-error', String(error));
+  };
+  window.addEventListener('error', event => fail(event.error || event.message));
+  window.addEventListener('unhandledrejection', event => fail(event.reason));
   try {
     await new Promise((resolve, reject) => {
       const script = document.createElement('script');
@@ -68,111 +76,128 @@ export function hostPage(app, skin) {
     const result = module.web.start();
     if (result !== 0) throw new Error('web.start() failed: ' + result);
     await document.fonts.ready;
-    document.body.setAttribute('data-loka-capture', 'ready');
-  } catch (error) {
-    document.body.setAttribute('data-loka-capture', 'failed');
-    document.body.setAttribute('data-loka-error', String(error));
-  }
+    if (!failed) document.body.setAttribute('data-loka-capture', 'ready');
+  } catch (error) { fail(error); }
 })();
 </script></body></html>`;
 }
 
 async function runBrowser(chromium, args, signal) {
   signal.throwIfAborted();
-  const pending = run(chromium, args, {timeout: 30000, killSignal: 'SIGKILL', maxBuffer: 8 * 1024 * 1024});
-  // Kill directly rather than execFile's abort option: await process close before
-  // deleting the profile, so the browser cannot keep writing into its old home.
-  const stop = () => pending.child.kill('SIGKILL');
+  const pending = run(chromium, args, {detached: process.platform !== 'win32', maxBuffer: 8 * 1024 * 1024});
+  // POSIX dev hosts own the browser group, including launcher descendants.
+  // Windows falls back to the immediate child; process-tree cleanup is unsupported.
+  const stop = () => {
+    if (!pending.child.pid) return;
+    try {
+      if (process.platform === 'win32') pending.child.kill('SIGKILL');
+      else process.kill(-pending.child.pid, 'SIGKILL');
+    } catch (error) { if (error.code !== 'ESRCH') throw error; }
+  };
+  const timeout = setTimeout(stop, 30000);
   signal.addEventListener('abort', stop, {once: true});
   try { return await pending; }
   catch (error) {
     if (error.code === 'ENOENT') throw new Error('Chromium missing: ' + chromium);
     throw error;
-  } finally { signal.removeEventListener('abort', stop); }
+  } finally { clearTimeout(timeout); signal.removeEventListener('abort', stop); }
 }
 
 async function main() {
   if (process.argv.length > 3) throw new Error('Usage: node tests/web/driver/capture.mjs [web build dir]');
   const requestedBuild = resolve(process.argv[2] || join(repo, 'build/wasm/web'));
-  const catalogPath = join(requestedBuild, 'loka-web-apps.json');
-  const catalog = JSON.parse(await readFile(catalogPath, 'utf8').catch(error => {
-    throw new Error('Cannot read Web catalog ' + catalogPath + ': ' + error.message);
-  }));
-  const build = await realpath(requestedBuild);
-  const skins = JSON.parse(await readFile(join(repo, 'tools/style-vocab.json'), 'utf8')).webSkins;
-  capturePlan(catalog, skins, ''); // Validate before acquiring resources.
-  // Same executable lookup as run.mjs; absence is an error for a capture request.
-  const chromium = process.env.CHROMIUM || ['chromium', 'chromium-browser', 'google-chrome']
-    .find(name => spawnSync('which', [name], {stdio: 'ignore'}).status === 0);
-  if (!chromium) throw new Error('Chromium missing; set CHROMIUM to its executable');
   const output = join(repo, 'build/web-captures');
-  await mkdir(output, {recursive: true});
-  if (await realpath(output) !== output) throw new Error('Capture output directory must not be a symlink');
-  const server = createServer(async (req, res) => {
-    try {
-      if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
-      const url = new URL(req.url, 'http://127.0.0.1');
-      let data, type;
-      if (req.url.split('?')[0] === hostPath) {
-        const app = catalog.apps.find(item => item.id === url.searchParams.get('app'));
-        const skin = url.searchParams.get('skin');
-        if (!app || !skins.some(item => item.name === skin)) throw new Error('Unknown capture');
-        data = hostPage(app, skin); type = 'text/html; charset=utf-8';
-      } else {
-        const path = resolveBuildPath(build, req.url);
-        if (!path) throw new Error('Refused path');
-        const file = await realpath(path);
-        if (!containedPath(build, file) || !(await stat(file)).isFile()) throw new Error('Refused file');
-        data = await readFile(file);
-        type = {'.js': 'application/javascript', '.wasm': 'application/wasm', '.css': 'text/css'}[extname(file)] || 'application/octet-stream';
-      }
-      res.writeHead(200, {'Content-Type': type}); res.end(req.method === 'HEAD' ? undefined : data);
-    } catch { res.writeHead(404); res.end(); }
-  });
+  await mkdir(join(repo, 'build'), {recursive: true});
+  if (await realpath(join(repo, 'build')) !== join(repo, 'build')
+      || (await lstat(output).catch(error => {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      }))?.isSymbolicLink()) throw new Error('Capture output directory must not be a symlink');
   const cancellation = new AbortController();
   const cancel = () => cancellation.abort(new Error('Capture interrupted'));
   process.on('SIGINT', cancel);
   process.on('SIGTERM', cancel);
   try {
-    await new Promise((resolve, reject) => {
-      server.once('error', reject); server.listen(0, '127.0.0.1', resolve);
-    });
-    const plan = capturePlan(catalog, skins, 'http://127.0.0.1:' + server.address().port);
-    for (const capture of plan) {
-      cancellation.signal.throwIfAborted();
-      // Pipeline images, even temporary ones, stay under build/.
-      const staging = await mkdtemp(join(output, '.capture-'));
+    // Invalidate before catalog/browser checks, including missing-input failures.
+    await rm(output, {recursive: true, force: true});
+    const catalogPath = join(requestedBuild, 'loka-web-apps.json');
+    const catalog = JSON.parse(await readFile(catalogPath, 'utf8').catch(error => {
+      throw new Error('Cannot read Web catalog ' + catalogPath + ': ' + error.message);
+    }));
+    const build = await realpath(requestedBuild);
+    const skins = JSON.parse(await readFile(join(repo, 'tools/style-vocab.json'), 'utf8')).webSkins;
+    capturePlan(catalog, skins, ''); // Validate before acquiring resources.
+    // Same executable lookup as run.mjs; absence is an error for a capture request.
+    const chromium = process.env.CHROMIUM || ['chromium', 'chromium-browser', 'google-chrome']
+      .find(name => spawnSync('which', [name], {stdio: 'ignore'}).status === 0);
+    if (!chromium) throw new Error('Chromium missing; set CHROMIUM to its executable');
+    cancellation.signal.throwIfAborted();
+    await mkdir(output, {recursive: true});
+    const server = createServer(async (req, res) => {
       try {
-        const profile = await mkdtemp(join(tmpdir(), 'loka-web-capture-'));
-        try {
-          const png = join(staging, 'capture.png');
-          const {stdout} = await runBrowser(chromium, ['--headless', '--no-sandbox', '--disable-gpu',
-            '--hide-scrollbars', '--window-size=420,330', '--force-device-scale-factor=1',
-            '--user-data-dir=' + profile, '--virtual-time-budget=5000', '--dump-dom',
-            '--screenshot=' + png, capture.url], cancellation.signal);
-          if (!/<body\b[^>]*\bdata-loka-capture="ready"/.test(stdout)) {
-            const error = stdout.match(/\bdata-loka-error="([^"]*)"/);
-            throw new Error(capture.outputName + ': ' + (error ? error[1] : 'Module not ready within 5000 ms virtual time'));
-          }
-          const size = await stat(png).catch(() => null);
-          if (!size || !size.isFile() || size.size === 0) throw new Error('Capture missing or empty: ' + capture.outputName);
-          await rename(png, join(output, capture.outputName));
-          console.log('Wrote build/web-captures/' + capture.outputName);
-        } finally {
-          await rm(profile, {recursive: true, force: true, maxRetries: 3});
+        if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
+        const url = new URL(req.url, 'http://127.0.0.1');
+        let data, type;
+        if (req.url.split('?')[0] === hostPath) {
+          const app = catalog.apps.find(item => item.id === url.searchParams.get('app'));
+          const skin = url.searchParams.get('skin');
+          if (!app || !skins.some(item => item.name === skin)) throw new Error('Unknown capture');
+          data = hostPage(app, skin); type = 'text/html; charset=utf-8';
+        } else {
+          const path = resolveBuildPath(build, req.url);
+          if (!path) throw new Error('Refused path');
+          const file = await realpath(path);
+          if (!containedPath(build, file) || !(await stat(file)).isFile()) throw new Error('Refused file');
+          data = await readFile(file);
+          type = {'.js': 'application/javascript', '.wasm': 'application/wasm', '.css': 'text/css'}[extname(file)] || 'application/octet-stream';
         }
-      } finally {
-        await rm(staging, {recursive: true, force: true});
-      }
-    }
-  } finally {
+        res.writeHead(200, {'Content-Type': type}); res.end(req.method === 'HEAD' ? undefined : data);
+      } catch { res.writeHead(404); res.end(); }
+    });
     try {
+      await new Promise((resolve, reject) => {
+        server.once('error', reject); server.listen(0, '127.0.0.1', resolve);
+      });
+      const plan = capturePlan(catalog, skins, 'http://127.0.0.1:' + server.address().port);
+      for (const capture of plan) {
+        cancellation.signal.throwIfAborted();
+        // Pipeline images, even temporary ones, stay under build/.
+        const staging = await mkdtemp(join(output, '.capture-'));
+        try {
+          const profile = await mkdtemp(join(tmpdir(), 'loka-web-capture-'));
+          try {
+            const png = join(staging, 'capture.png');
+            const {stdout} = await runBrowser(chromium, ['--headless', '--no-sandbox', '--disable-gpu',
+              '--hide-scrollbars', '--window-size=420,330', '--force-device-scale-factor=1',
+              '--user-data-dir=' + profile, '--virtual-time-budget=5000', '--dump-dom',
+              '--screenshot=' + png, capture.url], cancellation.signal);
+            if (!/<body\b[^>]*\bdata-loka-capture="ready"/.test(stdout)) {
+              const error = stdout.match(/\bdata-loka-error="([^"]*)"/);
+              throw new Error(capture.outputName + ': ' + (error ? error[1] : 'Module not ready within 5000 ms virtual time'));
+            }
+            const size = await stat(png).catch(() => null);
+            if (!size || !size.isFile() || size.size === 0) throw new Error('Capture missing or empty: ' + capture.outputName);
+            cancellation.signal.throwIfAborted();
+            await rename(png, join(output, capture.outputName));
+            console.log('Wrote build/web-captures/' + capture.outputName);
+          } finally {
+            await rm(profile, {recursive: true, force: true, maxRetries: 3});
+          }
+        } finally {
+          await rm(staging, {recursive: true, force: true});
+        }
+      }
+    } finally {
       server.closeAllConnections();
       await new Promise(resolve => server.close(resolve));
-    } finally {
-      process.off('SIGINT', cancel);
-      process.off('SIGTERM', cancel);
     }
+    cancellation.signal.throwIfAborted();
+  } catch (error) {
+    await rm(output, {recursive: true, force: true});
+    throw error;
+  } finally {
+    process.off('SIGINT', cancel);
+    process.off('SIGTERM', cancel);
   }
 }
 
