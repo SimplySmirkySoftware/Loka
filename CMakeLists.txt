@@ -171,6 +171,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   add_subdirectory(web)
   add_subdirectory(example/HelloWorld)
   add_subdirectory(example/MineSweeper)
+  loka_finalize_web_apps()
   loka_verify_warning_floor()
   return()
 endif()
@@ -1295,6 +1296,12 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     add_test(NAME toolbarMeasurement COMMAND LokaToolbarMeasurementTests)
     add_test(NAME toolbarMeasurementWiring
       COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/toolbox/host/CheckToolbarMeasurement.py)
+    add_test(NAME scriptWebAppCatalog
+      COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/WebAppCatalogTest.py)
+    add_test(NAME scriptWebAppCatalogIntegration
+      COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/WebAppCatalogIntegrationTest.py)
+    set_tests_properties(scriptWebAppCatalogIntegration PROPERTIES
+      SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
     add_test(NAME scriptCiPaths
       COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/CiPathsTest.py)
     add_test(NAME scriptRetro68SizeReport

@@ -623,3 +623,30 @@ roots overlap as described above; a fixed-seed board shows a blank, a number
 and a mine; and the production `LokaMineWeb` module at 220x240 shows 65
 Buttons, runs New Game and disposes. Without an installed Chromium the driver
 prints a skip.
+
+## Generated Web example catalog
+
+The root Emscripten configure finalizes `loka-web-apps.json` in each binary
+directory after visiting the examples. `loka_add_web_app` registers only callers
+beneath the repository root's `example/` directory, including nested projects;
+the build graph must visit a directory for it to register. Membership is
+lexical (the calling source directory's path), not resolved filesystem
+containment: a caller reached through a symlink beneath `example/` can register
+even when the symlink points outside that directory. Browser fixtures such
+as `LokaWebCounter` are excluded. No consumer reads this catalog yet.
+
+Schema v1 is `{"version":1,"apps":[{"id","name","target","exportName","sourceDir","js"}]}`.
+`id` equals the unique `target` (`[A-Za-z0-9_]+`); `name` is the example directory
+label, not identity. `exportName` is a JavaScript identifier
+(`[A-Za-z_][A-Za-z0-9_]*`). `sourceDir` is repository-relative beneath `example/`;
+`js` is a nonempty binary-directory-relative `.js` path. Neither path may contain
+a parent traversal component. Replace `.js` with `.wasm` to locate its companion.
+
+V1 covers single-configuration Web builds and the helper's configure-known
+output specification. The finalizer refuses registrations and output-property
+overrides that violate that specification, before writing any catalog. Each
+successful configure replaces the complete file, including an empty `apps`
+array; stale artifacts cannot restore removed registrations. Fields preserve
+spaces, non-ASCII text and semicolons. The serializer escapes backslash, quote,
+backspace, tab, newline, form feed and carriage return, and refuses other C0
+controls representable in CMake strings (NUL is not representable).
