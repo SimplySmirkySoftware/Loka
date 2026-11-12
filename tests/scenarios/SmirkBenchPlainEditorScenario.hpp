@@ -25,7 +25,8 @@ namespace loka
                                           "text-editor-plain",
                                           "text-editor-scroll",
                                           "text-editor-keys",
-                                          "text-editor-japanese"};
+                                          "text-editor-japanese",
+                                          "clip-edge-tracking"};
       return ScenarioCellTable(cells, sizeof(cells) / sizeof(cells[0]));
     }
     inline ScenarioAdvance AdvanceSmirkBenchPlainEditor(long tick,
