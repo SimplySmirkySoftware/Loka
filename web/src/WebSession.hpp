@@ -2,6 +2,7 @@
 #define LOKA_WEB_SESSION_HPP
 #include "WebResources.hpp"
 #include "WebIdle.hpp"
+#include "app/layout/RailSpacing.hpp"
 #include "core/Operation.hpp"
 class WebPlatformContext;
 class WebApp;
@@ -62,6 +63,11 @@ public:
   {
     return this->scrollbarGeometry_;
   }
+  /** Cost: controller construction/layout reads once per consumer; O(1), no rows. */
+  const loka::app::layout::RailSpacing &spacing() const
+  {
+    return *this->spacing_;
+  }
   /** Cost: accepted resize once; one probe, changed value walks own live root rows. */
   void refreshScrollbarGeometry();
   /** Cost: one resize; two bounded root lookups; App checks its pending-close
@@ -119,6 +125,7 @@ private:
   WebScrollbarGeometry scrollbarGeometry_;
   WebInputRoutes routes_;
   WebTokens tokens_;
+  const loka::app::layout::RailSpacing *spacing_;
   WebPlatformContext *platform_;
   AppConfigurable *config_;
   WebApp *app_;

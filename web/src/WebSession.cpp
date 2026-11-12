@@ -1,12 +1,14 @@
 #include "WebSession.hpp"
 #include "WebStyleWire.hpp"
+#include "WebSkins.hpp"
 #include "app/bootstrap/PlatformBootstrap.hpp"
 #include "WebPlatformContext.hpp"
 #include "WebInputDoor.hpp"
 #include <new>
 #include <cassert>
 WebSession::WebSession(double now)
-    : platform_(0),
+    : spacing_(&WebSkinSpacing[WEB_SKIN_DEFAULT]),
+      platform_(0),
       config_(0),
       app_(0),
       regime_(0),
@@ -44,13 +46,18 @@ WebSession::StartResult WebSession::start(ConfigFactory factory, double now)
   int vertical = 0, horizontal = 0;
   if (web_scrollbar_geometry(&vertical, &horizontal) && web_text_admit(kWebTextWireFingerprint, WEB_TEXT_FIELD_COUNT))
   {
-    this->scrollbarGeometry_ = WebScrollbarGeometry(vertical, horizontal);
-    loka::platform::InitPlatformRuntime();
-    this->platform_ = new (std::nothrow) WebPlatformContext(*this);
-    if (this->platform_ && factory)
-      this->config_ = factory(this->platform_);
-    if (this->config_)
-      this->app_ = static_cast<WebApp *>(this->platform_->createApp(this->config_, 0, 0));
+    const int skin = web_skin();
+    if (skin >= 0 && skin < WEB_SKIN_COUNT)
+    {
+      this->spacing_ = &WebSkinSpacing[skin];
+      this->scrollbarGeometry_ = WebScrollbarGeometry(vertical, horizontal);
+      loka::platform::InitPlatformRuntime();
+      this->platform_ = new (std::nothrow) WebPlatformContext(*this);
+      if (this->platform_ && factory)
+        this->config_ = factory(this->platform_);
+      if (this->config_)
+        this->app_ = static_cast<WebApp *>(this->platform_->createApp(this->config_, 0, 0));
+    }
   }
   if (!this->app_)
   {

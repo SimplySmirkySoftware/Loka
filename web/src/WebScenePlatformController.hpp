@@ -8,6 +8,7 @@
 #include "app/scene/projection/PlatformLayoutHandler.hpp"
 #include "app/scene/projection/NativeNodeContext.hpp"
 #include "app/layout/NaturalSizeSource.hpp"
+#include "app/layout/RailSpacing.hpp"
 class WebSession;
 /** Window-owned DOM projection; layout containers other than ScrollView create no DOM nodes.
     Cost: apply visits the supplied Scene subtree once; retirement drains only
@@ -18,6 +19,8 @@ class WebScenePlatformController : public loka::app::scene::IPlatformController,
 public:
   WebScenePlatformController(WebSession &session, loka::web::Token root, int width, int height);
   virtual ~WebScenePlatformController();
+  /** Cost: Stack layout once per visit; O(1) session forwarding, no rows. */
+  const loka::app::layout::RailSpacing &spacing() const;
   /** Cost: Scene apply once; delegates a traversal of that supplied Scene subtree. */
   virtual void onChange(loka::app::scene::Node *, loka::app::scene::NodeDirtyFlags, bool);
   /** Cost: Window safe completion once; O(1), DOM writes are synchronous. */

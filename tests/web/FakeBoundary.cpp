@@ -10,10 +10,15 @@ namespace webtest
   unsigned completed = 0, failCreate = 0, failHidden = 0, failTextAdmit = 0, failTextStyle = 0;
   void (*probe)(const char *, uint32_t) = 0;
   int scrollStatus = 0, appliedX = -1, appliedY = -1, gutterVertical = 0, gutterHorizontal = 0;
-  bool geometryMeasurable = true;
+  bool geometryMeasurable = true, textService = false;
+  int skinSelection = 0;
+  unsigned skinPulls = 0;
   static unsigned nextHandle = 1;
   void reset()
   {
+    textService = false;
+    skinSelection = 0;
+    skinPulls = 0;
     scrollStatus = gutterVertical = gutterHorizontal = 0;
     appliedX = appliedY = -1;
     geometryMeasurable = true;
@@ -201,6 +206,7 @@ extern "C"
   }
   void web_completed()
   {
+    webtest::textService = false;
     ++webtest::completed;
     webtest::record("completed", 0);
   }
@@ -259,7 +265,10 @@ extern "C" bool web_text_admit(unsigned long fingerprint, unsigned count)
     --webtest::failTextAdmit;
     return false;
   }
-  return fingerprint == kWebTextWireFingerprint && count == WEB_TEXT_FIELD_COUNT;
+  const bool admitted = fingerprint == kWebTextWireFingerprint && count == WEB_TEXT_FIELD_COUNT;
+  if (admitted)
+    webtest::textService = true;
+  return admitted;
 }
 extern "C" bool web_set_text_style(uint32_t token, const int *values, unsigned count)
 {
@@ -348,4 +357,10 @@ void loka::web::testing::textBuilt()
 void loka::web::testing::textCompared()
 {
   ++webtest::textScans;
+}
+
+extern "C" int web_skin()
+{
+  ++webtest::skinPulls;
+  return webtest::skinSelection;
 }

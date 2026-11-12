@@ -16,6 +16,6 @@ enum WebTextField
   WEB_TEXT_FIELD_COUNT = 9
 };
 static const int kWebTextDescriptorVersion = 2;
-static const unsigned long kWebTextWireFingerprint = 0x1002576bUL;
+static const unsigned long kWebTextWireFingerprint = 0x19ba689fUL;
 
 #endif

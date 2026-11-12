@@ -41,6 +41,8 @@ namespace loka
     once per outer entry; each call addresses one adapter-owned row. */
 extern "C"
 {
+  /** Cost: bootstrap once after admissions; O(1) module option read, no resource rows. */
+  int web_skin();
   /** Cost: session start once before allocation; probes the private service's fixed Env table. */
   bool web_text_admit(unsigned long fingerprint, unsigned count);
   int web_create(int kind, uint32_t token, uint32_t parent, int *width, int *height);

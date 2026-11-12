@@ -34,6 +34,10 @@ namespace webtest
     MID_FAILURE_Y_SCROLL,
     LEAF_FAILURE_ROOT,
     LEAF_FAILURE_SCROLL,
+    SKIN_STACK,
+    SKIN_MARGIN,
+    SKIN_INHERITED,
+    SKIN_OVERFLOW,
     LAYOUT_CELL_COUNT
   };
   inline LayoutCell &layoutCell()
@@ -205,6 +209,20 @@ namespace webtest
       case LEAF_FAILURE_SCROLL:
         c.declare(ScrollView(this->viewport).scrollTo(this->request)
                   << (VStack().gap(0) << Text("first leaf") << Text("after")));
+        break;
+      case SKIN_STACK:
+        c.declare(VStack() << (HStack().naturalWidth() << Text("a") << Text("b"))
+                           << (HStack().naturalWidth().gap(3) << Text("c") << Text("d")));
+        break;
+      case SKIN_MARGIN:
+        c.declare(Box().padding(StandardWindowMargin()) << Text("margin"));
+        break;
+      case SKIN_INHERITED:
+        c.declare(ScrollView(this->viewport) << Text("first") << Text("second"));
+        break;
+      case SKIN_OVERFLOW:
+        c.declare(ScrollView(this->viewport).scrollTo(this->request)
+                  << (HStack().naturalWidth() << Text("abcdefghijklmno") << Text("abcdefghijklmnp")));
         break;
       case LAYOUT_CELL_COUNT:
         break;

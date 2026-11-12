@@ -8,6 +8,7 @@ import {fileURLToPath} from 'node:url';
 const driverDir=fileURLToPath(new URL('.',import.meta.url));
 import assert from 'node:assert/strict';
 import {runStackCells, runHelloRoundTrip} from './stack-cells.mjs';
+import {runSkinCells} from './skin-cells.mjs';
 import {runCellCells} from './cell-cells.mjs';
 import {runGridCells} from './grid-cells.mjs';
 import {renderPreviewHtml} from '../../../tools/vscode-loka/src/previewHtml.ts';
@@ -87,17 +88,17 @@ const server=createServer(async(req,res)=>{
       const wasm=file === 'csp-allow.html' ? " 'wasm-unsafe-eval'" : '';
       res.setHeader('Content-Security-Policy',`script-src 'nonce-X'${wasm}; connect-src 'self'; default-src 'none'`);
       data=`<!doctype html><body><script nonce="X" src="LokaHelloWeb.js"></script>
-        <script nonce="X">LokaHelloWeb({locateFile:name=>name}).then(m=>{
+        <script nonce="X">LokaHelloWeb({locateFile:name=>name,lokaSkin:new URLSearchParams(location.search).get('skin')}).then(m=>{
           window.fixture=m;window.web=m.web;window.ready=true;
         }).catch(error=>{window.loadError=String(error)});</script>`;
     } else if(file === 'mine.html') {
       data=`<!doctype html><body><script src="LokaMineWeb.js"></script><script>
-        LokaMineWeb({locateFile:name=>name}).then(m=>{window.fixture=m;window.web=m.web;window.ready=true});
+        LokaMineWeb({locateFile:name=>name,lokaSkin:new URLSearchParams(location.search).get('skin')}).then(m=>{window.fixture=m;window.web=m.web;window.ready=true});
         </script>`;
     } else if(file === 'LokaMineWeb.wasm') data=await readFile(join(mineBuild,file));
     else if(file === 'hello.html') {
       data=`<!doctype html><body><script src="LokaHelloWeb.js"></script><script>
-        LokaHelloWeb({locateFile:name=>name}).then(m=>{window.fixture=m;window.web=m.web;window.ready=true});
+        LokaHelloWeb({locateFile:name=>name,lokaSkin:new URLSearchParams(location.search).get('skin')}).then(m=>{window.fixture=m;window.web=m.web;window.ready=true});
         </script>`;
     } else if(file === 'LokaHelloWeb.wasm') data=await readFile(join(helloBuild,file));
     else if(file === 'text-cells.js') data=await readFile(join(driverDir,file));
@@ -302,6 +303,7 @@ try {
   await client.evaluate('web.dispose();web.completed.then(()=>true)');
   await runGridCells(client, navigate);
   await runCellCells(client, navigate);
+  await runSkinCells(client, navigate);
   await runStackCells(client, navigate);
   await runHelloRoundTrip(client, navigate);
   for(const viewportWidth of [800,300]) {

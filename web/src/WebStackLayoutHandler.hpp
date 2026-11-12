@@ -2,7 +2,6 @@
 #define LOKA_WEB_STACK_LAYOUT_HANDLER_HPP
 #include "WebScenePlatformController.hpp"
 #include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
-extern const loka::app::layout::RailSpacing WebLayoutSpacing;
 /** Registry-owned Stack policy; the creating controller outlives this borrowed
     reference. Estimates exist only during a visit, with no retained typography. */
 class WebStackLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
