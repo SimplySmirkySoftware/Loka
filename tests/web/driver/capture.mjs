@@ -1,15 +1,13 @@
 #!/usr/bin/env node
-import {execFile, spawnSync} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import {createServer} from 'node:http';
 import {lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, stat} from 'node:fs/promises';
 import {extname, isAbsolute, join, relative, resolve, sep} from 'node:path';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
-import {promisify} from 'node:util';
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const hostPath = '/__loka_capture.html';
-const run = promisify(execFile);
 
 // Also used on realpath results so a symlink cannot escape the served tree.
 export function containedPath(root, file) {
@@ -82,25 +80,43 @@ export function hostPage(app, skin) {
 </script></body></html>`;
 }
 
-async function runBrowser(chromium, args, signal) {
+export async function runBrowser(chromium, args, signal, timeoutMs = 30000) {
   signal.throwIfAborted();
-  const pending = run(chromium, args, {detached: process.platform !== 'win32', maxBuffer: 8 * 1024 * 1024});
-  // POSIX dev hosts own the browser group, including launcher descendants.
-  // Windows falls back to the immediate child; process-tree cleanup is unsupported.
-  const stop = () => {
-    if (!pending.child.pid) return;
-    try {
-      if (process.platform === 'win32') pending.child.kill('SIGKILL');
-      else process.kill(-pending.child.pid, 'SIGKILL');
-    } catch (error) { if (error.code !== 'ESRCH') throw error; }
-  };
-  const timeout = setTimeout(stop, 30000);
-  signal.addEventListener('abort', stop, {once: true});
-  try { return await pending; }
-  catch (error) {
-    if (error.code === 'ENOENT') throw new Error('Chromium missing: ' + chromium);
-    throw error;
-  } finally { clearTimeout(timeout); signal.removeEventListener('abort', stop); }
+  return new Promise((resolve, reject) => {
+    const child = spawn(chromium, args, {
+      detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'ignore']
+    });
+    const chunks = [];
+    let bytes = 0, failure;
+    const stop = error => {
+      failure ||= error;
+      if (!child.pid) return;
+      // POSIX owns the launcher group. Windows descendant cleanup is unsupported.
+      try {
+        if (process.platform === 'win32') child.kill('SIGKILL');
+        else process.kill(-child.pid, 'SIGKILL');
+      } catch (error) { if (error.code !== 'ESRCH') failure = error; }
+    };
+    const abort = () => stop(signal.reason);
+    const timer = setTimeout(() => stop(new Error('Chromium timed out')), timeoutMs);
+    signal.addEventListener('abort', abort, {once: true});
+    child.stdout.on('data', chunk => {
+      if (failure) return;
+      bytes += chunk.length;
+      if (bytes > 8 * 1024 * 1024) stop(new Error('Chromium stdout exceeded 8 MiB'));
+      else chunks.push(chunk);
+    });
+    child.once('error', error => {
+      failure ||= error.code === 'ENOENT' ? new Error('Chromium missing: ' + chromium) : error;
+    });
+    child.once('close', (code, killedBy) => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', abort);
+      if (failure) reject(failure);
+      else if (code !== 0) reject(new Error('Chromium exited with ' + (killedBy || code)));
+      else resolve(Buffer.concat(chunks).toString('utf8'));
+    });
+  });
 }
 
 async function main() {
@@ -167,7 +183,7 @@ async function main() {
           const profile = await mkdtemp(join(tmpdir(), 'loka-web-capture-'));
           try {
             const png = join(staging, 'capture.png');
-            const {stdout} = await runBrowser(chromium, ['--headless', '--no-sandbox', '--disable-gpu',
+            const stdout = await runBrowser(chromium, ['--headless', '--no-sandbox', '--disable-gpu',
               '--hide-scrollbars', '--window-size=420,330', '--force-device-scale-factor=1',
               '--user-data-dir=' + profile, '--virtual-time-budget=5000', '--dump-dom',
               '--screenshot=' + png, capture.url], cancellation.signal);

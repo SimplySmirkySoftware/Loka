@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import vm from 'node:vm';
-import {readFile} from 'node:fs/promises';
+import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {setTimeout as delay} from 'node:timers/promises';
 import {join, resolve} from 'node:path';
-import {capturePlan, containedPath, hostPage, resolveBuildPath} from '../driver/capture.mjs';
+import {capturePlan, containedPath, hostPage, resolveBuildPath, runBrowser} from '../driver/capture.mjs';
 
 const apps = [
   {id: 'First', exportName: 'LokaFirst', js: 'example/with space/first.js'},
@@ -111,7 +113,6 @@ async function invocation(failure, cancelAt) {
   let images = ['old.png'];
   const context = {
     join, resolve, fileURLToPath: () => '/repo/', AbortController, URL, URLSearchParams,
-    promisify: () => () => {}, execFile: {},
     process: {argv: ['node', 'capture'], env: failure === 'chromium' ? {} : {CHROMIUM: 'browser'},
       on: (name, fn) => { signals[name] = fn; }, off: name => { delete signals[name]; }},
     spawnSync: () => ({status: 1}),
@@ -135,7 +136,7 @@ async function invocation(failure, cancelAt) {
     console: {log() {}},
     browser: async () => {
       if (failure === 'browser' || (failure === 'partial' && images.length)) throw new Error('browser failed');
-      return {stdout: '<body data-loka-capture="ready">'};
+      return '<body data-loka-capture="ready">';
     }
   };
   let error;
@@ -170,23 +171,67 @@ test('cancellation during validation or server close cannot succeed', async () =
   }
 });
 
-test('browser cancellation and timeout kill the POSIX group before returning', async () => {
-  for (const cause of ['abort', 'timeout']) {
-    const controller = new AbortController(), kills = [];
-    let timer, options, reject;
-    const pending = new Promise((resolve, fail) => { reject = fail; });
-    pending.child = {pid: 123, kill: () => assert.fail('must kill group')};
-    const context = {
-      URL, fileURLToPath: () => '/repo/', promisify: () => (file, args, opts) => { options = opts; return pending; }, execFile: {},
-      process: {platform: 'linux', kill: (pid, signal) => { kills.push([pid, signal]); reject(new Error('killed')); }},
-      setTimeout: (fn, ms) => { assert.equal(ms, 30000); timer = fn; return 1; },
-      clearTimeout: id => { assert.equal(id, 1); timer = null; }, controller
-    };
-    const result = vm.runInNewContext(driverSource + "\nrunBrowser('browser', [], controller.signal);", context);
-    if (cause === 'abort') controller.abort(); else timer();
-    await assert.rejects(result, /killed/);
-    assert.equal(options.detached, true);
-    assert.deepEqual(kills, [[-123, 'SIGKILL']]);
-    assert.equal(timer, null);
+// A bounded watchdog also cleans up deliberately broken mutation runs.
+async function poll(check, message, ms = 3000) {
+  const deadline = Date.now() + ms;
+  while (!await check()) {
+    assert.ok(Date.now() < deadline, message);
+    await delay(20);
   }
+}
+
+function gone(pid) {
+  try { process.kill(pid, 0); return false; }
+  catch (error) { if (error.code === 'ESRCH') return true; throw error; }
+}
+
+function kill(pid) {
+  try { process.kill(pid, 'SIGKILL'); }
+  catch (error) { if (error.code !== 'ESRCH') throw error; }
+}
+
+if (process.platform === 'win32') console.log('[skip] real browser process tests: POSIX process groups required; Windows descendants unsupported');
+
+for (const cause of ['abort', 'timeout']) test('real browser ' + cause + ' waits for launcher and kills descendant',
+  {skip: process.platform === 'win32'}, async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'loka-capture-test-'));
+    const launcher = join(dir, 'launcher.sh'), pidFile = join(dir, 'pids');
+    const controller = new AbortController();
+    let pids = [], watchdog, outcome;
+    try {
+      await writeFile(launcher, 'sleep 60 &\nchild=$!\nprintf "%s %s\\n" "$$" "$child" | tee "$1"\nwait "$child"\n');
+      const pending = runBrowser('/bin/sh', [launcher, pidFile], controller.signal, cause === 'timeout' ? 1000 : 30000);
+      // Observe rejection immediately, including failures before the fixture is ready.
+      outcome = pending.then(stdout => ({stdout}), error => ({error}));
+      await poll(async () => {
+        pids = (await readFile(pidFile, 'utf8').catch(() => '')).trim().split(/\s+/).map(Number);
+        return pids.length === 2 && pids.every(pid => Number.isInteger(pid) && pid > 0);
+      }, 'launcher did not publish both PIDs');
+      const deadline = new Promise(resolve => {
+        watchdog = setTimeout(() => resolve({error: new Error('test watchdog expired')}), 4000);
+      });
+      if (cause === 'abort') controller.abort(new Error('test abort'));
+      const result = await Promise.race([outcome, deadline]);
+      assert.match(result.error?.message || '', cause === 'abort' ? /test abort/ : /timed out/);
+      assert.equal(gone(pids[0]), true, 'promise settles after launcher close');
+      await poll(() => pids.every(gone), 'launcher and descendant must both reach ESRCH');
+    } finally {
+      clearTimeout(watchdog);
+      for (const pid of pids.filter(pid => Number.isInteger(pid) && pid > 0)) kill(pid);
+      await outcome;
+      await rm(dir, {recursive: true, force: true});
+    }
+  });
+
+test('real browser exit, output bound, spawn error and pre-abort', {skip: process.platform === 'win32'}, async () => {
+  const controller = new AbortController();
+  assert.equal(await runBrowser('/bin/sh', ['-c', 'printf hello'], controller.signal), 'hello');
+  await assert.rejects(runBrowser('/bin/sh', ['-c', 'exit 7'], controller.signal), /exited with 7/);
+  await assert.rejects(runBrowser('/bin/sh', ['-c', 'exec dd if=/dev/zero bs=1048576 count=9'], controller.signal), /stdout exceeded/);
+  const dir = await mkdtemp(join(tmpdir(), 'loka-capture-missing-'));
+  try {
+    await assert.rejects(runBrowser(join(dir, 'missing'), [], controller.signal), /Chromium missing:/);
+    controller.abort(new Error('already aborted'));
+    await assert.rejects(runBrowser(process.execPath, [], controller.signal), /already aborted/);
+  } finally { await rm(dir, {recursive: true, force: true}); }
 });

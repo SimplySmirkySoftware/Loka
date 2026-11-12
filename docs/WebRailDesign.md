@@ -124,8 +124,10 @@ The driver requires Node 22.x from 22.18, or Node 24 or newer (not Node 23). Wit
 For PR before/after observations, run
 `node tests/web/driver/capture.mjs [web build dir]` (default `build/wasm/web`)
 after building the catalogued examples. It writes each app × skin as an app-only
-420×330 PNG under the fixed `build/web-captures/` directory. Each run clears
-the previous batch; a failed or cancelled run leaves no captures. Chromium discovery
+420×330 PNG under the fixed `build/web-captures/` directory. After output-path validation
+the previous batch is removed; failures and handled cancellations remove the
+incomplete batch; usage errors and an unsafe output path are refused before
+anything is removed; process-tree cleanup on cancellation or timeout is POSIX-only. Chromium discovery
 uses the driver's lookup or `CHROMIUM`; missing inputs or failed starts are errors.
 The tool uses a 5,000 ms virtual-time budget and checks the host's successful-start
 marker, invalidated by script errors or unhandled rejections; this keeps it independent of the driver's embedded CDP client. Captures
