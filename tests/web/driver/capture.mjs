@@ -9,19 +9,31 @@ import {fileURLToPath} from 'node:url';
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const hostPath = '/__loka_capture.html';
 
-// Also used on realpath results so a symlink cannot escape the served tree.
+// Validate resolved catalog modules before opening the server.
 export function containedPath(root, file) {
   const tail = relative(root, file);
   return tail !== '' && tail !== '..' && !tail.startsWith('..' + sep) && !isAbsolute(tail);
 }
 
-export function resolveBuildPath(root, request) {
-  let path;
-  try { path = decodeURIComponent(request.split('?')[0]); }
-  catch { return null; }
-  if (!path.startsWith('/') || path.includes('\\') || path.includes('\0') || path.split('/').includes('..')) return null;
-  const file = resolve(root, '.' + path);
-  return containedPath(root, file) ? file : null;
+export async function buildFileMap(apps, root) {
+  const build = await realpath(root);
+  const files = new Map();
+  for (const app of apps) {
+    for (const path of [app.js, app.js.slice(0, -3) + '.wasm']) {
+      try {
+        const file = await realpath(resolve(build, path));
+        if (!containedPath(build, file) || !(await stat(file)).isFile()) throw new Error('Refused file');
+        files.set(modulePath(path), file);
+      } catch (error) {
+        throw new Error('Invalid capture module for ' + app.id + ': ' + error.message);
+      }
+    }
+  }
+  return files;
+}
+
+function modulePath(path) {
+  return '/' + path.split('/').map(encodeURIComponent).join('/');
 }
 
 export function capturePlan(catalog, skins, origin) {
@@ -49,7 +61,7 @@ export function capturePlan(catalog, skins, origin) {
 export function hostPage(app, skin) {
   // JSON string encoding plus '<' escaping keeps catalog text inside the script.
   const literal = value => JSON.stringify(value).replaceAll('<', '\\u003c');
-  const source = '/' + app.js.split('/').map(encodeURIComponent).join('/');
+  const source = modulePath(app.js);
   return `<!doctype html><html><head><meta charset="utf-8">
 <style>html,body{margin:0;overflow:hidden}*{scrollbar-width:none}*::-webkit-scrollbar{display:none}</style>
 </head><body><script>
@@ -140,9 +152,9 @@ async function main() {
     const catalog = JSON.parse(await readFile(catalogPath, 'utf8').catch(error => {
       throw new Error('Cannot read Web catalog ' + catalogPath + ': ' + error.message);
     }));
-    const build = await realpath(requestedBuild);
     const skins = JSON.parse(await readFile(join(repo, 'tools/style-vocab.json'), 'utf8')).webSkins;
     capturePlan(catalog, skins, ''); // Validate before acquiring resources.
+    const files = await buildFileMap(catalog.apps, requestedBuild);
     // Same executable lookup as run.mjs; absence is an error for a capture request.
     const chromium = process.env.CHROMIUM || ['chromium', 'chromium-browser', 'google-chrome']
       .find(name => spawnSync('which', [name], {stdio: 'ignore'}).status === 0);
@@ -160,12 +172,10 @@ async function main() {
           if (!app || !skins.some(item => item.name === skin)) throw new Error('Unknown capture');
           data = hostPage(app, skin); type = 'text/html; charset=utf-8';
         } else {
-          const path = resolveBuildPath(build, req.url);
-          if (!path) throw new Error('Refused path');
-          const file = await realpath(path);
-          if (!containedPath(build, file) || !(await stat(file)).isFile()) throw new Error('Refused file');
+          const file = files.get(url.pathname);
+          if (!file) throw new Error('Unknown module');
           data = await readFile(file);
-          type = {'.js': 'application/javascript', '.wasm': 'application/wasm', '.css': 'text/css'}[extname(file)] || 'application/octet-stream';
+          type = {'.js': 'application/javascript', '.wasm': 'application/wasm'}[extname(file)] || 'application/octet-stream';
         }
         res.writeHead(200, {'Content-Type': type}); res.end(req.method === 'HEAD' ? undefined : data);
       } catch { res.writeHead(404); res.end(); }

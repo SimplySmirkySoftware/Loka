@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import vm from 'node:vm';
-import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
-import {join, resolve} from 'node:path';
-import {capturePlan, containedPath, hostPage, resolveBuildPath, runBrowser} from '../driver/capture.mjs';
+import {dirname, extname, isAbsolute, join, relative, resolve, sep} from 'node:path';
+import {buildFileMap, capturePlan, hostPage, runBrowser} from '../driver/capture.mjs';
 
 const apps = [
   {id: 'First', exportName: 'LokaFirst', js: 'example/with space/first.js'},
@@ -36,15 +36,39 @@ test('every catalog identity and vocabulary skin gets a distinct capture', () =>
   assert.throws(() => capturePlan(catalog, [{name: '../bad'}], ''), /webSkins/);
 });
 
-test('server resolution refuses traversal and sibling-prefix escapes', () => {
-  const root = resolve('build/test-capture-root');
-  assert.equal(resolveBuildPath(root, '/example/with%20space/app.js?v=1'), resolve(root, 'example/with space/app.js'));
-  for (const path of ['/../secret', '/%2e%2e/secret', '/a/../../secret', '/a/%2e%2e/secret',
-    '/%2e%2e%2fsecret', '/..%5csecret', '/%00', '/%zz', 'relative.js', '/'])
-    assert.equal(resolveBuildPath(root, path), null, 'refuse ' + path);
-  assert.equal(containedPath(root, root + '-sibling/file'), false);
-  assert.equal(containedPath(root, resolve(root, '..', 'secret')), false);
-  assert.equal(containedPath(root, resolve(root, 'app.wasm')), true);
+test('allow-list serves listed js and wasm but excludes another existing build file', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'loka-capture-files-'));
+  try {
+    for (const app of apps) {
+      await mkdir(dirname(join(root, app.js)), {recursive: true});
+      await writeFile(join(root, app.js), 'module');
+      await writeFile(join(root, app.js.slice(0, -3) + '.wasm'), 'wasm');
+    }
+    await writeFile(join(root, 'loka-web-apps.json'), JSON.stringify(catalog));
+    const files = await buildFileMap(apps, root);
+    for (const app of apps) for (const path of [app.js, app.js.slice(0, -3) + '.wasm']) {
+      const url = '/' + path.split('/').map(encodeURIComponent).join('/');
+      assert.equal(files.get(url), await realpath(join(root, path)));
+    }
+    assert.equal(files.get('/loka-web-apps.json'), undefined);
+    assert.equal(files.size, apps.length * 2);
+    await rm(join(root, apps[0].js.slice(0, -3) + '.wasm'));
+    await assert.rejects(buildFileMap(apps, root), /Invalid capture module for First:/);
+    await mkdir(join(root, apps[0].js.slice(0, -3) + '.wasm'));
+    await assert.rejects(buildFileMap(apps, root), /Invalid capture module for First: Refused file/);
+  } finally { await rm(root, {recursive: true, force: true}); }
+});
+
+test('allow-list refuses a catalog js escaping through a symlink', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'loka-capture-symlink-'));
+  try {
+    const root = join(dir, 'build');
+    await mkdir(root);
+    await writeFile(join(dir, 'outside.js'), 'outside');
+    await symlink(join(dir, 'outside.js'), join(root, 'escape.js'));
+    await assert.rejects(buildFileMap([{...apps[0], js: 'escape.js'}], root),
+      /Invalid capture module for First: Refused file/);
+  } finally { await rm(dir, {recursive: true, force: true}); }
 });
 
 async function boot(result, rejectFactory = false, failScript = false, deferred = null) {
@@ -67,7 +91,7 @@ async function boot(result, rejectFactory = false, failScript = false, deferred 
       return {web: {start: () => { calls.push('start'); return result; }}};
     }}
   };
-  await vm.runInNewContext(html.match(/<script>([\s\S]*)<\/script>/)[1], context);
+  await vm.runInNewContext(html.slice(html.indexOf('<script>') + '<script>'.length, html.lastIndexOf('</script>')), context);
   return {attrs, calls, html, listeners};
 }
 
@@ -108,11 +132,11 @@ const driverSource = (await readFile(new URL('../driver/capture.mjs', import.met
   .replace(/^export /gm, '').replace(/import\.meta\.url/g, "'file:///repo/tests/web/driver/capture.mjs'")
   .split('\nif (process.argv[1]')[0];
 
-async function invocation(failure, cancelAt) {
-  const events = [], signals = {};
+async function invocation(failure, cancelAt, requests = []) {
+  const events = [], signals = {}, responses = [];
   let images = ['old.png'];
   const context = {
-    join, resolve, fileURLToPath: () => '/repo/', AbortController, URL, URLSearchParams,
+    join, resolve, relative, sep, isAbsolute, extname, fileURLToPath: () => '/repo/', AbortController, URL, URLSearchParams,
     process: {argv: ['node', 'capture'], env: failure === 'chromium' ? {} : {CHROMIUM: 'browser'},
       on: (name, fn) => { signals[name] = fn; }, off: name => { delete signals[name]; }},
     spawnSync: () => ({status: 1}),
@@ -121,17 +145,25 @@ async function invocation(failure, cancelAt) {
     rm: async path => { events.push('rm:' + path); if (path === '/repo/build/web-captures') images = null; },
     readFile: async path => {
       if (path.endsWith('loka-web-apps.json')) {
-        assert.equal(images, null, 'old batch removed before catalog read');
+        if (!requests.length) assert.equal(images, null, 'old batch removed before catalog read');
         if (failure === 'catalog') throw new Error('missing catalog');
         return JSON.stringify(catalog);
       }
       return JSON.stringify({webSkins: [{name: 'web'}]});
     },
-    createServer: () => ({once() {}, listen: (port, host, done) => done(),
+    createServer: handler => ({once() {}, listen: async (port, host, done) => {
+      for (const req of requests) {
+        const response = {};
+        await handler(req, {writeHead: (status, headers) => { Object.assign(response, {status, headers}); },
+          end: data => { response.data = data; }});
+        responses.push(response);
+      }
+      done();
+    },
       address: () => ({port: 1234}), closeAllConnections() {},
       close: done => { if (cancelAt === 'close') signals.SIGTERM(); done(); }}),
     mkdtemp: async path => path + 'temp', tmpdir: () => '/tmp',
-    stat: async () => { if (cancelAt === 'stat') signals.SIGTERM(); return {isFile: () => true, size: 1}; },
+    stat: async path => { if (cancelAt === 'stat' && path.endsWith('capture.png')) signals.SIGTERM(); return {isFile: () => true, size: 1}; },
     rename: async (from, to) => { events.push('promote'); images.push(to); },
     console: {log() {}},
     browser: async () => {
@@ -142,8 +174,25 @@ async function invocation(failure, cancelAt) {
   let error;
   try { await vm.runInNewContext(driverSource + '\nrunBrowser = browser; main();', context); }
   catch (caught) { error = caught; }
-  return {error, images, events, signals};
+  return {error, images, events, signals, responses};
 }
+
+test('HTTP allow-list excludes other existing files and keeps GET, HEAD and host routes', async () => {
+  const paths = ['/example/with%20space/first.js', '/example/with%20space/first.wasm'];
+  const result = await invocation(undefined, undefined, [
+    ...paths.map(url => ({method: 'GET', url})),
+    {method: 'HEAD', url: paths[0]},
+    {method: 'GET', url: '/__loka_capture.html?app=First&skin=web'},
+    {method: 'GET', url: '/loka-web-apps.json'},
+    {method: 'POST', url: paths[0]}
+  ]);
+  assert.equal(result.error, undefined);
+  assert.deepEqual(result.responses.map(item => item.status), [200, 200, 200, 200, 404, 405]);
+  assert.equal(result.responses[0].headers['Content-Type'], 'application/javascript');
+  assert.equal(result.responses[1].headers['Content-Type'], 'application/wasm');
+  assert.equal(result.responses[2].data, undefined);
+  assert.match(result.responses[3].data, /<body><script>/);
+});
 
 test('batch invalidation precedes input errors and discards partial batches', async () => {
   const success = await invocation();
