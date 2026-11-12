@@ -27,12 +27,23 @@ namespace loka
         static void refresh(scene::SceneTextDocuments &documents, scene::IPlatformController &controller);
         static void
         publish(scene::TextDocumentRegistration &row, scene::IPlatformController &controller, Requests requests);
+        static TextBodyWrite writeReplacement(scene::TextDocumentRegistration &row,
+                                              scene::IPlatformController &controller,
+                                              Requests requests,
+                                              scene::TextStoreRow *store,
+                                              bool read,
+                                              const scene::TextStoreReading &first);
         static TextBodyWrite writeBody(scene::TextDocumentRegistration &row,
                                        scene::IPlatformController &controller,
                                        Requests requests,
                                        scene::TextStoreRow *store,
                                        bool read,
                                        const scene::TextStoreReading &first);
+        static TextBodyWrite writeSplice(scene::TextDocumentRegistration &row,
+                                         scene::IPlatformController &controller,
+                                         bool read,
+                                         const scene::TextStoreReading &first,
+                                         const TextBodyWrite &replacement);
         static void replyBodyWrite(scene::TextDocumentRegistration &row, const TextBodyWrite &write);
         /** One row of complete or refresh; refresh first asks a linked row to commit.
             A member of the befriended class, so GCC 4.0.1 grants it the registration's

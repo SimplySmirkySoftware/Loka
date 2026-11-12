@@ -125,8 +125,10 @@ namespace webtest
     }
     virtual void compose(AppComposition &c)
     {
-      c << WindowDef(
-          WindowProps().size(220, cellMode() == 6 ? 0 : 240).scene(loka::app::scene::Boundary<CellFixture>()));
+      c << WindowDef(WindowProps()
+                         .contentMargin(0)
+                         .size(220, cellMode() == 6 ? 0 : 240)
+                         .scene(loka::app::scene::Boundary<CellFixture>()));
     }
   };
   inline AppConfigurable *CreateCells(PlatformContext *platform)

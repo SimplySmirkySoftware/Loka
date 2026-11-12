@@ -207,7 +207,7 @@ namespace
     int width = 100, height = 80;
     LOKA_VERIFY(root.create(session.routes(), session.tokens(), ROOT, 0, width, height));
     {
-      WebScenePlatformController controller(session, root.token(), width, height);
+      WebScenePlatformController controller(session, root.token(), width, height, 0);
       CellNode node(Cell("old").props);
       node.setPropsTypeId(CellProps::staticTypeId());
       LayoutState state;
@@ -360,7 +360,7 @@ namespace
       int width = 100, height = 80;
       LOKA_VERIFY(root.create(session.routes(), session.tokens(), ROOT, 0, width, height));
       {
-        WebScenePlatformController controller(session, root.token(), width, height);
+        WebScenePlatformController controller(session, root.token(), width, height, 0);
         CellNode cell(Cell("refused").props);
         LayoutState seat;
         if (failure == 0)

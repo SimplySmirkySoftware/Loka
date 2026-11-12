@@ -51,7 +51,8 @@ bool WebWindow::initialize()
   if (!this->root_.create(*this, width, height))
     return false;
   this->storeNativeFrame(loka::core::Frame(0, 0, width, height));
-  this->controller_ = new (std::nothrow) WebScenePlatformController(this->session_, this->root_.token(), width, height);
+  this->controller_ = new (std::nothrow) WebScenePlatformController(
+      this->session_, this->root_.token(), width, height, resolveWindowContentMargin(this, this->session_.spacing()));
   if (!this->controller_)
     return false;
   if (this->scene() && !this->mountReplacementScene(this->scene()))

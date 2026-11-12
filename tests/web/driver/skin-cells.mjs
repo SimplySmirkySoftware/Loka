@@ -16,6 +16,7 @@ export async function runSkinCells(client, navigate) {
       const after=sample();m.web.dispose();await m.web.completed;return {before,after};
     })()`);
     for(const rows of [fixture.before,fixture.after]) {
+      assert.equal(rows[0].x,margin);assert.equal(rows[0].y,margin);
       assert.equal(rows[1].x-rows[0].x-rows[0].w,horizontal);
       assert.equal(rows[2].y-rows[0].y-rows[0].h,gap);
       assert.equal(rows[3].x-rows[2].x-rows[2].w,3);
@@ -46,13 +47,32 @@ export async function runSkinCells(client, navigate) {
 
     await navigate('mine.html?skin='+name);
     assert.equal(await client.evaluate('web.start()'),0);
+    // Named normal fixture: 220x240; cramped overflow is tested separately.
     const mine=await client.evaluate(`(()=>{
-      const buttons=[...document.querySelectorAll('button')], first=buttons[0], cell=buttons[1];
-      const gap=parseFloat(cell.style.top)-parseFloat(first.style.top)-parseFloat(first.style.height);
-      cell.click();const clicked=cell.textContent;first.click();
-      return {gap,clicked,oldGone:!cell.isConnected,count:document.querySelectorAll('button').length};
+      const root=document.querySelector('body > div[data-loka-token]');
+      const buttons=[...root.querySelectorAll('button')], first=buttons[0], cell=buttons[1];
+      const box=e=>({x:parseFloat(e.style.left),y:parseFloat(e.style.top),w:parseFloat(e.style.width),h:parseFloat(e.style.height)});
+      const a=box(first),b=box(cell),r=root.getBoundingClientRect(),c=cell.getBoundingClientRect();
+      const x=c.x+c.width/2,y=c.y+c.height/2;
+      return {a,b,gap:b.y-a.y-a.h,x,y,hit:document.elementFromPoint(x,y)===cell,
+        contained:buttons.every(e=>{const q=e.getBoundingClientRect();return q.left>=r.left&&q.top>=r.top&&q.right<=r.right&&q.bottom<=r.bottom}),
+        documentFits:document.documentElement.scrollWidth<=document.documentElement.clientWidth&&document.documentElement.scrollHeight<=document.documentElement.clientHeight,
+        overflow:[root.scrollWidth,root.scrollHeight],size:[root.clientWidth,root.clientHeight]};
     })()`);
-    assert.equal(mine.gap,gap);assert.notEqual(mine.clicked,'.');assert(mine.oldGone);assert.equal(mine.count,65);
+    assert.deepEqual([mine.a.x,mine.a.y],[margin,margin]);
+    assert.equal(mine.a.w,220-2*margin);assert.equal(mine.gap,gap);
+    assert.equal(mine.b.w,Math.floor((220-2*margin)/8));
+    assert.equal(mine.b.h,Math.floor((240-2*margin-mine.a.h-gap)/8));
+    assert(mine.contained && mine.hit && mine.documentFits);assert.deepEqual(mine.overflow,mine.size);
+    for(const type of ['mousePressed','mouseReleased'])
+      await client.send('Input.dispatchMouseEvent',{type,x:mine.x,y:mine.y,button:'left',clickCount:1});
+    const clicked=await client.evaluate(`(()=>{
+      const buttons=[...document.querySelectorAll('button')],first=buttons[0],cell=buttons[1];
+      const text=cell.textContent,hitFocused=document.activeElement===cell;first.focus();return {text,hitFocused,focused:document.activeElement===first};
+    })()`);
+    assert.notEqual(clicked.text,'.');assert(clicked.hitFocused && clicked.focused);
+    const lifecycle=await client.evaluate(`(()=>{const first=document.querySelector('button'),cell=document.querySelectorAll('button')[1];first.click();return {oldGone:!cell.isConnected,count:document.querySelectorAll('button').length};})()`);
+    assert(lifecycle.oldGone);assert.equal(lifecycle.count,65);
     await client.evaluate('web.dispose();web.completed.then(()=>true)');
     console.log(`SkinMine ${name} gap, click and New Game passed`);
   }
@@ -71,6 +91,6 @@ export async function runSkinCells(client, navigate) {
     const remaining=parseFloat(roots[1].querySelector('span').style.left);
     b.web.dispose();await b.web.completed;return {x,remaining};
   })()`);
-  assert.deepEqual(together,{x:[16,12],remaining:12});
+  assert.deepEqual(together,{x:[32,24],remaining:24});
   console.log('SkinModules bootstrap-time choice, simultaneous macos/classic, relayout and independent disposal passed');
 }

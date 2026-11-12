@@ -795,3 +795,13 @@ foreach(pin IN ITEMS win32-link-press-table win32-attributed-text-input-body)
       -include ${PROJECT_SOURCE_DIR}/tests/win32/host/Win32TextHost.hpp)
   endforeach()
 endforeach()
+
+loka_compile_pin(request-text-splice-private
+  REFUSES pins/refuses_text_splice_private.cpp
+  ACCEPTS pins/accepts_text_splice_private.cpp
+)
+
+loka_compile_pin(request-text-splice-reply-write
+  REFUSES pins/refuses_text_splice_reply_write.cpp
+  ACCEPTS pins/accepts_text_splice_reply_write.cpp
+)
