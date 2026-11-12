@@ -33,10 +33,19 @@ namespace win32_host
 } // namespace win32_host
 HGDIOBJ GetCurrentObject(HDC dc, UINT)
 {
-  return dc->font;
+  return win32_host::refuseSnapshot ? 0 : dc->font;
 }
 HGDIOBJ SelectObject(HDC dc, HGDIOBJ font)
 {
+  if (font == win32_host::restoreFont)
+  {
+    ++win32_host::restoreAttempts;
+    if (win32_host::refusedRestores > 0)
+    {
+      --win32_host::refusedRestores;
+      return HGDI_ERROR;
+    }
+  }
   win32_host::event('S', font);
   if (++win32_host::selections == win32_host::refuseSelection)
     return HGDI_ERROR;
@@ -125,6 +134,7 @@ BOOL ExtTextOutW(HDC dc, int x, int y, UINT flags, const RECT *clip, const WCHAR
 }
 #include "Win32FittingPins.inc"
 #include "Win32MeasurementPins.inc"
+#include "Win32LinkHitPins.inc"
 namespace loka
 {
   namespace testing
@@ -334,10 +344,20 @@ static void pinStaticTextColor()
   }
 }
 
-int main(int argc, char **)
+int main(int argc, char **argv)
 {
+  if (argc == 2 && std::strcmp(argv[1], "link-run") == 0)
+  {
+    pinLinkHitRunCoverage();
+    return 0;
+  }
+
   pinTargetOnlyRebuild();
   pinFitting();
+  pinLinkHitGeometry();
+  pinLinkHitCleanup();
+  pinLinkHitEligibility();
+  pinLinkHitRunCoverage();
   pinStaticTextColor();
   pinPlainWrappedLines();
   pinAttributedTextGroundText();

@@ -618,6 +618,11 @@ namespace loka
     class Win32AttributedTextAccess
     {
     public:
+      static HitAnswer prepare(Win32AttributedTextContext &context, POINT point, LinkHit &hit)
+      {
+        return context.prepareLinkHit(point, hit);
+      }
+
       static const Win32AttributedTextTable &table(const Win32AttributedTextContext &context)
       {
         return context.table_;
@@ -3659,6 +3664,286 @@ void testWin32UnderlineInitialFailure()
     LOKA_VERIFY(dc);
     underlineMetrics(dc, controller.fallbackFont(Underline), true);
     ReleaseDC(root, dc);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+namespace
+{
+  typedef BOOL(WINAPI *HitRectFn)(HWND, LPRECT);
+  typedef HDC(WINAPI *HitGetDCFn)(HWND);
+  typedef int(WINAPI *HitReleaseFn)(HWND, HDC);
+  typedef HGDIOBJ(WINAPI *HitObjectFn)(HDC, UINT);
+  typedef HGDIOBJ(WINAPI *HitSelectFn)(HDC, HGDIOBJ);
+  typedef BOOL(WINAPI *HitExtentFn)(HDC, LPCWSTR, int, int, LPINT, LPINT, LPSIZE);
+  typedef HWND(WINAPI *HitCoverFn)(POINT);
+  HitRectFn hitRectNative;
+  HitGetDCFn hitDCNative;
+  HitReleaseFn hitReleaseNative;
+  HitObjectFn hitObjectNative;
+  HitSelectFn hitSelectNative;
+  HitExtentFn hitExtentNative;
+  HitCoverFn hitCoverNative;
+  HWND hitWindow;
+  HDC hitDC;
+  HGDIOBJ hitOriginal, hitSelected, hitBeforeRelease;
+  int hitInjection, hitAcquires, hitReleaseAttempts, hitReleases, hitRestores, hitSelections, hitCovers;
+
+  BOOL WINAPI hitRect(HWND window, LPRECT rect)
+  {
+    if (window == hitWindow && hitInjection == 1)
+      return FALSE;
+    return hitRectNative(window, rect);
+  }
+  HDC WINAPI hitAcquire(HWND window)
+  {
+    if (window != hitWindow)
+      return hitDCNative(window);
+    if (hitInjection == 2)
+      return NULL;
+    hitDC = hitDCNative(window);
+    LOKA_VERIFY(hitDC);
+    ++hitAcquires;
+    hitOriginal = hitObjectNative(hitDC, OBJ_FONT);
+    LOKA_VERIFY(hitOriginal);
+    return hitDC;
+  }
+  int WINAPI hitRelease(HWND window, HDC dc)
+  {
+    if (window != hitWindow || dc != hitDC)
+      return hitReleaseNative(window, dc);
+    ++hitReleaseAttempts;
+    hitBeforeRelease = hitObjectNative(dc, OBJ_FONT);
+    if (hitInjection == 7 || hitInjection == 9 || hitInjection == 10)
+      return 0;
+    const int result = hitReleaseNative(window, dc);
+    LOKA_VERIFY(result != 0); // Natural OS failure is not an injected refusal.
+    ++hitReleases;
+    return result;
+  }
+  HGDIOBJ WINAPI hitObject(HDC dc, UINT kind)
+  {
+    if (dc == hitDC && kind == OBJ_FONT && hitInjection == 8)
+      return NULL;
+    return hitObjectNative(dc, kind);
+  }
+  HGDIOBJ WINAPI hitSelect(HDC dc, HGDIOBJ object)
+  {
+    if (dc != hitDC)
+      return hitSelectNative(dc, object);
+    if (object == hitOriginal)
+    {
+      ++hitRestores;
+      if (hitInjection == 6 || hitInjection == 10 || ((hitInjection == 5 || hitInjection == 9) && hitRestores == 1))
+        return HGDI_ERROR;
+    }
+    else
+    {
+      ++hitSelections;
+      hitSelected = object;
+      if (hitInjection == 3)
+        return HGDI_ERROR;
+    }
+    const HGDIOBJ result = hitSelectNative(dc, object);
+    LOKA_VERIFY(result && result != HGDI_ERROR);
+    return result;
+  }
+  BOOL WINAPI hitExtent(HDC dc, LPCWSTR text, int count, int limit, LPINT fit, LPINT advances, LPSIZE size)
+  {
+    if (dc == hitDC && hitInjection == 4)
+      return FALSE;
+    return hitExtentNative(dc, text, count, limit, fit, advances, size);
+  }
+  HWND WINAPI hitCover(POINT point)
+  {
+    ++hitCovers;
+    return hitCoverNative(point);
+  }
+  typedef HFONT(WINAPI *HitCreateFontFn)(const LOGFONTW *);
+  HitCreateFontFn hitCreateFontNative;
+  HFONT WINAPI hitArialFont(const LOGFONTW *requested)
+  {
+    LOGFONTW descriptor = *requested;
+    lstrcpynW(descriptor.lfFaceName, L"Arial", LF_FACESIZE);
+    return hitCreateFontNative(&descriptor);
+  }
+  void paintHitContext(Win32AttributedTextContext &context)
+  {
+    RECT rect;
+    LOKA_VERIFY(GetClientRect(context.paintHwnd(), &rect));
+    HDC window = GetDC(context.paintHwnd());
+    LOKA_VERIFY(window);
+    HDC memory = CreateCompatibleDC(window);
+    HBITMAP bitmap = CreateCompatibleBitmap(window, rect.right, rect.bottom);
+    LOKA_VERIFY(memory && bitmap);
+    HGDIOBJ old = SelectObject(memory, bitmap);
+    LOKA_VERIFY(old && old != HGDI_ERROR);
+    LOKA_VERIFY(IntersectClipRect(memory, 0, 0, rect.right, rect.bottom) != ERROR);
+    AttributedAccess::draw(context, memory, rect);
+    LOKA_VERIFY(AttributedAccess::known(context));
+    LOKA_VERIFY(SelectObject(memory, old));
+    LOKA_VERIFY(DeleteObject(bitmap) && DeleteDC(memory));
+    LOKA_VERIFY(ReleaseDC(context.paintHwnd(), window));
+  }
+} // namespace
+
+void testWin32LinkHitCleanup()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  HMODULE user = GetModuleHandleW(L"user32.dll"), gdi = GetModuleHandleW(L"gdi32.dll");
+  hitRectNative = reinterpret_cast<HitRectFn>(GetProcAddress(user, "GetClientRect"));
+  hitDCNative = reinterpret_cast<HitGetDCFn>(GetProcAddress(user, "GetDC"));
+  hitReleaseNative = reinterpret_cast<HitReleaseFn>(GetProcAddress(user, "ReleaseDC"));
+  hitObjectNative = reinterpret_cast<HitObjectFn>(GetProcAddress(gdi, "GetCurrentObject"));
+  hitSelectNative = reinterpret_cast<HitSelectFn>(GetProcAddress(gdi, "SelectObject"));
+  hitExtentNative = reinterpret_cast<HitExtentFn>(GetProcAddress(gdi, "GetTextExtentExPointW"));
+  hitCoverNative = reinterpret_cast<HitCoverFn>(GetProcAddress(user, "WindowFromPoint"));
+  LOKA_VERIFY(hitRectNative && hitDCNative && hitReleaseNative && hitObjectNative && hitSelectNative && hitExtentNative
+              && hitCoverNative);
+  HWND root = attributedHost();
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    const LinkTarget target(loka::core::String("target"));
+    AttributedTextNode node((AttributedText(Linked(loka::core::String(std::string(80, 'M')), Bold, target))
+                             + BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS))
+                                .props);
+    LayoutState seat = attributedSeat(100);
+    LOKA_VERIFY(controller.prepareProjectedLayout(&node, seat));
+    Win32AttributedTextContext &context = *static_cast<Win32AttributedTextContext *>(node.getContext());
+    context.layout(&controller, seat);
+    paintHitContext(context);
+    hitWindow = context.paintHwnd();
+    for (int injection = 0; injection < 13; ++injection)
+    {
+      std::printf("Win32 hit cleanup injection %d\n", injection);
+      hitInjection = injection;
+      hitDC = NULL;
+      hitOriginal = hitSelected = hitBeforeRelease = NULL;
+      hitAcquires = hitReleaseAttempts = hitReleases = hitRestores = hitSelections = hitCovers = 0;
+      LinkHit result = {91, 92, 93, 94};
+      const POINT point = {injection == 11 ? -1 : 0, 0};
+      if (injection == 12)
+        node.props.blockStyle_ = BlockStyle();
+      {
+        // All injections refuse before effect. Saved imports observe the exact
+        // acquired DC without being counted as production snapshot/cleanup.
+        Win32ImportRefusal rectHook("user32.dll", "GetClientRect", reinterpret_cast<ULONG_PTR>(&hitRect));
+        Win32ImportRefusal acquireHook("user32.dll", "GetDC", reinterpret_cast<ULONG_PTR>(&hitAcquire));
+        Win32ImportRefusal releaseHook("user32.dll", "ReleaseDC", reinterpret_cast<ULONG_PTR>(&hitRelease));
+        Win32ImportRefusal objectHook("gdi32.dll", "GetCurrentObject", reinterpret_cast<ULONG_PTR>(&hitObject));
+        Win32ImportRefusal selectHook("gdi32.dll", "SelectObject", reinterpret_cast<ULONG_PTR>(&hitSelect));
+        Win32ImportRefusal extentHook("gdi32.dll", "GetTextExtentExPointW", reinterpret_cast<ULONG_PTR>(&hitExtent));
+        Win32ImportRefusal coverHook("user32.dll", "WindowFromPoint", reinterpret_cast<ULONG_PTR>(&hitCover));
+        LOKA_VERIFY(AttributedAccess::prepare(context, point, result)
+                    == (injection > 0 && injection < 11 ? HIT_REFUSED
+                        : injection == 11               ? HIT_NONE
+                                                        : HIT_LINK));
+      }
+      const int acquired = injection == 1 || injection == 2 ? 0 : 1;
+      const bool withheld = injection == 7 || injection == 9 || injection == 10;
+      LOKA_VERIFY(hitAcquires == acquired && hitReleaseAttempts == acquired);
+      LOKA_VERIFY(hitReleases == (withheld ? 0 : acquired) && hitCovers == 0);
+      LOKA_VERIFY(hitRestores
+                  == (!acquired || injection == 8 || injection >= 11                            ? 0
+                      : injection == 5 || injection == 6 || (injection == 9 || injection == 10) ? 2
+                                                                                                : 1));
+      LOKA_VERIFY(hitSelections == (!acquired || injection == 8 || injection >= 11 ? 0 : 1));
+      if (acquired)
+        LOKA_VERIFY(hitBeforeRelease == (injection == 6 || injection == 10 ? hitSelected : hitOriginal));
+      if (injection > 0 && injection < 12)
+        LOKA_VERIFY(result.firstSegment == 91 && result.lastSegment == 92 && result.seatWidth == 93
+                    && result.seatHeight == 94);
+      if (withheld)
+      {
+        LOKA_VERIFY(hitSelectNative(hitDC, hitOriginal));
+        LOKA_VERIFY(hitReleaseNative(hitWindow, hitDC));
+      }
+    }
+    hitWindow = NULL;
+    hitDC = NULL;
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+void testWin32LinkHitGeometry()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  hitCreateFontNative =
+      reinterpret_cast<HitCreateFontFn>(GetProcAddress(GetModuleHandleW(L"gdi32.dll"), "CreateFontIndirectW"));
+  LOKA_VERIFY(hitCreateFontNative);
+  // Choose a real GDI face with external leading; do not inject fake metrics.
+  Win32ImportRefusal fontHook("gdi32.dll", "CreateFontIndirectW", reinterpret_cast<ULONG_PTR>(&hitArialFont));
+  HWND root = attributedHost();
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    const LinkTarget target(loka::core::String("target"));
+    const TextAlign modes[] = {TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, TEXT_ALIGN_RIGHT};
+    for (int mode = 0; mode < 3; ++mode)
+    {
+      AttributedTextNode node(
+          (AttributedText(Linked("MMMM\n\nMMMM", FontSize<24>() + Bold, target)) + BlockStyle().align(modes[mode]))
+              .props);
+      LayoutState seat = attributedSeat(200);
+      LOKA_VERIFY(controller.prepareProjectedLayout(&node, seat));
+      Win32AttributedTextContext &context = *static_cast<Win32AttributedTextContext *>(node.getContext());
+      context.layout(&controller, seat);
+      paintHitContext(context);
+      RECT rect;
+      LOKA_VERIFY(GetClientRect(context.paintHwnd(), &rect));
+      const TextLineRecord &line = AttributedAccess::table(context).lines().line(0);
+      const int offset = mode == 0 ? 0 : mode == 1 ? (rect.right - line.width) / 2 : rect.right - line.width;
+      POINT point = {offset, 0};
+      LinkHit hit;
+      LOKA_VERIFY(AttributedAccess::prepare(context, point, hit) == HIT_LINK);
+      point.x = offset - 1;
+      LOKA_VERIFY(AttributedAccess::prepare(context, point, hit) == HIT_NONE);
+      point.x = offset + line.width;
+      LOKA_VERIFY(AttributedAccess::prepare(context, point, hit) == HIT_NONE);
+      point.x = offset;
+      LOKA_VERIFY(line.metrics.leading > 0);
+      point.y = line.metrics.ascent + line.metrics.descent;
+      LOKA_VERIFY(AttributedAccess::prepare(context, point, hit) == HIT_NONE); // Inside native leading.
+      point.y += line.metrics.leading;
+      LOKA_VERIFY(AttributedAccess::prepare(context, point, hit) == HIT_NONE); // Empty row.
+      point.x = rect.right;
+      point.y = 0;
+      LOKA_VERIFY(AttributedAccess::prepare(context, point, hit) == HIT_NONE); // Client clipping.
+    }
+    AttributedTextNode node((AttributedText(Linked(loka::core::String(std::string(80, 'M')), Bold, target))
+                             + BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS))
+                                .props);
+    LayoutState seat = attributedSeat(100);
+    LOKA_VERIFY(controller.prepareProjectedLayout(&node, seat));
+    Win32AttributedTextContext &context = *static_cast<Win32AttributedTextContext *>(node.getContext());
+    context.layout(&controller, seat);
+    paintHitContext(context);
+    POINT point = {0, 0};
+    LinkHit hit;
+    LOKA_VERIFY(AttributedAccess::prepare(context, point, hit) == HIT_LINK);
+    RECT rect;
+    LOKA_VERIFY(GetClientRect(context.paintHwnd(), &rect));
+    HDC dc = GetDC(context.paintHwnd());
+    LOKA_VERIFY(dc);
+    HGDIOBJ original = SelectObject(dc, AttributedAccess::font(AttributedAccess::table(context), 0));
+    LOKA_VERIFY(original && original != HGDI_ERROR);
+    SIZE dots, full;
+    int advances[80];
+    const std::wstring body(80, L'M');
+    LOKA_VERIFY(GetTextExtentExPointW(dc, L"...", 3, INT_MAX, NULL, NULL, &dots));
+    LOKA_VERIFY(GetTextExtentExPointW(dc, body.c_str(), 80, INT_MAX, NULL, advances, &full));
+    LOKA_VERIFY(dots.cx > 0 && dots.cx < rect.right && full.cx > rect.right);
+    int prefix = 0;
+    for (int unit = 0; unit < 80 && advances[unit] <= rect.right - dots.cx; ++unit)
+      prefix = advances[unit];
+    point.x = prefix + dots.cx / 2;
+    LOKA_VERIFY(point.x >= prefix && point.x < prefix + dots.cx && point.x < rect.right);
+    LOKA_VERIFY(SelectObject(dc, original));
+    LOKA_VERIFY(ReleaseDC(context.paintHwnd(), dc));
+    LOKA_VERIFY(AttributedAccess::prepare(context, point, hit) == HIT_NONE); // Strictly inside measured dots.
+    point.x = rect.right;
+    LOKA_VERIFY(AttributedAccess::prepare(context, point, hit) == HIT_NONE);
   }
   LOKA_VERIFY(DestroyWindow(root));
 }

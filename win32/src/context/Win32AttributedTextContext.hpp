@@ -7,6 +7,24 @@
 #include "app/scene/projection/PaintFact.hpp"
 #include "app/scene/projection/PlatformNodeHandler.hpp"
 
+/** Completed text presentation at its drawn client size. */
+struct Win32PresentedText
+{
+  Win32PresentedText()
+      : seatWidth(0),
+        seatHeight(0)
+  {
+  }
+  Win32PresentedText(const loka::app::AttributedString &value, const RECT &seat)
+      : text(value),
+        seatWidth(seat.right - seat.left),
+        seatHeight(seat.bottom - seat.top)
+  {
+  }
+  loka::app::AttributedString text;
+  int seatWidth, seatHeight;
+};
+
 /** RectSurface-shaped PER_RUN projection. Retained detach hides its HWND;
     terminal delivery drops derived rows before queuing native destruction. */
 class Win32AttributedTextContext : public Win32RetirableContext, public Win32TextEnvironment::Listener
@@ -34,12 +52,14 @@ private:
   friend class loka::testing::Win32AttributedTextAccess;
   static void EnsureClassRegistered();
   static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+  HitAnswer prepareLinkHit(POINT client, LinkHit &out);
+  bool linkHitEligible(const LinkHit &hit) const;
   void clearMeasurement();
   void draw(HDC, const RECT &);
   void relayout(int, int, int, int);
   loka::app::AttributedTextNode *node_;
   Win32AttributedTextTable table_;
-  loka::app::scene::PaintFact<loka::app::AttributedString> presented_;
+  loka::app::scene::PaintFact<Win32PresentedText> presented_;
 };
 void RegisterWin32AttributedTextNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &);
 #endif

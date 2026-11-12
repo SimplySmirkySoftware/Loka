@@ -595,7 +595,7 @@ void testTextBreakerRangesAndRefusal()
   const RangeSource source(split);
   const TextLineBreaker wrapped(source, BlockStyle().wrap(TEXT_WRAP_CHAR), 7);
   LOKA_VERIFY(wrapped.valid() && wrapped.lineCount() == 2);
-  LOKA_VERIFY(source.span(wrapped.fragment(wrapped.line(1).firstFragment).span).segment == 0);
+  LOKA_VERIFY(source.span(wrapped.fragment(wrapped.line(1).firstFragment).span).source.first() == 0);
   const TextLineBreaker result(source, BlockStyle().wrap(TEXT_WRAP_WORD), 11);
   LOKA_VERIFY(result.valid());
   LOKA_VERIFY(result.width() == 11 && result.height() == 10 && result.lineCount() == 1);
@@ -607,7 +607,7 @@ void testTextBreakerRangesAndRefusal()
   LOKA_VERIFY(lines.valid() && lines.width() == 14 && lines.height() == 21);
   LOKA_VERIFY(lines.line(0).metrics.ascent == 14 && lines.line(0).metrics.descent == 7
               && lines.line(0).metrics.leading == 3);
-  LOKA_VERIFY(lines.line(0).fragmentCount == 2 && mixed.span(lines.fragment(1).span).segment == 1);
+  LOKA_VERIFY(lines.line(0).fragmentCount == 2 && mixed.span(lines.fragment(1).span).source.first() == 1);
   const SyntheticTextWidthSource unicode(Styled("a\xF0\x9F\x98\x80"
                                                 "b",
                                                 TextStyle()));
@@ -690,9 +690,9 @@ void testTextSpanTable()
                                  + Styled("e", Italic) + Styled("f", Bold);
   const SyntheticTextWidthSource source(value);
   LOKA_VERIFY(source.valid() && source.length() == 6 && source.spanCount() == 3);
-  LOKA_VERIFY(source.span(0).segment == 1 && source.span(0).start == 0 && source.span(0).end == 4);
-  LOKA_VERIFY(source.span(1).segment == 4 && source.span(1).start == 4 && source.span(1).end == 5);
-  LOKA_VERIFY(source.span(2).segment == 5 && source.span(2).start == 5 && source.span(2).end == 6);
+  LOKA_VERIFY(source.span(0).source.first() == 1 && source.span(0).start == 0 && source.span(0).end == 4);
+  LOKA_VERIFY(source.span(1).source.first() == 4 && source.span(1).start == 4 && source.span(1).end == 5);
+  LOKA_VERIFY(source.span(2).source.first() == 5 && source.span(2).start == 5 && source.span(2).end == 6);
   LOKA_VERIFY(source.spanStyle(0) == Bold && source.spanStyle(1) == Italic && source.spanStyle(2) == Bold);
   LOKA_VERIFY(&source.spanStyle(0) == &source.span(0).style);
   for (std::size_t i = 0; i < source.length(); ++i)
@@ -700,7 +700,7 @@ void testTextSpanTable()
   const TextLineBreaker lines(source, BlockStyle().wrap(TEXT_WRAP_CHAR), 8);
   LOKA_VERIFY(lines.valid() && lines.lineCount() == 3 && lines.width() == 8 && lines.height() == 36);
   const TextFragment &continued = lines.fragment(lines.line(1).firstFragment);
-  LOKA_VERIFY(continued.span == 0 && source.span(continued.span).segment == 1);
+  LOKA_VERIFY(continued.span == 0 && source.span(continued.span).source.first() == 1);
   LOKA_VERIFY(source.spanStyle(continued.span) == Bold && continued.start == 2 && continued.end == 4);
 
   const SyntheticTextWidthSource empty(Styled("", Bold) + Styled("", Italic));
@@ -727,7 +727,7 @@ void testTextSpanTable()
   LOKA_VERIFY(coalesced.valid() && coalesced.spanCount() == 1 && coalesced.span(0).end == 40);
   for (std::size_t i = 0; i < many.spanCount(); ++i)
   {
-    LOKA_VERIFY(many.span(i).segment == i && many.span(i).start == i && many.span(i).end == i + 1);
+    LOKA_VERIFY(many.span(i).source.first() == i && many.span(i).start == i && many.span(i).end == i + 1);
     LOKA_VERIFY(many.character(i).span == i);
   }
   // Both character and span tables exceed inline capacity. Failure of the
@@ -888,7 +888,7 @@ void testTextSpanUnlinkedCharacterization()
   const std::size_t ends[] = {4, 5, 6};
   for (std::size_t i = 0; i < 3; ++i)
   {
-    LOKA_VERIFY(source.span(i).segment == segments[i]);
+    LOKA_VERIFY(source.span(i).source.first() == segments[i]);
     LOKA_VERIFY(source.span(i).start == starts[i] && source.span(i).end == ends[i]);
     LOKA_VERIFY(source.span(i).style == (i == 1 ? Italic : Bold));
   }
@@ -993,11 +993,11 @@ namespace
     const AttributedString value = Linked("a", Bold, a) + Linked("b", secondStyle, b);
     const SyntheticTextWidthSource source(value);
     LOKA_VERIFY(source.valid() && source.spanCount() == expected && source.length() == 2);
-    LOKA_VERIFY(source.span(0).segment == 0 && source.span(0).start == 0);
+    LOKA_VERIFY(source.span(0).source.first() == 0 && source.span(0).start == 0);
     LOKA_VERIFY(source.span(0).end == (expected == 1 ? 2 : 1));
     LOKA_VERIFY(source.character(0).span == 0 && source.character(1).span == expected - 1);
     if (expected == 2)
-      LOKA_VERIFY(source.span(1).segment == 1 && source.span(1).start == 1 && source.span(1).end == 2);
+      LOKA_VERIFY(source.span(1).source.first() == 1 && source.span(1).start == 1 && source.span(1).end == 2);
     const TextLineBreaker lines(source, BlockStyle(), 100);
     LOKA_VERIFY(lines.valid() && lines.lineCount() == 1 && lines.line(0).fragmentCount == expected);
     for (std::size_t i = 0; i < expected; ++i)
@@ -1066,9 +1066,36 @@ void testTextSpanLinkBoundaries()
                                  + Linked("c", Bold, y) + Linked("", Italic, x) + Linked("", Red, x);
   const SyntheticTextWidthSource source(value);
   LOKA_VERIFY(source.valid() && source.spanCount() == 2 && source.length() == 3);
-  LOKA_VERIFY(source.span(0).segment == 2 && source.span(0).start == 0 && source.span(0).end == 2);
-  LOKA_VERIFY(source.span(1).segment == 6 && source.span(1).start == 2 && source.span(1).end == 3);
+  LOKA_VERIFY(source.span(0).source.first() == 2 && source.span(0).start == 0 && source.span(0).end == 2);
+  LOKA_VERIFY(source.span(1).source.first() == 6 && source.span(1).start == 2 && source.span(1).end == 3);
   LOKA_VERIFY(source.character(0).span == 0 && source.character(1).span == 0 && source.character(2).span == 1);
+  LOKA_VERIFY(source.span(0).source.last() == 5 && source.span(1).source.last() == 6);
+  const AttributedString recipes[] = {Linked("a", Bold, x),
+                                      Linked("a", Bold, x) + Linked("", Bold, y) + Linked("b", Bold, x),
+                                      Linked("", Bold, y) + Linked("a", Bold, x),
+                                      Linked("a", Bold, x) + Linked("", Bold, y),
+                                      Linked("a", Bold, x) + Linked("", Bold, y) + Linked("b", Bold, y)
+                                          + Linked("", Bold, x),
+                                      Linked("a\nb", Bold, x),
+                                      Linked("abcdefgh", Bold, x)};
+  for (unsigned recipe = 0; recipe < sizeof(recipes) / sizeof(recipes[0]); ++recipe)
+  {
+    const SyntheticTextWidthSource decoded(recipes[recipe]);
+    LOKA_VERIFY(decoded.valid());
+    LOKA_VERIFY(decoded.span(0).source.first() == (recipe == 2 ? 1u : 0u));
+    LOKA_VERIFY(decoded.span(0).source.last() == (recipe == 1 ? 2u : recipe == 2 ? 1u : 0u));
+    if (recipe == 4)
+      LOKA_VERIFY(decoded.spanCount() == 2 && decoded.span(1).source.first() == 2
+                  && decoded.span(1).source.last() == 2);
+    const TextLineBreaker rows(decoded, BlockStyle().wrap(TEXT_WRAP_CHAR), 5);
+    LOKA_VERIFY(rows.valid());
+    for (std::size_t row = 0; row < rows.lineCount(); ++row)
+      for (std::size_t f = 0; f < rows.line(row).fragmentCount; ++f)
+      {
+        const TextStyleSpan &span = decoded.span(rows.fragment(rows.line(row).firstFragment + f).span);
+        LOKA_VERIFY(span.source.last() < recipes[recipe].segmentCount());
+      }
+  }
   const SyntheticTextWidthSource empty(Linked("", Italic, x) + Linked("", Bold, y));
   LOKA_VERIFY(empty.valid() && empty.length() == 0 && empty.spanCount() == 0);
 }
@@ -1082,7 +1109,7 @@ void testTextSpanPreviousNonempty()
   const String third = spanString(new SpanSwitchBody(readable, false));
   const SyntheticTextWidthSource source(Linked(first, Bold, a) + Linked("x", Bold, b) + Linked(third, Bold, c));
   LOKA_VERIFY(source.valid() && source.spanCount() == 1 && source.length() == 3);
-  LOKA_VERIFY(source.span(0).segment == 0 && source.span(0).start == 0 && source.span(0).end == 3);
+  LOKA_VERIFY(source.span(0).source.first() == 0 && source.span(0).start == 0 && source.span(0).end == 3);
   for (std::size_t i = 0; i < 3; ++i)
     LOKA_VERIFY(source.character(i).span == 0);
 }

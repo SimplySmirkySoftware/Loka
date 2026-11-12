@@ -165,7 +165,7 @@ Win32AttributedTextContext::queryPaintDamage(const loka::app::scene::PaintQuery 
   if (!this->presented_.isKnown())
     return PaintAnswer::refused(PAINT_REFUSED_HISTORY_UNKNOWN);
   PaintDamage damage = {query.scope, rect.left, rect.top, 0, 0, PAINT_COVERAGE_PAINT_ONLY};
-  if (this->table_.value() != this->presented_.value())
+  if (this->table_.value() != this->presented_.value().text)
   {
     damage.width = rect.right - rect.left;
     damage.height = rect.bottom - rect.top;
@@ -241,9 +241,42 @@ void Win32AttributedTextContext::draw(HDC dc, const RECT &rect)
       || this->table_.value() != this->node_->props.text_->get())
     return;
   if (this->table_.draw(dc, rect, this->node_->props.blockStyle_) && complete)
-    this->presented_.commit(this->table_.value(), paintScope());
+    this->presented_.commit(Win32PresentedText(this->table_.value(), rect), paintScope());
 }
 void RegisterWin32AttributedTextNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &registry)
 {
   registry.registerHandler(&handler);
+}
+
+HitAnswer Win32AttributedTextContext::prepareLinkHit(POINT client, LinkHit &out)
+{
+  RECT seat;
+  if (!this->node_ || !this->hwnd() || !GetClientRect(this->hwnd(), &seat))
+    return HIT_REFUSED;
+  HDC dc = GetDC(this->hwnd());
+  if (!dc)
+    return HIT_REFUSED;
+  LinkHit local;
+  HitAnswer answer = this->table_.hitAt(dc, seat, this->node_->props.blockStyle_, client, local);
+  if (!ReleaseDC(this->hwnd(), dc))
+    return HIT_REFUSED;
+  if (answer == HIT_LINK)
+    out = local;
+  return answer;
+}
+
+bool Win32AttributedTextContext::linkHitEligible(const LinkHit &hit) const
+{
+  if (!loka::app::scene::IsAttachedCurrentContext(this) || !this->node_ || !this->node_->props.text_
+      || !this->table_.valid() || !this->presented_.isKnown())
+    return false;
+  const Win32PresentedText &presented = this->presented_.value();
+  const loka::app::AttributedString &current = this->node_->props.text_->get();
+  if (!presented.text.hasSameSegmentValues(this->table_.value()) || !this->table_.value().hasSameSegmentValues(current)
+      || hit.seatWidth != presented.seatWidth || hit.seatHeight != presented.seatHeight)
+    return false;
+  loka::app::AttributedString::LinkRun run;
+  // queryLinkRun success guarantees run.first <= firstSegment and run.last < segmentCount(), so run.last >= lastSegment
+  // implies both bounds.
+  return current.queryLinkRun(hit.firstSegment, run) && run.last >= hit.lastSegment;
 }

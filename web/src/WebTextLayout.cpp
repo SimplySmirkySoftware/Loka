@@ -190,7 +190,7 @@ public:
         used_(0),
         status_(WEB_MEASURE_OK)
   {
-    this->span_.segment = this->span_.start = 0;
+    this->span_.start = 0;
     this->span_.end = snapshot.characterCount_;
     if (Ellipsis(snapshot.constraint_.block))
       for (std::size_t i = 0; i < snapshot.characterCount_; ++i)

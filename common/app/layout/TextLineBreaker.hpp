@@ -100,12 +100,50 @@ namespace loka
       }
     };
 
-    /** One coalesced descriptor span. segment is the first contributing input
-        segment; start/end delimit a half-open range of character indices. Empty
-        input segments contribute neither a span nor a descriptor boundary. */
+    /** Completed inclusive range of non-empty source contributions. */
+    class TextSegmentRange
+    {
+    public:
+      TextSegmentRange()
+          : first_(0),
+            last_(0)
+      {
+      }
+      explicit TextSegmentRange(std::size_t one)
+          : first_(one),
+            last_(one)
+      {
+      }
+      TextSegmentRange through(std::size_t segment) const
+      {
+        assert(segment >= this->last_);
+        return TextSegmentRange(this->first_, segment);
+      }
+      std::size_t first() const
+      {
+        return this->first_;
+      }
+      std::size_t last() const
+      {
+        return this->last_;
+      }
+
+    private:
+      TextSegmentRange(std::size_t first, std::size_t last)
+          : first_(first),
+            last_(last)
+      {
+      }
+      std::size_t first_, last_;
+    };
+
+    /** One coalesced descriptor span. source covers the first through last
+        contributing input segments; start/end delimit a half-open character
+        range. Empty inputs do not extend source or create descriptor boundaries. */
     struct TextStyleSpan
     {
-      std::size_t segment, start, end;
+      TextSegmentRange source;
+      std::size_t start, end;
       TextStyle style;
     };
 
