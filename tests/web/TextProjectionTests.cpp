@@ -23,7 +23,7 @@ namespace
   public:
     unsigned requests;
     Controller(WebSession &s, uint32_t root)
-        : WebScenePlatformController(s, root, 320, 200),
+        : WebScenePlatformController(s, root, 320, 200, 0),
           requests(0)
     {
     }
@@ -105,7 +105,7 @@ namespace
     int width = 320, height = 200;
     LOKA_VERIFY(root.create(session.routes(), session.tokens(), loka::web::ROOT, 0, width, height));
     {
-      WebScenePlatformController controller(session, root.token(), width, height);
+      WebScenePlatformController controller(session, root.token(), width, height, 0);
       Scene scene((Boundary<LiveText>()));
       LOKA_VERIFY(scene.mount(&controller));
       SceneTestAccess::updateAttached(scene, true);

@@ -17,7 +17,7 @@ class WebScenePlatformController : public loka::app::scene::IPlatformController,
                                    public loka::app::layout::INaturalSizeSource
 {
 public:
-  WebScenePlatformController(WebSession &session, loka::web::Token root, int width, int height);
+  WebScenePlatformController(WebSession &session, loka::web::Token root, int width, int height, int rootMargin);
   virtual ~WebScenePlatformController();
   /** Cost: Stack layout once per visit; O(1) session forwarding, no rows. */
   const loka::app::layout::RailSpacing &spacing() const;
@@ -59,6 +59,8 @@ public:
   bool checkCoordinate(int value);
 
 private:
+  /** Cost: construction and resize once; O(1) own offer calculation, no rows. */
+  void setRootOffer(int width, int height);
   struct ScrollResult
   {
     ScrollResult(int y, const loka::app::ScrollViewVisit &v)
@@ -79,6 +81,7 @@ private:
   int layoutNode(loka::app::scene::Node *, const loka::app::scene::LayoutState &);
   WebSession &session_;
   const loka::web::Token root_;
+  const int rootMargin_;
   loka::app::scene::Node *tree_;
   loka::app::scene::LayoutState layout_;
   loka::app::scene::PlatformLayoutHandlerRegistry layouts_;

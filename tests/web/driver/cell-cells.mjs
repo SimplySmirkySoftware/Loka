@@ -140,6 +140,17 @@ export async function runCellCells(client, navigate) {
   assert.equal(new Set(geometry.rows.map(r=>r.y)).size,8);
   assert.deepEqual(geometry.root,{w:220,h:240});
   assert(geometry.rows.every(r=>r.w>0 && r.h>0));
+  const normal=await client.evaluate(`(()=>{
+    const r=root.getBoundingClientRect(),b=newGame.getBoundingClientRect();
+    return {x:parseFloat(newGame.style.left),y:parseFloat(newGame.style.top),w:parseFloat(newGame.style.width),
+      cellW:parseFloat(cells[0].style.width),cellH:parseFloat(cells[0].style.height),buttonH:b.height,
+      contained:cells.every(e=>{const q=e.getBoundingClientRect();return q.left>=r.left&&q.top>=r.top&&q.right<=r.right&&q.bottom<=r.bottom}),
+      overflow:[root.scrollWidth,root.scrollHeight]};
+  })()`);
+  assert.equal(normal.x,9);assert.equal(normal.y,9);assert.equal(normal.w,202);
+  assert.equal(normal.cellW,25);assert.equal(normal.cellH,Math.floor((240-18-normal.buttonH-12)/8));
+  assert(normal.contained);assert.deepEqual(normal.overflow,[220,240]);
+  await hit(0);
   await client.evaluate('window.kept=newGame;window.old=cells.slice();newGame.click()');
   assert((await inspect()).rows.every(r=>r.text==='.' && r.h>0));
   assert.equal(await client.evaluate('newGame===kept && old.every(e=>!e.isConnected)'),true);
