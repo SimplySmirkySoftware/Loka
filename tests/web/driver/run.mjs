@@ -72,7 +72,7 @@ const server=createServer(async(req,res)=>{
     const mode = new URL(req.url, 'http://localhost').searchParams.get('cell');
     if(file === 'preview.html') {
       data = renderPreviewHtml({kind:'module', id:'preview-document', nonce:'preview-nonce',
-        cspSource: "'self'", exportName: mode === 'mine' ? 'LokaMineWeb' : 'LokaHelloWeb',
+        cspSource: "'self'", skin: 'web', exportName: mode === 'mine' ? 'LokaMineWeb' : 'LokaHelloWeb',
         jsUri: mode === 'mine' ? 'preview-mine.js' : mode === 'script-fail' ? 'missing-preview.js' : 'preview-module.js',
         wasmUri: mode === 'mine' ? 'LokaMineWeb.wasm' : mode === 'wasm-fail' ? 'missing-preview.wasm' : 'LokaHelloWeb.wasm'});
       if(mode?.startsWith('nonce-')) {
