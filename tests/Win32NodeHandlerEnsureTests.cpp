@@ -625,7 +625,7 @@ namespace loka
 
       static const Win32AttributedTextTable &table(const Win32AttributedTextContext &context)
       {
-        return context.table_;
+        return context.links_.table();
       }
       static bool hasNode(const Win32AttributedTextContext &context)
       {
