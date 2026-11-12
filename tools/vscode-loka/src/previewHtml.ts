@@ -1,7 +1,7 @@
 /** One document's immutable rendering input; identity and nonce are independent. */
 export type PreviewInput = Readonly<{
   id: string; nonce: string; cspSource: string;
-} & ({kind: 'module'; jsUri: string; wasmUri: string; exportName: string}
+} & ({kind: 'module'; skin: string; jsUri: string; wasmUri: string; exportName: string}
   | {kind: 'message'; text: string})>;
 
 function text(value: string): string {
@@ -60,7 +60,7 @@ addEventListener('message', event => {
 try {
   const factory = window[${script(input.exportName)}];
   if (typeof factory !== 'function') throw new Error('Module factory is unavailable');
-  Promise.resolve(factory({locateFile: () => ${script(input.wasmUri + key)}})).then(module => {
+  Promise.resolve(factory({locateFile: () => ${script(input.wasmUri + key)}, lokaSkin: ${script(input.skin)}})).then(module => {
     slot = {kind: 'READY', module};
     module.web.completed.then(() => post('completed'));
     try {

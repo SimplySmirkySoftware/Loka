@@ -47,6 +47,11 @@
         "command": "loka.preview.configure",
         "title": "Configure",
         "category": "Loka"
+      },
+      {
+        "command": "loka.preview.selectSkin",
+        "title": "Select Skin",
+        "category": "Loka"
       }
     ],
     "configuration": {

@@ -555,8 +555,33 @@ value actually committed to storage, regardless of invocation, picker-close or
 promise-settlement order. No selection phase, generation counter or descriptor
 cache is retained.
 
+**Loka: Select Skin** presents the generated `webSkins` names in vocabulary
+order. It stores the chosen name in `workspaceState` under
+`loka.preview.skin:<folder URI>`, using the folder captured before the picker
+opens. The picker marks the requested preference, not the skin actually applied
+by the module. Missing, non-string or unknown saved values resolve to the first
+name (`web`). Successful persistence reloads the current preview, if any; the
+next Open otherwise reads the preference. Cancellation changes nothing. Late
+picker/save continuations follow Select Example's captured-key/current-slot
+contract, including shutdown and contained notification failures.
+
+Each successful preparation reads the skin into an immutable document input;
+the factory receives it as `lokaSkin` through the existing script escaping.
+Build shares preparation but does not carry the skin in its task operation.
+Select Skin reads no workspace file and needs no trust admission itself;
+replacement still checks trust before preparation. This does not claim command
+availability in Restricted Mode: the manifest disables the extension there.
+
+Extension/module version skew is outside the admission fingerprint: an older
+module falls back to `web` for unknown names or ignores the option, while an
+older extension does not offer newer names. If a selection has no effect, align
+the extension and workspace module versions. There is no applied-skin response
+or capability handshake. Real VS Code webview behaviour for Select Skin is
+**not runtime-verified**; headless factory-argument tests and compiled-artifact
+checks do not establish visible spacing changes or persistence in the real host.
+
 Build and every preview replacement read trust afresh. Untrusted workspaces run
-no task and receive a script-free MESSAGE page; Select does not read the catalog.
+no task and receive a script-free MESSAGE page; Select Example does not read the catalog.
 Catalog reads and validation are synchronous at Select, Build and replacement
 preparation, with no watcher or editor/configuration listener. Missing, malformed,
 unsupported-version, empty and unreadable catalogs diagnose **Configure**.

@@ -22,7 +22,7 @@ export type PreviewPanel = Readonly<{
 export type PreviewPorts<T> = Readonly<{
   admitted(): boolean;
   folder(): string | undefined;
-  prepare(): Readonly<{app: App; directory: string}> | Diagnostic;
+  prepare(): Readonly<{app: App; directory: string; skin: string}> | Diagnostic;
   resolve(folder: string, relative: string): string;
   directory(file: string): string;
   existsSync(file: string): boolean;
@@ -128,7 +128,7 @@ class Preview<T> {
             roots = [this.ports.directory(js)];
             input = {kind: 'module', id, nonce, cspSource: this.ports.cspSource,
               jsUri: this.ports.asWebviewUri(js), wasmUri: this.ports.asWebviewUri(wasm),
-              exportName: prepared.app.exportName};
+              skin: prepared.skin, exportName: prepared.app.exportName};
           }
         }
       }

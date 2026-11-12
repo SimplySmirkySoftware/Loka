@@ -5,6 +5,8 @@ import {randomUUID} from 'node:crypto';
 import {createPreview} from './preview.ts';
 import type {PreviewDoors, PreviewPanel} from './preview.ts';
 import {readCatalog, currentExample} from './catalog.ts';
+import {currentSkin} from './skin.ts';
+import {skinNames} from './skins.ts';
 import {createBuild} from './build.ts';
 
 type PanelAdapter = PreviewPanel & Readonly<{
@@ -84,7 +86,7 @@ export function createPanelAdapter(api: typeof vscode, panel: vscode.WebviewPane
 }
 
 /** Activation owns Build, the optional Preview and its UI subscriptions.
- * Cost: activation once; fixed nine subscriptions, no task or workspace scans. */
+ * Cost: activation once; fixed ten subscriptions, no task or workspace scans. */
 export function wire(api: typeof vscode, context: vscode.ExtensionContext): vscode.Disposable {
   let current: Slot | undefined;
   const output = api.window.createOutputChannel('Loka Preview');
@@ -107,17 +109,19 @@ export function wire(api: typeof vscode, context: vscode.ExtensionContext): vsco
   const report = (message: string): void => { status.text = 'Loka: ' + message; };
   /** Cost: each selection read/write; one folder-qualified preference key. */
   const selectionKey = (workspace: vscode.WorkspaceFolder): string => 'loka.preview.example:' + workspace.uri.toString();
+  /** Cost: each skin read/write; one folder-qualified preference key. */
+  const skinKey = (workspace: vscode.WorkspaceFolder): string => 'loka.preview.skin:' + workspace.uri.toString();
   /** Cost: each admitted Select/Build/replacement; one file, linear decoder, no retained descriptor. */
   const catalog = () => {
     const directory = resolve(folder()!.uri.fsPath, setting('buildDirectory'));
     return {directory, value: readCatalog(resolve(directory, 'loka-web-apps.json'), file => readFileSync(file, 'utf8'))};
   };
-  /** Cost: each admitted Build/replacement; one preference read and catalog scan. */
+  /** Cost: each admitted Build/replacement; two preference reads, a skin-name scan and catalog scan. */
   const prepare = () => {
     const {directory, value} = catalog();
     if (value.kind !== 'catalog') return value;
     const app = currentExample(value, context.workspaceState.get<string>(selectionKey(folder()!)));
-    return 'message' in app ? app : {app, directory};
+    return 'message' in app ? app : {app, directory, skin: currentSkin(context.workspaceState.get(skinKey(folder()!)))};
   };
   /** Cost: command/task/Select settlement; borrow the current slot once, never capture a panel. */
   const reload = (): void => { current?.doors.reload(); };
@@ -141,7 +145,7 @@ export function wire(api: typeof vscode, context: vscode.ExtensionContext): vsco
     },
   });
   /** Cost: Select once; one picker, at most one preference write and current-slot reload.
-   * The captured key belongs to the opening folder. Late success only borrows the slot,
+   * Like selectSkin below, the captured key belongs to the opening folder. Late success only borrows the slot,
    * which shutdown clears before releasing UI. Late failures use only the window service. */
   const select = async (): Promise<void> => {
     try {
@@ -157,6 +161,26 @@ export function wire(api: typeof vscode, context: vscode.ExtensionContext): vsco
       reload();
     } catch (error) {
       try { await api.window.showErrorMessage('Select Example failed: ' + String(error)); }
+      catch { /* Reporting failure must not escape the command's asynchronous continuation. */ }
+    }
+  };
+  /** Cost: Select Skin once; one picker over generated names, at most one save and reload.
+   * Like select above, capture the folder key before awaiting; borrow only the current
+   * slot after saving. Shutdown clears that slot before releasing UI. */
+  const selectSkin = async (): Promise<void> => {
+    try {
+      const workspace = folder();
+      if (!workspace) { await api.window.showErrorMessage('Open a workspace folder'); return; }
+      const key = skinKey(workspace);
+      const requested = currentSkin(context.workspaceState.get(key));
+      const picked = await api.window.showQuickPick(skinNames.map(name => ({
+        label: name, description: name === requested ? 'Requested' : '',
+      })));
+      if (!picked) return;
+      await context.workspaceState.update(key, picked.label);
+      reload();
+    } catch (error) {
+      try { await api.window.showErrorMessage('Select Skin failed: ' + String(error)); }
       catch { /* Reporting failure must not escape the command's asynchronous continuation. */ }
     }
   };
@@ -184,9 +208,10 @@ export function wire(api: typeof vscode, context: vscode.ExtensionContext): vsco
     api.commands.registerCommand('loka.preview.reload', reload),
     api.commands.registerCommand('loka.preview.configure', () => build.start('CONFIGURE')),
     api.commands.registerCommand('loka.preview.selectExample', select),
+    api.commands.registerCommand('loka.preview.selectSkin', selectSkin),
   ];
   /** Cost: activation shutdown once, not fault retirement; retire current, close its healthy owner
-   * to release its timer, then attempt each of nine activation releases. */
+   * to release its timer, then attempt each of ten activation releases. */
   return new api.Disposable(() => {
     build.dispose();
     if (current) {
