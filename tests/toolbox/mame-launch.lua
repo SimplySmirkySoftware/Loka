@@ -462,25 +462,28 @@ if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/clip-edge-tracking" then
         -- bar full=(156,60,172,180), clip=(12,60,164,180).
         local editOutside = {ox + 92, oy + 12, ox + 212, oy + 36}
         local barOutside = {x, top, x + 8, y + 24}
-        local function acknowledge()
+        local function pressTitled(title)
             local handle = ptr(window + 140)
             for _ = 1, 64 do
-                assert(handle ~= 0, "Next control missing")
+                assert(handle ~= 0, title .. " control missing")
                 local c = ptr(handle)
                 -- ControlRecord.contrlTitle is a Str255 at offset 40.
-                if mem:read_u8(c + 40) == 4 and mem:read_u8(c + 41) == string.byte('N')
-                    and mem:read_u8(c + 42) == string.byte('e')
-                    and mem:read_u8(c + 43) == string.byte('x')
-                    and mem:read_u8(c + 44) == string.byte('t') then
+                local matches = mem:read_u8(c + 40) == #title
+                for i = 1, #title do
+                    matches = matches and mem:read_u8(c + 40 + i) == title:byte(i)
+                end
+                if matches then
                     click(ox + (signed(c + 10) + signed(c + 14)) // 2,
                           oy + (signed(c + 8) + signed(c + 12)) // 2)
                     return
                 end
                 handle = ptr(c)
             end
-            error("Next control walk bound exceeded")
+            error(title .. " control walk bound exceeded")
         end
+        local function acknowledge() pressTitled("Next") end
         local function drag(label, sx, sy, ex, ey, outside)
+            local leaked = false
             move(sx, sy)
             local before, width, height = captureSnapshotPixels(video)
             button:set_value(1); emu.wait(0.3) -- ADB stamps mouseDown at post time.
@@ -502,18 +505,21 @@ if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/clip-edge-tracking" then
                         end
                     end
                 end
-                -- Observation for the PR, NOT a verdict: the runner does not
-                -- read this. Transient XOR outlines erase themselves; the app
-                -- audit can see persistent residue only.
-                say("clip %s held frame=%d outside.changed=%d (observation only)", label, step, changed)
+                -- Drawing past the clip can be erased again before the tracking
+                -- call returns (M1: TEClick under the port clip), so the app's
+                -- own samples cannot see it; only these held frames can. The verdict travels through the app: the caller presses Leak
+                -- for a drag with any changed held frame (held.outside.leaks).
+                say("clip %s held frame=%d outside.changed=%d", label, step, changed)
+                if changed > 0 then leaked = true end
             end
             -- Hold still after the release: the ADB driver posts mouseUp on its
             -- next poll, and a cursor already outside the thumb's slop rect
             -- would make TrackControl cancel the drag (text-editor-scroll uses
             -- exactly that to cancel on purpose).
             button:clear_value(); emu.wait(0.5); move(600, 450); emu.wait(2)
+            return leaked
         end
-        drag("edit", ox + 16, oy + 20, ox + 198, oy + 20, editOutside)
+        local editLeaked = drag("edit", ox + 16, oy + 20, ox + 198, oy + 20, editOutside)
         -- Native input must leave the bar at zero. Next acknowledges even a
         -- rejected click, so unchanged is not confused with a missing gesture.
         click(x + 4, y + 16); acknowledge()
@@ -521,7 +527,10 @@ if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/clip-edge-tracking" then
         local _, _, _, value, maximum = barPoint(true)
         assert(value and value > 0 and value < maximum, "arrow did not leave a draggable thumb")
         local thumbY = top + 24 + math.floor((y - top - 24) * value / maximum)
-        drag("thumb", x - 4, thumbY, x - 4, y, barOutside)
+        local thumbLeaked = drag("thumb", x - 4, thumbY, x - 4, y, barOutside)
+        -- One Leak press per leaking drag, before the THUMB phase's Next.
+        if editLeaked then pressTitled("Leak") end
+        if thumbLeaked then pressTitled("Leak") end
         acknowledge()
         move(600, 450)
     end)

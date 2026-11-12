@@ -60,6 +60,7 @@ tick	3
 bar.outside.changed	0
 bar.thumb.moved	yes
 format_version	1
+held.outside.leaks	0
 node	SmirkBench.EditorLine
 scenario_version	1
 schema_version	1

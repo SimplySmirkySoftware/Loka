@@ -58,6 +58,7 @@ namespace loka
           : app::scene::StdCompositionBoundaryNodeBase<ClipEdgeProps>(props)
       {
         this->state(this->acknowledgements_, 0u);
+        this->state(this->heldLeaks_, 0u);
         this->state(this->text_, core::String::Literal("Clip edge tracking text"));
         this->state(this->clipWidth_, int(ClipEdgeGeometry::BAR_WIDTH - 8));
         // The rail writes the scroll origin here; an unbound ScrollView requests
@@ -67,6 +68,7 @@ namespace loka
       virtual void declareBindings(app::scene::BindingToken &token)
       {
         token.action(this->next_, this, &ClipEdgeNode::acknowledge);
+        token.action(this->leak_, this, &ClipEdgeNode::reportHeldLeak);
       }
       virtual void composeNode(app::scene::NodeComposition &composition)
       {
@@ -82,11 +84,19 @@ namespace loka
                     .TEST_ID("ClipEdge.BarClip")
                 << (Box().size(ClipEdgeGeometry::BAR_WIDTH, ClipEdgeGeometry::BAR_HEIGHT)
                     << (ScrollView(this->viewport_) << Box().size(100, 600))))
-            << Box().height(24) << Button("Next", &this->next_));
+            << Box().height(24)
+            << (Row() << Button("Next", &this->next_) << Button("Leak", &this->leak_)));
       }
       unsigned acknowledgements() const
       {
         return this->acknowledgements_.get();
+      }
+      /** Drags whose held frames the Lua transport saw change outside a clip.
+          TextEdit's tracking can draw past the clip and erase it again before
+          TEClick returns (mutation M1), so only the held frames can see it. */
+      unsigned heldLeaks() const
+      {
+        return this->heldLeaks_.get();
       }
       void expose()
       {
@@ -100,11 +110,18 @@ namespace loka
         core::StateTrackerGuard guard(this->tracker());
         this->acknowledgements_.set(this->acknowledgements_.get() + 1);
       }
+      void reportHeldLeak()
+      {
+        core::StateTrackerGuard guard(this->tracker());
+        this->heldLeaks_.set(this->heldLeaks_.get() + 1);
+      }
       app::scene::NodeState<core::String> text_;
       app::scene::NodeState<int> clipWidth_;
       app::scene::NodeState<core::Frame> viewport_;
       core::EmitterState next_;
+      core::EmitterState leak_;
       app::scene::NodeState<unsigned> acknowledgements_;
+      app::scene::NodeState<unsigned> heldLeaks_;
     };
 
     /** A captured all-white rectangle needs only its bounds: every baseline
@@ -295,8 +312,12 @@ namespace loka
           record.set("bar.thumb.moved", value > this->arrowValue_ ? "yes" : "no");
           const int changed = this->barPixels_.observe();
           record.setInt("bar.outside.changed", changed);
+          // Lua presses Leak before the third Next for each leaking drag.
+          record.setInt("held.outside.leaks", static_cast<int>(owner.heldLeaks()));
           if (value <= this->arrowValue_ || changed)
             return this->fail(out, "thumb value/outside", &record);
+          if (owner.heldLeaks())
+            return this->fail(out, "held frames changed outside a clip", &record);
           owner.expose();
           break;
         }
