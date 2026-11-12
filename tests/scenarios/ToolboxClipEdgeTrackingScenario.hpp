@@ -60,6 +60,9 @@ namespace loka
         this->state(this->acknowledgements_, 0u);
         this->state(this->text_, core::String::Literal("Clip edge tracking text"));
         this->state(this->clipWidth_, int(ClipEdgeGeometry::BAR_WIDTH - 8));
+        // The rail writes the scroll origin here; an unbound ScrollView requests
+        // origin 0 at every layout, so its bar would snap back after each press.
+        this->state(this->viewport_, core::Frame(0, 0, 0, 0));
       }
       virtual void declareBindings(app::scene::BindingToken &token)
       {
@@ -78,7 +81,7 @@ namespace loka
                     .height(ClipEdgeGeometry::BAR_HEIGHT)
                     .TEST_ID("ClipEdge.BarClip")
                 << (Box().size(ClipEdgeGeometry::BAR_WIDTH, ClipEdgeGeometry::BAR_HEIGHT)
-                    << (ScrollView() << Box().size(100, 600))))
+                    << (ScrollView(this->viewport_) << Box().size(100, 600))))
             << Box().height(24) << Button("Next", &this->next_));
       }
       unsigned acknowledgements() const
@@ -99,6 +102,7 @@ namespace loka
       }
       app::scene::NodeState<core::String> text_;
       app::scene::NodeState<int> clipWidth_;
+      app::scene::NodeState<core::Frame> viewport_;
       core::EmitterState next_;
       app::scene::NodeState<unsigned> acknowledgements_;
     };

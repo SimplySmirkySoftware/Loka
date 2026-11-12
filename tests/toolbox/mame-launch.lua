@@ -492,7 +492,11 @@ if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/clip-edge-tracking" then
                 local changed = 0
                 for py = outside[2], outside[4] - 1 do
                     for px = outside[1], outside[3] - 1 do
-                        if not (px >= cx - 10 and px < cx + 10 and py >= cy - 10 and py < cy + 10)
+                        -- The 16x16 cursor sits within 16 px of its hot spot, both in
+                        -- this frame (cx, cy) and in the pre-press frame (sx, sy).
+                        local nearCursor = (px >= cx - 16 and px < cx + 16 and py >= cy - 16 and py < cy + 16)
+                            or (px >= sx - 16 and px < sx + 16 and py >= sy - 16 and py < sy + 16)
+                        if not nearCursor
                             and snapshotPixel(frame, width, px, py) ~= snapshotPixel(before, width, px, py) then
                             changed = changed + 1
                         end
@@ -503,7 +507,11 @@ if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/clip-edge-tracking" then
                 -- audit can see persistent residue only.
                 say("clip %s held frame=%d outside.changed=%d (observation only)", label, step, changed)
             end
-            button:clear_value(); move(600, 450); emu.wait(2)
+            -- Hold still after the release: the ADB driver posts mouseUp on its
+            -- next poll, and a cursor already outside the thumb's slop rect
+            -- would make TrackControl cancel the drag (text-editor-scroll uses
+            -- exactly that to cancel on purpose).
+            button:clear_value(); emu.wait(0.5); move(600, 450); emu.wait(2)
         end
         drag("edit", ox + 16, oy + 20, ox + 198, oy + 20, editOutside)
         -- Native input must leave the bar at zero. Next acknowledges even a
