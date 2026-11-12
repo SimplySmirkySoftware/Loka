@@ -770,8 +770,10 @@ wire version 2 and its nine words are unchanged. Spacing numbers are consumed
 only by C++ and remain outside the fingerprint; changing only those numbers
 leaves it unchanged. This detects accidental skew, not adversarial collisions.
 
-A skin does not change Button or Cell padding, borders or dimensions, fonts,
-colours, scrollbar geometry, DPI policy, or explicit gap overrides. It does not
+A skin leaves Button and Cell sizing rules, padding and borders unchanged
+(their allocated dimensions can still change with the space the new gaps
+leave), and does not change fonts, colours, scrollbar geometry, DPI policy,
+or explicit gap overrides. It does not
 apply a window content margin at the root. HelloWorld's inner ScrollView Box
 uses the selected standard margin and its default gaps change, while the
 measured root width breakpoint remains 400 (399 is one column; 400 and 420 are
