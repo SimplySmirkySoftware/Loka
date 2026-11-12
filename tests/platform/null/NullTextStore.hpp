@@ -13,6 +13,12 @@ namespace loka
     {
       struct TextDocumentAccess;
 #ifdef TEST_BUILD
+      void failTextSplices(TextSpliceResult reason, unsigned count);
+      TextSpliceResult consumeTextSpliceFailure();
+      void failTextSpliceAfterChange(unsigned count);
+      bool consumeTextSpliceAfterChangeFailure();
+      void failTextStoreReads(unsigned count);
+      bool consumeTextStoreReadFailure();
       void failTextStoreBirths(scene::TextStoreBirth reason, unsigned count);
       scene::TextStoreBirth consumeTextStoreBirthFailure();
       void startTextDocumentRevision(TextDocument &, unsigned long revision);
@@ -37,23 +43,7 @@ public:
   /** Construct the native body in one source traversal, then consume construction marks. */
   loka::app::scene::TextStoreReading build(loka::app::TextStoreSource &source)
   {
-    unsigned int scalar;
-    bool separator;
-    while (source.next(scalar, separator))
-    {
-      if (scalar < 0x80)
-        this->committedText_ += static_cast<char>(scalar);
-      else
-      {
-        const unsigned count = scalar < 0x800 ? 2 : scalar < 0x10000 ? 3 : 4;
-        this->committedText_ += static_cast<char>((count == 2   ? 0xc0
-                                                   : count == 3 ? 0xe0
-                                                                : 0xf0)
-                                                  | (scalar >> (6 * (count - 1))));
-        for (unsigned i = count - 1; i; --i)
-          this->committedText_ += static_cast<char>(0x80 | ((scalar >> (6 * (i - 1))) & 0x3f));
-      }
-    }
+    this->committedText_ = materialize(source);
     const loka::app::TextPlacement placement = source.appliedPlacement();
     this->apply(placement.kind() == loka::app::TextPlacement::START ? 0
                 : placement.kind() == loka::app::TextPlacement::END ? this->length()
@@ -62,6 +52,43 @@ public:
     this->changes_.noteEdit(&range);
     this->take();
     return loka::app::scene::TextStoreReading(false, &range, this->caret_, this->anchor_, false);
+  }
+  /** Validate first, prepare the entire new body, then commit and consume marks. */
+  loka::app::TextSpliceResult splice(unsigned long from,
+                                     unsigned long to,
+                                     loka::app::TextStoreSource &source,
+                                     loka::app::scene::TextStoreReading &out)
+  {
+    using namespace loka::app;
+    if (from > to || to > this->length() || !this->canonical(from) || !this->canonical(to))
+      return TEXT_SPLICE_RANGE;
+#ifdef TEST_BUILD
+    const TextSpliceResult refusal = loka::app::testing::consumeTextSpliceFailure();
+    if (refusal != TEXT_SPLICE_OK)
+      return refusal;
+#endif
+    // The test-native store assumes std::string allocation succeeds.
+    const std::string inserted = materialize(source);
+    const unsigned long length = static_cast<unsigned long>(inserted.size());
+    std::string prepared(this->committedText_);
+    prepared.replace(from, to - from, inserted);
+    const TextPlacement placement = source.appliedPlacement();
+    const unsigned long caret = from
+                                + (placement.kind() == TextPlacement::START ? 0
+                                   : placement.kind() == TextPlacement::END ? length
+                                                                            : placement.utf8Offset());
+    this->committedText_.swap(prepared);
+    this->apply(caret);
+    const TextChangedRange range(from, to - from, length);
+    this->changes_.noteEdit(&range);
+#ifdef TEST_BUILD
+    // Deliberate contract violation for the kernel's release recovery pins.
+    if (loka::app::testing::consumeTextSpliceAfterChangeFailure())
+      return TEXT_SPLICE_ALLOCATION;
+#endif
+    this->take();
+    out = scene::TextStoreReading(false, &range, this->caret_, this->anchor_, false);
+    return TEXT_SPLICE_OK;
   }
   loka::app::scene::TextStoreReading take()
   {
@@ -154,6 +181,25 @@ public:
   }
 
 private:
+  static std::string materialize(loka::app::TextStoreSource &source)
+  {
+    std::string out;
+    unsigned int scalar;
+    bool separator;
+    while (source.next(scalar, separator))
+    {
+      if (scalar < 0x80)
+        out += static_cast<char>(scalar);
+      else
+      {
+        const unsigned count = scalar < 0x800 ? 2 : scalar < 0x10000 ? 3 : 4;
+        out += static_cast<char>((count == 2 ? 0xc0 : count == 3 ? 0xe0 : 0xf0) | (scalar >> (6 * (count - 1))));
+        for (unsigned i = count - 1; i; --i)
+          out += static_cast<char>(0x80 | ((scalar >> (6 * (i - 1))) & 0x3f));
+      }
+    }
+    return out;
+  }
   bool canonical(unsigned long offset) const
   {
     if (offset == 0 || offset == this->length())

@@ -357,7 +357,7 @@ Source: [#892](https://github.com/SimplySmirkySoftware/Loka/issues/892),
 [#893](https://github.com/SimplySmirkySoftware/Loka/pull/893).
 
 `RequestTraits<T>::coalescable` has no permissive primary; `LineCursor` opts in,
-and `EditorCommand` explicitly opts out (#902 item 1).
+and `EditorCommand` and `TextSplice` explicitly opt out (commands do not coalesce).
 `RequestDeclarationWall<T>` refuses command-like or unspecialized types on all
 three plain declaration routes: `StateBatchBase::CreateImmediateState`,
 `ComposableNode::state`, and `NodeStateBatch::state`. This covers both
@@ -394,7 +394,8 @@ The implementation series is [#903 (a0, runner and trace)](https://github.com/Si
 `NONE` denotes an empty slot. These verbs accumulate: two posts mean two page
 operations, so `RequestTraits<EditorCommand>::coalescable = 0` permits only
 `RequestQueue<EditorCommand, N>`, not either plain request handle or a sourceless
-binding. Standard Edit menu items first offer the action to the native editor;
+binding. `TextSplice` is also a command; its document-owned queue admits one
+pending splice through the document gate. Standard Edit menu items first offer the action to the native editor;
 when no native target handles it, the copied app binding runs once if present.
 A native refusal or no-op counts as handled and does not fall back. App-owned
 history, clipboard seams, and selection requests are separate future work.
@@ -507,7 +508,7 @@ row. Single-seat behavior and command-free golden records remain unchanged
 
 | Delivery site | Caller | Bound and ownership |
 |---|---|---|
-| `Window::reconcileTextDocuments` via `App::reconcileAtCompletion` | Rail outer completion, after focus and a fresh close-pending check | One caret take per document in the current Scene; no view is required. AWAITING_STORE waits; refused creation and stale revisions take and drop. |
+| `Window::reconcileTextDocuments` via `App::reconcileAtCompletion` | Rail outer completion, after focus and a fresh close-pending check | At most one replacement, one splice, then one caret take per document in the current Scene; no view is required. AWAITING_STORE waits; refused creation and stale revisions take and drop. |
 
 [Window](../common/app/core/Window.cpp), [App](../common/app/core/App.cpp), and
 [TextDocumentPublisher](../common/app/text/TextDocument.cpp) own this sequence.

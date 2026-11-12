@@ -1763,6 +1763,7 @@ LOKA_TEST(testLinkActivationCompletion)
 LOKA_TEST(testLinkActivationClosingArm)
 
 LOKA_TEST(testTextWholeReplacementContracts)
+LOKA_TEST(testTextDocumentSpliceContracts)
 
 LOKA_TEST(testTextSpanUnlinkedCharacterization)
 LOKA_TEST(testTextSpanLinkBoundaries)

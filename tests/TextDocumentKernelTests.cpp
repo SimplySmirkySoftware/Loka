@@ -1541,3 +1541,476 @@ void testTextWholeReplacementContracts()
   replacementAwaitedPin();
   replacementOriginPins();
 }
+
+namespace
+{
+  TextSplice spliceValue(TextDocument &doc,
+                         unsigned long from,
+                         unsigned long to,
+                         const char *bytes = "X",
+                         TextPlacement placement = TextPlacement::End())
+  {
+    const unsigned long revision = doc.fact()->get().textRevision();
+    TextSplice value;
+    LOKA_VERIFY(TextSplice::FromUtf8(TextPositionTestAccess::make(revision, from),
+                                     TextPositionTestAccess::make(revision, to),
+                                     bytes,
+                                     static_cast<unsigned long>(std::strlen(bytes)),
+                                     placement,
+                                     value)
+                == TEXT_DOCUMENT_OK);
+    return value;
+  }
+  void seedSplice(Fixture &f)
+  {
+    LOKA_VERIFY(f.text().replace(bodyReplacement("abcd")) == POST_ACCEPTED);
+    f.app.reconcileAtCompletion();
+  }
+  void spliceAppliedPins()
+  {
+    BlobAllocationProbe allocation;
+    Fixture f;
+    seedSplice(f);
+    TextDocument &doc = f.text();
+    const TextDocumentOrigin origin = doc.fact()->get().origin();
+    const unsigned long from[] = {1, 1, 1, 1, 1, 1};
+    const unsigned long to[] = {1, 3, 2, 2, 2, 2};
+    const char *bytes[] = {"xy", "", "Q\r\nR", "\xc3\xa9", "\xc3\xa9", "z"};
+    const TextPlacement places[] = {TextPlacement::Start(),
+                                    TextPlacement::End(),
+                                    TextPlacement::AtUtf8Offset(2),
+                                    TextPlacement::AtUtf8Offset(1),
+                                    TextPlacement::AtUtf8Offset(99),
+                                    TextPlacement::End()};
+    const unsigned long inserted[] = {2, 0, 3, 2, 2, 1};
+    const unsigned long caret[] = {1, 1, 3, 1, 3, 2};
+    for (unsigned i = 0; i < 6; ++i)
+    {
+      TextDocumentAccess::body(doc, "abcd");
+      f.app.reconcileAtCompletion();
+      const unsigned long revision = doc.fact()->get().textRevision();
+      const unsigned reads = f.controller.reads;
+      const unsigned applies = f.controller.applies;
+      const int live = allocation.live;
+      const int frees = allocation.byteFrees;
+      doc.post(doc.fact()->get().caret());
+      LOKA_VERIFY(doc.splice(spliceValue(doc, from[i], to[i], bytes[i], places[i])) == POST_ACCEPTED);
+      f.app.reconcileAtCompletion();
+      LOKA_VERIFY(f.controller.reads == reads + 1 && f.controller.applies == applies);
+      LOKA_VERIFY(doc.fact()->get().textRevision() == revision + 1);
+      LOKA_VERIFY(doc.fact()->get().caret() == TextPositionTestAccess::make(revision + 1, caret[i]));
+      LOKA_VERIFY(doc.fact()->get().selectionAnchor() == doc.fact()->get().caret());
+      LOKA_VERIFY(doc.fact()->get().origin() == origin);
+      TextPosition start, end;
+      LOKA_VERIFY(doc.fact()->get().queryChangedRange(start, end));
+      LOKA_VERIFY(start == TextPositionTestAccess::make(revision + 1, from[i]));
+      LOKA_VERIFY(end == TextPositionTestAccess::make(revision + 1, from[i] + inserted[i]));
+      const Reply<TextSplice> &reply = doc.spliceReply()->get();
+      LOKA_VERIFY(reply.kind() == (i == 3 || i == 4 ? Reply<TextSplice>::CLAMPED : Reply<TextSplice>::GRANTED));
+      LOKA_VERIFY(reply.applied().logicalLength() == inserted[i]);
+      LOKA_VERIFY(allocation.live == live && allocation.byteFrees == frees + (inserted[i] ? 1 : 0));
+      const char *bodies[] = {"axybcd",
+                              "ad",
+                              "aQ\nRcd",
+                              "a\xc3\xa9"
+                              "cd",
+                              "a\xc3\xa9"
+                              "cd",
+                              "azcd"};
+      LOKA_VERIFY(TextDocumentAccess::committedText(doc) == bodies[i]);
+      f.app.reconcileAtCompletion();
+      LOKA_VERIFY(doc.fact()->get().textRevision() == revision + 1);
+    }
+  }
+  struct SpliceOrder
+  {
+    unsigned stage;
+    SpliceOrder()
+        : stage(0)
+    {
+    }
+    static void fact(void *data)
+    {
+      SpliceOrder &p = *static_cast<SpliceOrder *>(data);
+      LOKA_VERIFY(p.stage == 0);
+      p.stage = 1;
+    }
+    static void replacement(void *data)
+    {
+      SpliceOrder &p = *static_cast<SpliceOrder *>(data);
+      LOKA_VERIFY(p.stage == 1);
+      p.stage = 2;
+    }
+    static void splice(void *data)
+    {
+      SpliceOrder &p = *static_cast<SpliceOrder *>(data);
+      LOKA_VERIFY(p.stage == 2);
+      p.stage = 3;
+    }
+  };
+  void spliceStalePins()
+  {
+    for (unsigned event = 0; event < 4; ++event)
+    {
+      Fixture f;
+      seedSplice(f);
+      TextDocument &doc = f.text();
+      const TextSplice value = spliceValue(doc, 1, 2);
+      if (event == 2)
+      {
+        TextDocumentAccess::body(doc, "typed");
+        f.app.reconcileAtCompletion();
+      }
+      const unsigned long revision = doc.fact()->get().textRevision();
+      SpliceOrder order;
+      if (event == 1 || event == 3)
+      {
+        doc.fact()->bind(&SpliceOrder::fact, &order, false);
+        doc.replaceReply()->bind(&SpliceOrder::replacement, &order, false);
+        doc.spliceReply()->bind(&SpliceOrder::splice, &order, false);
+        LOKA_VERIFY(doc.replace(bodyReplacement("replacement")) == POST_ACCEPTED);
+        if (event == 3)
+          failTextStoreBirths(TEXT_STORE_REFUSED_ALLOCATION, 1);
+      }
+      LOKA_VERIFY(doc.splice(value) == POST_ACCEPTED);
+      if (event == 0)
+        TextDocumentAccess::body(doc, "typed");
+      f.app.reconcileAtCompletion();
+      LOKA_VERIFY(doc.fact()->get().textRevision() == revision + (event == 2 ? 0 : 1));
+      LOKA_VERIFY(doc.spliceReply()->get().kind()
+                  == (event == 3 ? Reply<TextSplice>::GRANTED : Reply<TextSplice>::REFUSED));
+      if (event != 3)
+        LOKA_VERIFY(doc.spliceReply()->get().reason() == TEXT_SPLICE_STALE);
+      LOKA_VERIFY(TextDocumentAccess::committedText(doc)
+                  == (event == 1   ? "replacement"
+                      : event == 3 ? "aXcd"
+                                   : "typed"));
+      if (event == 1 || event == 3)
+      {
+        LOKA_VERIFY(order.stage == 3);
+        LOKA_VERIFY(doc.replaceReply()->get().kind()
+                    == (event == 1 ? Reply<TextReplacement>::GRANTED : Reply<TextReplacement>::REFUSED));
+        doc.fact()->unbind(&SpliceOrder::fact, &order);
+        doc.replaceReply()->unbind(&SpliceOrder::replacement, &order);
+        doc.spliceReply()->unbind(&SpliceOrder::splice, &order);
+      }
+    }
+  }
+  void spliceRefusalPins()
+  {
+    const TextSpliceResult reasons[] = {
+        TEXT_SPLICE_NOT_REPRESENTABLE, TEXT_SPLICE_ALLOCATION, TEXT_SPLICE_CAPACITY, TEXT_SPLICE_UNAVAILABLE};
+    for (unsigned i = 0; i < 4; ++i)
+    {
+      Fixture f;
+      seedSplice(f);
+      TextDocument &doc = f.text();
+      const TextDocumentFact before = doc.fact()->get();
+      failTextSplices(reasons[i], 1);
+      LOKA_VERIFY(doc.splice(spliceValue(doc, 1, 2)) == POST_ACCEPTED);
+      f.app.reconcileAtCompletion();
+      LOKA_VERIFY(doc.spliceReply()->get().reason() == reasons[i]);
+      LOKA_VERIFY(TextDocumentAccess::committedText(doc) == "abcd");
+      LOKA_VERIFY(doc.fact()->get().textRevision() == before.textRevision());
+      LOKA_VERIFY(doc.fact()->get().caret() == before.caret());
+      LOKA_VERIFY(doc.fact()->get().selectionAnchor() == before.selectionAnchor());
+      failTextSplices(reasons[i], 1);
+      doc.post(TextPositionTestAccess::make(before.textRevision(), 3));
+      LOKA_VERIFY(doc.splice(spliceValue(doc, 1, 2)) == POST_ACCEPTED);
+      f.app.reconcileAtCompletion();
+      LOKA_VERIFY(doc.fact()->get().caret() == TextPositionTestAccess::make(before.textRevision(), 3));
+    }
+    Fixture f;
+    seedSplice(f);
+    TextDocument &doc = f.text();
+    doc.post(doc.fact()->get().caret());
+    LOKA_VERIFY(doc.splice(spliceValue(doc, 1, 2)) == POST_ACCEPTED);
+    TextDocumentAccess::uncommitted(doc, "marked");
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(doc.spliceReply()->get().reason() == TEXT_SPLICE_COMPOSING);
+    LOKA_VERIFY(TextDocumentAccess::pending(doc));
+    TextDocumentAccess::uncommitted(doc, 0);
+    failTextStoreReads(1);
+    LOKA_VERIFY(doc.splice(spliceValue(doc, 1, 2)) == POST_ACCEPTED);
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(doc.spliceReply()->get().reason() == TEXT_SPLICE_UNAVAILABLE);
+    TextDocumentAccess::body(doc, "a\xc3\xa9z");
+    TextDocumentAccess::selection(doc, 2, 2);
+    f.app.reconcileAtCompletion();
+    TextSplice bad;
+    LOKA_VERIFY(
+        TextSplice::FromUtf8(doc.fact()->get().caret(), doc.fact()->get().caret(), "x", 1, TextPlacement::End(), bad)
+        == TEXT_DOCUMENT_OK);
+    LOKA_VERIFY(doc.splice(bad) == POST_ACCEPTED);
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(doc.spliceReply()->get().reason() == TEXT_SPLICE_RANGE);
+    LOKA_VERIFY(TextDocumentAccess::committedText(doc) == "a\xc3\xa9z");
+    failTextStoreCreations(1);
+    Fixture refused;
+    LOKA_VERIFY(refused.text().splice(spliceValue(refused.text(), 0, 0)) == POST_ACCEPTED);
+    refused.app.reconcileAtCompletion();
+    LOKA_VERIFY(refused.text().spliceReply()->get().reason() == TEXT_SPLICE_UNAVAILABLE);
+  }
+  class SpliceController : public Controller
+  {
+  public:
+    enum Mode
+    {
+      DEFAULT_DOOR,
+      FAIL_REREAD
+    };
+    const Mode mode;
+    explicit SpliceController(Mode m)
+        : mode(m)
+    {
+    }
+    virtual TextSpliceResult applyTextSplice(
+        TextStoreRow &row, unsigned long from, unsigned long to, TextStoreSource &source, TextStoreReading &out)
+    {
+      if (this->mode == DEFAULT_DOOR)
+        return IPlatformController::applyTextSplice(row, from, to, source, out);
+      const TextSpliceResult result = Controller::applyTextSplice(row, from, to, source, out);
+      failTextStoreReads(1);
+      return result;
+    }
+  };
+  void spliceRecoveryPins()
+  {
+    for (unsigned i = 0; i < 3; ++i)
+    {
+      SpliceController controller(i == 0 ? SpliceController::DEFAULT_DOOR : SpliceController::FAIL_REREAD);
+      NullPlatformContext context;
+      TestWindow window(&context, props(), &controller);
+      TextTestApp app(window);
+      app.flush();
+      app.reconcileAtCompletion();
+      TextDocument &doc = static_cast<Root *>(SceneAccess::rootBoundary(*window.scene()))->text;
+      LOKA_VERIFY(doc.replace(bodyReplacement("abcd")) == POST_ACCEPTED);
+      app.reconcileAtCompletion();
+      const unsigned long revision = doc.fact()->get().textRevision();
+      LOKA_VERIFY(doc.splice(spliceValue(doc, 1, 2)) == POST_ACCEPTED);
+      doc.post(TextPositionTestAccess::make(revision, 0));
+      if (i)
+        failTextSpliceAfterChange(1);
+      // Case 1 uses the ordinary Null door so the recovery reread succeeds.
+      if (i == 1)
+      {
+        Controller ordinary;
+        TextDocumentAccess::complete(window.scene()->textDocuments(), ordinary);
+      }
+      else
+        app.reconcileAtCompletion();
+      LOKA_VERIFY(doc.spliceReply()->get().reason() == (i ? TEXT_SPLICE_ALLOCATION : TEXT_SPLICE_UNAVAILABLE));
+      LOKA_VERIFY(doc.fact()->get().textRevision() == revision + (i ? 1 : 0));
+      LOKA_VERIFY(!TextDocumentAccess::pending(doc));
+      if (i == 2)
+      {
+        TextPosition start, end;
+        LOKA_VERIFY(doc.fact()->get().caret().isNone() && doc.fact()->get().selectionAnchor().isNone());
+        LOKA_VERIFY(!doc.fact()->get().queryChangedRange(start, end));
+        app.reconcileAtCompletion();
+        LOKA_VERIFY(!doc.fact()->get().caret().isNone());
+      }
+      else
+        LOKA_VERIFY(doc.fact()->get().caret() == TextPositionTestAccess::make(revision + (i ? 1 : 0), i ? 2 : 0));
+    }
+  }
+  struct DirectSpliceAdmission
+  {
+    TextDocument &doc;
+    unsigned calls;
+    explicit DirectSpliceAdmission(TextDocument &d)
+        : doc(d),
+          calls(0)
+    {
+    }
+    static void run(void *data)
+    {
+      DirectSpliceAdmission &p = *static_cast<DirectSpliceAdmission *>(data);
+      ++p.calls;
+      LOKA_VERIFY(p.doc.splice(spliceValue(p.doc, 0, 0)) == POST_QUEUE_FULL);
+    }
+  };
+  struct SpliceObserver
+  {
+    TextDocument &doc;
+    loka::core::PushStateTracker tracker;
+    unsigned direct, deferred;
+    explicit SpliceObserver(TextDocument &d)
+        : doc(d),
+          direct(0),
+          deferred(0)
+    {
+    }
+    static void immediate(void *data)
+    {
+      SpliceObserver &p = *static_cast<SpliceObserver *>(data);
+      ++p.direct;
+      LOKA_VERIFY(p.doc.splice(spliceValue(p.doc, 0, 0)) == POST_QUEUE_FULL);
+      loka::core::StateTrackerGuard guard(&p.tracker);
+      loka::core::testing::PushStateTrackerTestAccess::defer(p.tracker, &later, data);
+    }
+    static void later(void *data)
+    {
+      SpliceObserver &p = *static_cast<SpliceObserver *>(data);
+      if (p.deferred)
+        return;
+      ++p.deferred;
+      LOKA_VERIFY(p.doc.splice(spliceValue(p.doc, 0, 0)) == POST_ACCEPTED);
+    }
+  };
+  void spliceAdmissionPins()
+  {
+    Fixture f;
+    seedSplice(f);
+    TextDocument &doc = f.text();
+    TextDocument undeclared;
+    LOKA_VERIFY(undeclared.splice(spliceValue(doc, 0, 0)) == POST_INVALID);
+    LOKA_VERIFY(doc.splice(TextSplice()) == POST_INVALID);
+    LOKA_VERIFY(doc.splice(spliceValue(doc, 1, 2)) == POST_ACCEPTED);
+    LOKA_VERIFY(doc.splice(spliceValue(doc, 2, 3)) == POST_QUEUE_FULL);
+    f.app.commitTextInput();
+    LOKA_VERIFY(TextDocumentAccess::splicePending(doc));
+    LOKA_VERIFY(doc.spliceReply()->get().kind() == Reply<TextSplice>::NO_REPLY);
+    DirectSpliceAdmission direct(doc);
+    doc.fact()->bind(&DirectSpliceAdmission::run, &direct, false);
+    SpliceObserver observer(doc);
+    doc.spliceReply()->bind(&SpliceObserver::immediate, &observer, false);
+    {
+      // The command turn settles deferred observers after publication.
+      loka::core::Operation turn;
+      f.app.reconcileAtCompletion();
+      turn.close();
+    }
+    LOKA_VERIFY(observer.direct == 1 && observer.deferred == 1);
+    LOKA_VERIFY(direct.calls == 1);
+    doc.fact()->unbind(&DirectSpliceAdmission::run, &direct);
+    LOKA_VERIFY(TextDocumentAccess::splicePending(doc));
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(observer.direct == 2 && !TextDocumentAccess::splicePending(doc));
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(observer.direct == 2);
+    doc.spliceReply()->unbind(&SpliceObserver::immediate, &observer);
+#if defined(NDEBUG) && !defined(LOKA_LIFECYCLE_AUDIT)
+    LOKA_VERIFY(TextDocumentAccess::postSpliceDirect(doc, spliceValue(doc, 0, 0)) == POST_ACCEPTED);
+    LOKA_VERIFY(TextDocumentAccess::postSpliceDirect(doc, spliceValue(doc, 0, 0)) == POST_ACCEPTED);
+    LOKA_VERIFY(doc.splice(spliceValue(doc, 0, 0)) == POST_QUEUE_FULL);
+    const unsigned long revision = doc.fact()->get().textRevision();
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(TextDocumentAccess::spliceRing(doc) == 1 && TextDocumentAccess::splicePending(doc));
+    LOKA_VERIFY(doc.fact()->get().textRevision() == revision);
+#else
+    std::puts("[skip] splice ring refusal requires NDEBUG without lifecycle audit; debug take asserts.");
+#endif
+  }
+  void spliceCancellationPins()
+  {
+    for (unsigned event = 0; event < 3; ++event)
+    {
+      BlobAllocationProbe allocation;
+      unsigned replies = 0;
+      {
+        Fixture f;
+        seedSplice(f);
+        TextDocument &doc = f.text();
+        const int frees = allocation.byteFrees;
+        loka::core::State<Reply<TextSplice> > *reply = doc.spliceReply();
+        reply->bind(&count, &replies, false);
+        LOKA_VERIFY(doc.splice(spliceValue(doc, 0, 0, "pending")) == POST_ACCEPTED);
+        if (event == 0)
+        {
+          TextDocumentAccess::withdraw(doc);
+          LOKA_VERIFY(doc.splice(spliceValue(doc, 0, 0)) == POST_INVALID);
+          // Withdrawal has not reclaimed the Boundary-owned seat yet.
+          LOKA_VERIFY(allocation.byteFrees == frees + 1);
+          f.app.reconcileAtCompletion();
+          LOKA_VERIFY(TextDocumentAccess::splicePending(doc));
+          reply->unbind(&count, &replies);
+        }
+        else if (event == 1)
+        {
+          doc.~TextDocument();
+          f.app.reconcileAtCompletion();
+          reply->unbind(&count, &replies);
+          new (&doc) TextDocument();
+        }
+        else
+        {
+          Scene *candidate = new Scene(Boundary<Root>());
+          LOKA_VERIFY(f.window.sceneManager()->commitTransaction(0, candidate));
+          f.app.flush();
+          f.app.reconcileAtCompletion();
+          LOKA_VERIFY(TextDocumentAccess::committedText(f.text()).empty());
+        }
+        LOKA_VERIFY(replies == 0);
+      }
+      LOKA_VERIFY(allocation.live == 0 && allocation.byteFrees >= 2);
+    }
+    for (unsigned event = 0; event < 2; ++event)
+    {
+      Fixture f;
+      seedSplice(f);
+      TextDocument &doc = f.text();
+      WithdrawDocument withdrawal(doc);
+      unsigned replies = 0;
+      doc.spliceReply()->bind(&count, &replies, false);
+      if (event == 0)
+        doc.fact()->bind(&WithdrawDocument::run, &withdrawal, false);
+      else
+      {
+        doc.replaceReply()->bind(&WithdrawDocument::run, &withdrawal, false);
+        LOKA_VERIFY(doc.replace(bodyReplacement("new body")) == POST_ACCEPTED);
+      }
+      LOKA_VERIFY(doc.splice(spliceValue(doc, 1, 2)) == POST_ACCEPTED);
+      f.app.reconcileAtCompletion();
+      LOKA_VERIFY(withdrawal.calls == 1 && replies == 0);
+      LOKA_VERIFY(doc.spliceReply()->get().kind() == Reply<TextSplice>::NO_REPLY);
+      if (event == 0)
+        doc.fact()->unbind(&WithdrawDocument::run, &withdrawal);
+      else
+        doc.replaceReply()->unbind(&WithdrawDocument::run, &withdrawal);
+      doc.spliceReply()->unbind(&count, &replies);
+    }
+  }
+  class SpliceAwaitController : public Controller
+  {
+  public:
+    virtual TextStoreBirth
+    createTextStore(TextStoreSource &source, TextStoreRow *old, TextStoreRow *&fresh, TextStoreReading &reading)
+    {
+      if (!old)
+      {
+        LOKA_VERIFY(awaitedDocument->splice(spliceValue(*awaitedDocument, 0, 0)) == POST_ACCEPTED);
+        TextDocumentAccess::complete(awaitedScene->textDocuments(), *this);
+        LOKA_VERIFY(TextDocumentAccess::splicePending(*awaitedDocument));
+        LOKA_VERIFY(awaitedDocument->spliceReply()->get().kind() == Reply<TextSplice>::NO_REPLY);
+      }
+      return Controller::createTextStore(source, old, fresh, reading);
+    }
+  };
+  void spliceAwaitedPin()
+  {
+    SpliceAwaitController controller;
+    NullPlatformContext context;
+    WindowProps p;
+    p.scene(new Scene(Boundary<AwaitRoot>()));
+    TestWindow window(&context, p, &controller);
+    TextTestApp app(window);
+    app.flush();
+    app.reconcileAtCompletion();
+    LOKA_VERIFY(awaitedDocument->spliceReply()->get().kind() == Reply<TextSplice>::GRANTED);
+    LOKA_VERIFY(TextDocumentAccess::committedText(*awaitedDocument) == "X");
+    awaitedDocument = 0;
+    awaitedScene = 0;
+  }
+} // namespace
+void testTextDocumentSpliceContracts()
+{
+  spliceAppliedPins();
+  spliceStalePins();
+  spliceRefusalPins();
+  spliceRecoveryPins();
+  spliceAdmissionPins();
+  spliceCancellationPins();
+  spliceAwaitedPin();
+}
