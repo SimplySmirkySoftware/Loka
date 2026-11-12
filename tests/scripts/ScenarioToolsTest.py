@@ -1026,6 +1026,10 @@ class StandaloneDebugEntryPointTest(unittest.TestCase):
                 "Run (Windows SmirkyCard)",
             },
         )
+        preview = next(c for c in launch_document["configurations"]
+                       if c["name"] == "Loka: Preview Extension")
+        self.assertIn("${workspaceFolder}", preview["args"])
+        self.assertEqual(preview["preLaunchTask"], "Build: Loka Preview Extension")
         self.assertEqual(len(names), len(set(names)))
         self.assertFalse(any("Standalone" in name for name in names))
         self.assertFalse(any("Scenario Loop" in name for name in names))

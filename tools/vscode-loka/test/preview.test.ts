@@ -40,8 +40,9 @@ function fixture(trusted = true, folder: string | null = '/workspace', present: 
   const isClosed = () => live === 'closed';
   const ports: MutablePorts = {
     admitted: () => trusted, folder: () => folder ?? undefined,
-    setting: name => { reads.push(name); return directory + '/Demo.js'; },
-    resolve: posix.resolve, directory: posix.dirname, stem: file => posix.basename(file, '.js'),
+    prepare: () => { reads.push('catalog'); return {directory: '/workspace/' + directory,
+      app: {id: 'Target', target: 'Target', name: 'Label', sourceDir: 'example/Label', js: 'Demo.js', exportName: 'Factory'}}; },
+    resolve: posix.resolve, directory: posix.dirname,
     existsSync: file => { reads.push(file); return typeof present === 'boolean' ? present : !file.endsWith(present); },
     asWebviewUri: file => 'https://resource.invalid' + file, cspSource: "'self'",
     identity: () => 'id-' + ++serial,
@@ -163,7 +164,7 @@ test('Build lifetime spans Preview close and reopen; second starts stay refused'
   let f = fixture(), calls = 0;
   let resolve!: (execution: object) => void;
   const {createBuild} = await import('../src/build.ts');
-  const newBuild = () => createBuild({admitted: () => true,
+  const newBuild = () => createBuild({prepare: () => ({kind: 'BUILD', cwd: '/workspace', directory: '/build', target: 'Target'}),admitted: () => true,
     execute() { ++calls; return new Promise<object>(yes => { resolve = yes; }); },
     reload: () => f.preview.reload(), report: () => {}, fault: () => {}});
   let build = newBuild();
@@ -209,7 +210,7 @@ test('DISPOSING status callback close follows dispose post', () => {
   f.preview.reload();
   assert.equal(f.state().phase.kind, 'CLOSED'); assert.equal(f.posts.length, 1); assert.equal(f.timers.size, 0);
 });
-for (const port of ['admitted', 'folder', 'identity', 'setting', 'resolve', 'existsSync', 'directory', 'asWebviewUri', 'stem'] as const) {
+for (const port of ['admitted', 'folder', 'identity', 'prepare', 'resolve', 'existsSync', 'asWebviewUri'] as const) {
   test(`replacement ${port} callback close follows installed document`, () => {
     const f = fixture(); f.receive('completed'); const html = f.panel.html, options = f.panel.options;
     const original = f.ports[port];
@@ -313,7 +314,7 @@ for (const door of ['cancel', 'nested RELOAD']) {
 test('Preview -> Build -> Preview: outer-before, outer-after, nested', async () => {
   const {createBuild} = await import('../src/build.ts');
   const f = fixture(), trace: string[] = []; let executions = 0;
-  const build = createBuild({
+  const build = createBuild({prepare: () => ({kind: 'BUILD', cwd: '/workspace', directory: '/build', target: 'Target'}),
     admitted() { f.receive('started', {status: 0}); return true; },
     execute() { ++executions; return new Promise<object>(() => {}); },
     reload() {}, report() {}, fault() {},

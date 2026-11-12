@@ -35,7 +35,7 @@ export function fakeHost() {
     const row = {label, attempts: 0, active: true}; subscriptions.push(row);
     return strict({dispose() { ++row.attempts; row.active = false; hooks.release(label); }});
   };
-  const commands = new Map<string, () => void>();
+  const commands = new Map<string, () => void | Promise<void>>();
   const statuses: string[] = [], output: string[] = [];
   const panels: FakePanel[] = [], tasks: unknown[] = [];
   const processListeners: ((e: {execution: object; exitCode?: number}) => void)[] = [];
@@ -50,36 +50,53 @@ export function fakeHost() {
   }
   const uri = (file: string) => strict({fsPath: file, toString: () => pathToFileURL(file).href});
   const folder = strict({uri: uri(root), name: 'fixture', index: 0});
+  const settings: Record<string, string> = {buildDirectory: '.', configureCommand: 'configure fixture'};
+  const picks: {items: {label: string; description: string; id: string}[]; resolve(value: unknown): void; reject(error: unknown): void}[] = [];
+  const errors: string[] = [];
+  const apps = [
+    {id: 'TargetA', target: 'TargetA', name: 'Label A', exportName: 'FactoryA', sourceDir: 'example/Label A', js: 'module/Demo.js'},
+    {id: 'TargetB', target: 'TargetB', name: 'Label B', exportName: 'FactoryB', sourceDir: 'example/Label B', js: 'other/Payload.js'},
+  ];
+  mkdirSync(join(root, 'other'));
+  for (const ext of ['js', 'wasm']) writeFileSync(join(root, 'other', 'Payload.' + ext), 'fixture');
+  const catalog = (rows = apps, directory = root) => {
+    mkdirSync(directory, {recursive: true});
+    writeFileSync(join(directory, 'loka-web-apps.json'), JSON.stringify({version: 1, apps: rows}));
+  };
+  catalog();
+  const use = (label: string) => assert.ok(subscriptions.find(s => s.label === label)?.active, label + ' use after disposal');
   const api = strict({
     __esModule: false, // CommonJS __importStar probes this marker before copying exports.
     Disposable, Uri: strict({file: uri}), ViewColumn: strict({Beside: 2}), StatusBarAlignment: strict({Left: 1}),
     workspace: strict({get isTrusted() { return trusted; }, workspaceFolders: [folder],
-      getConfiguration(section: string, scope: unknown) {
-        assert.equal(section, 'loka.preview'); assert.equal(scope, folder.uri);
+      getConfiguration(section: string, scope: unknown): {get(name: string): string} {
+        assert.equal(section, 'loka.preview'); assert.equal(scope, api.workspace.workspaceFolders[0]?.uri);
         return strict({get(name: string) {
-          if (name === 'module') return 'module/Demo.js';
-          assert.equal(name, 'buildCommand'); return 'build fixture && finish';
+          assert.ok(name in settings, 'unknown setting'); return settings[name];
         }});
       },
     }),
     window: strict({
       createOutputChannel(name: string) { assert.equal(name, 'Loka Preview'); return strict({
-        ...subscription('output'), appendLine(text: string) { hooks.output(text); output.push(text); },
+        ...subscription('output'), appendLine(text: string) { use('output'); hooks.output(text); output.push(text); },
       }); },
       createStatusBarItem(alignment: number) { assert.equal(alignment, 1); return strict({
-        ...subscription('status'), show() {}, set text(text: string) { hooks.status(text); statuses.push(text); },
+        ...subscription('status'), show() {}, set text(text: string) { use('status'); hooks.status(text); statuses.push(text); },
       }); },
-      showErrorMessage(_message: string) { return hooks.error(); },
+      showErrorMessage(message: string) { errors.push(message); return hooks.error(); },
+      showQuickPick(items: typeof picks[0]['items']) { return new Promise((resolve, reject) => picks.push({items, resolve, reject})); },
       createWebviewPanel(type: string, title: string, column: number, options: unknown) {
         assert.equal(type, 'loka.preview'); assert.equal(title, 'Loka Preview'); assert.equal(column, 2);
         const p = new FakePanel(options, subscription, hooks); panels.push(p); return p.native;
       },
     }),
-    commands: strict({registerCommand(name: string, callback: () => void) {
+    commands: strict({registerCommand(name: string, callback: () => void | Promise<void>) {
       assert.equal(commands.has(name), false); commands.set(name, callback); return subscription(name);
     }}),
     ShellExecution: class { command: string; options: unknown;
       constructor(command: string, options: unknown) { this.command = command; this.options = options; } },
+    ProcessExecution: class { process: string; args: string[]; options: unknown;
+      constructor(process: string, args: string[], options: unknown) { this.process = process; this.args = args; this.options = options; } },
     Task: class { definition: unknown; scope: unknown; name: string; source: string; execution: unknown;
       constructor(definition: unknown, scope: unknown, name: string, source: string, execution: unknown) {
         this.definition = definition; this.scope = scope; this.name = name; this.source = source; this.execution = execution;
@@ -93,10 +110,20 @@ export function fakeHost() {
       onDidEndTask(callback: (e: {execution: object}) => void) { taskListeners.push(callback); return subscription('task'); },
     }),
   });
-  const context = strict({subscriptions: [] as vscode.Disposable[]}) as unknown as vscode.ExtensionContext;
+  const preferences = new Map<string, unknown>();
+  const writes: {key: string; value: unknown; commit(): void; resolve(): void; reject(error: unknown): void}[] = [];
+  const context = strict({subscriptions: [] as vscode.Disposable[], workspaceState: strict({
+    get(key: string) { return preferences.get(key); },
+    update(key: string, value: unknown) {
+      return new Promise<void>((resolve, reject) => writes.push({key, value,
+        commit() { preferences.set(key, value); }, resolve, reject}));
+    },
+  })}) as unknown as vscode.ExtensionContext;
   return {api: api as unknown as typeof vscode, context, root, folder, hooks, subscriptions, panels, tasks, commands,
+    settings, apps, catalog, picks, writes, preferences, errors,
+    folders(values: typeof folder[]) { api.workspace.workspaceFolders = values; },
     statuses, output, trust(value: boolean) { trusted = value; },
-    command(name: string) { const command = commands.get('loka.preview.' + name); assert.ok(command); command(); },
+    command(name: string) { const command = commands.get('loka.preview.' + name); assert.ok(command); return command(); },
     resolve(execution: object) { resolveTask(execution); }, reject(error: unknown) { rejectTask(error); },
     ended(execution: object, exitCode = 0) { processListeners.forEach(f => f({execution, exitCode})); },
     taskEnded(execution: object) { taskListeners.forEach(f => f({execution})); },
