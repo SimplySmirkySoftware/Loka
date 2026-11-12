@@ -249,18 +249,39 @@ LRESULT CALLBACK Win32AttributedTextContext::WndProc(HWND hwnd, UINT msg, WPARAM
 }
 void Win32AttributedTextContext::draw(HDC dc, const RECT &rect)
 {
-  this->presented_.invalidate();
   if (!dc || IsRectEmpty(&rect))
+  {
+    this->presented_.invalidate();
     return;
+  }
   RECT clip;
   const bool complete = GetClipBox(dc, &clip) == SIMPLEREGION && EqualRect(&clip, &rect);
-  // Transparent like Text: the parent repaint supplies ground. Only a complete,
-  // successful foreground paint certifies presentation; partial paints do not.
+  // Only complete success establishes knowledge. Successful partial drawing
+  // preserves an already known presentation only at the same value and seat.
   if (!this->links_.table().valid() || !this->node_ || !this->node_->props.text_
       || this->links_.table().value() != this->node_->props.text_->get())
+  {
+    this->presented_.invalidate();
     return;
-  if (this->links_.table().draw(dc, rect, this->node_->props.blockStyle_) && complete)
+  }
+  if (!this->links_.table().draw(dc, rect, this->node_->props.blockStyle_))
+  {
+    this->presented_.invalidate();
+    return;
+  }
+  if (complete)
+  {
     this->presented_.commit(Win32PresentedText(this->links_.table().value(), rect), paintScope());
+    return;
+  }
+  if (this->presented_.isKnown())
+  {
+    const Win32PresentedText &presented = this->presented_.value();
+    if (presented.text.hasSameSegmentValues(this->links_.table().value())
+        && presented.seatWidth == rect.right - rect.left && presented.seatHeight == rect.bottom - rect.top)
+      return;
+  }
+  this->presented_.invalidate();
 }
 void RegisterWin32AttributedTextNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &registry)
 {

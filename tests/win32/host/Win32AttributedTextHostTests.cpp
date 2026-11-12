@@ -347,6 +347,7 @@ static void pinStaticTextColor()
 
 int main(int argc, char **argv)
 {
+  pinLinkPressPartialPresentation();
   pinLinkPressProcedure();
   pinLinkPressHistory();
   pinLinkPressDoor2();

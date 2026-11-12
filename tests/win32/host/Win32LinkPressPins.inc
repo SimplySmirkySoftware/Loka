@@ -223,14 +223,14 @@ namespace
         if (!phase)
         {
           f.down();
-          if (action == 4 || action == 5 || action == 8)
+          if (action == 5 || action == 8)
             f.paint();
           f.up();
         }
         else
           f.up();
         const bool delivers =
-            action == 6 || (action == 2 && phase != 0) || (phase == 3 && (action == 1 || action == 3));
+            action == 4 || action == 6 || (action == 2 && phase != 0) || (phase == 3 && (action == 1 || action == 3));
         // GetClientRect runs before reading geometry: a new complete seat is valid.
         const bool resizedBeforeRead = phase == 1 && action == 8;
         LOKA_VERIFY(f.writes == (delivers || resizedBeforeRead ? 1 : 0));
@@ -631,6 +631,102 @@ namespace
       LOKA_VERIFY(captureReleases == before + 1 && !GetCapture());
       f.up();
       LOKA_VERIFY(f.writes == 0);
+    }
+  }
+} // namespace
+
+namespace
+{
+  void partialDamage(PressFixture &f, bool known)
+  {
+    LOKA_VERIFY(FittingAccess::known(*f.context) == known);
+    const PaintQuery query = {Win32RetirableContext::paintScope(), PLACEMENT_ELIGIBLE};
+    const PaintAnswer answer = f.context->queryPaintDamage(query);
+    if (known)
+      LOKA_VERIFY(answer.kind == PAINT_ANSWER_EXACT && answer.damage.width == 0 && answer.damage.height == 0);
+    else
+      LOKA_VERIFY(answer.kind == PAINT_ANSWER_REFUSED && answer.reason == PAINT_REFUSED_HISTORY_UNKNOWN);
+  }
+  void drawPartial(PressFixture &f, const RECT &seat)
+  {
+    paintClip = seat;
+    --paintClip.right;
+    const int before = outputAttempts;
+    FittingAccess::draw(*f.context, &f.hwnd()->dc, seat);
+    LOKA_VERIFY(outputAttempts > before);
+  }
+  void pinLinkPressPartialPresentation()
+  {
+    const RECT seat = {0, 0, 100, 100};
+    fittingPin("partial_same_keeps");
+    {
+      PressFixture f;
+      f.down();
+      drawPartial(f, seat);
+      partialDamage(f, true);
+      const POINT point = {0, 0};
+      LinkHit hit = LinkHit();
+      LOKA_VERIFY(FittingAccess::prepare(*f.context, point, hit) == HIT_LINK);
+      LOKA_VERIFY(FittingAccess::eligible(*f.context, hit));
+      f.up();
+      LOKA_VERIFY(f.writes == 1);
+    }
+    fittingPin("partial_after_unknown_stays_unknown");
+    {
+      PressFixture f;
+      f.down();
+      SendMessageW(f.hwnd(), WM_SIZE, 0, 0);
+      drawPartial(f, seat);
+      partialDamage(f, false);
+      f.up();
+      LOKA_VERIFY(f.writes == 0);
+    }
+    fittingPin("partial_failed_draw_unknown");
+    {
+      PressFixture f;
+      f.down();
+      refuseOutput = outputAttempts + 1;
+      drawPartial(f, seat);
+      refuseOutput = 0;
+      partialDamage(f, false);
+      f.up();
+      LOKA_VERIFY(f.writes == 0);
+      f.paint();
+      partialDamage(f, true);
+      refuseOutput = outputAttempts + 1;
+      const int before = outputAttempts;
+      FittingAccess::draw(*f.context, &f.hwnd()->dc, seat);
+      LOKA_VERIFY(outputAttempts > before);
+      refuseOutput = 0;
+      partialDamage(f, false);
+      drawPartial(f, seat);
+      partialDamage(f, false);
+    }
+    fittingPin("partial_other_value_unknown");
+    {
+      PressFixture f;
+      const AttributedString a = f.text.get();
+      f.text.set(Linked("different", Bold, LinkTarget(String("y"))));
+      f.rebuild();
+      // Predicate isolation: production rebuild invalidates A before drawing B.
+      FittingAccess::present(*f.context, a, seat);
+      LOKA_VERIFY(FittingAccess::known(*f.context));
+      drawPartial(f, seat);
+      partialDamage(f, false);
+    }
+    fittingPin("partial_other_seat_unknown");
+    for (int dimension = 0; dimension < 2; ++dimension)
+    {
+      PressFixture f;
+      RECT different = seat;
+      if (dimension)
+        --different.bottom;
+      else
+        --different.right;
+      // Predicate isolation: do not let relayout/WM_SIZE invalidate the old fact.
+      LOKA_VERIFY(FittingAccess::known(*f.context));
+      drawPartial(f, different);
+      partialDamage(f, false);
     }
   }
 } // namespace

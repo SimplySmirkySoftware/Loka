@@ -486,3 +486,97 @@ void testWin32LinkPressObserverProps()
 {
   pressLifetime(2);
 }
+
+namespace
+{
+  typedef int(WINAPI *ExposureClipFn)(HDC, LPRECT);
+  ExposureClipFn exposureNativeClip = 0;
+  /** Stack-owned observation of the production drawer's actual window DC. */
+  struct ExposurePaints
+  {
+    HWND window;
+    unsigned complete, partial;
+    explicit ExposurePaints(HWND hwnd)
+        : window(hwnd),
+          complete(0),
+          partial(0)
+    {
+    }
+    void observe(HDC dc, int kind, const RECT &clip)
+    {
+      if (WindowFromDC(dc) != this->window)
+        return;
+      LOKA_VERIFY(kind != ERROR);
+      RECT seat;
+      LOKA_VERIFY(GetClientRect(this->window, &seat));
+      if (kind == SIMPLEREGION && EqualRect(&clip, &seat))
+        ++this->complete;
+      else
+        ++this->partial;
+    }
+  };
+  ExposurePaints *exposurePaints = 0;
+  int WINAPI exposureClip(HDC dc, LPRECT clip)
+  {
+    const int kind = exposureNativeClip(dc, clip);
+    exposurePaints->observe(dc, kind, *clip);
+    return kind;
+  }
+  class ExposureObservation
+  {
+    Win32ImportRefusal hook_;
+
+  public:
+    explicit ExposureObservation(ExposurePaints &paints)
+        : hook_("gdi32.dll", "GetClipBox", reinterpret_cast<ULONG_PTR>(&exposureClip))
+    {
+      LOKA_VERIFY(!exposurePaints);
+      exposurePaints = &paints;
+    }
+    ~ExposureObservation()
+    {
+      exposurePaints = 0;
+    }
+
+  private:
+    ExposureObservation(const ExposureObservation &);
+    ExposureObservation &operator=(const ExposureObservation &);
+  };
+} // namespace
+void testWin32LinkPressPartialExposure()
+{
+  NativePress f;
+  exposureNativeClip = reinterpret_cast<ExposureClipFn>(GetProcAddress(GetModuleHandleW(L"gdi32.dll"), "GetClipBox"));
+  LOKA_VERIFY(exposureNativeClip);
+  ExposurePaints paints(f.hwnd());
+  ExposureObservation observation(paints);
+  aim(f);
+  // Settle activation/exposure before establishing the complete-paint control.
+  const DWORD start = GetTickCount();
+  MSG message;
+  while (PeekMessageW(&message, 0, 0, 0, PM_REMOVE))
+  {
+    LOKA_VERIFY(GetTickCount() - start < 5000);
+    TranslateMessage(&message);
+    DispatchMessageW(&message);
+  }
+  const unsigned before = paints.complete;
+  f.paint();
+  LOKA_VERIFY(paints.complete > before);
+  const unsigned complete = paints.complete, partial = paints.partial;
+  RECT exposed;
+  LOKA_VERIFY(GetClientRect(f.hwnd(), &exposed));
+  LOKA_VERIFY(exposed.right > 2 && exposed.bottom > 0);
+  exposed.right /= 2;
+  LOKA_VERIFY(InvalidateRect(f.hwnd(), &exposed, TRUE));
+  LOKA_VERIFY(UpdateWindow(f.hwnd()));
+  LOKA_VERIFY(paints.partial > partial && paints.complete == complete);
+  MouseRetrievals counts(f.hwnd(), f.windows.other);
+  MouseHook mouse(counts);
+  injectButton(MOUSEEVENTF_LEFTDOWN);
+  awaitMouse(counts.downs, 1, f.hwnd());
+  LOKA_VERIFY(paints.complete == complete);
+  injectButton(MOUSEEVENTF_LEFTUP);
+  awaitMouse(counts.ups, 1);
+  LOKA_VERIFY(paints.complete == complete && f.writes == 1 && counts.downs == 1 && counts.ups == 1);
+}

@@ -10,4 +10,5 @@ void testWin32LinkPressSeparatedRuns();
 void testWin32LinkPressHideDeferred();
 void testWin32LinkPressCloseDeferred();
 void testWin32LinkPressObserverProps();
+void testWin32LinkPressPartialExposure();
 #endif

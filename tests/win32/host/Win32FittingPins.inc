@@ -5,6 +5,10 @@ namespace loka
     class Win32AttributedTextAccess
     {
     public:
+      static bool known(const Win32AttributedTextContext &context)
+      {
+        return context.presented_.isKnown();
+      }
       static void expectInvalidated(Win32AttributedTextContext &context, bool active)
       {
         Win32PressedRun run;
