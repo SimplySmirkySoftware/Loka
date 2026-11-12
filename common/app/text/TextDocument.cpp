@@ -19,6 +19,15 @@ namespace loka
       this->replacement_.set(replacement);
       return scene::POST_ACCEPTED;
     }
+    scene::PostResult TextDocument::splice(const TextSplice &value)
+    {
+      scene::TextDocumentRegistration *row = this->registration_.remote();
+      if (!row || !this->splice_.isValid() || value.isNone())
+        return scene::POST_INVALID;
+      if (row->isPublishing() || !this->splice_.state()->get().isNone() || this->splice_.pending() != 0)
+        return scene::POST_QUEUE_FULL;
+      return this->splice_.post(value);
+    }
     bool TextDocument::canQuery() const
     {
       if (!this->registration_.remote() || !this->fact() || this->fact()->get().state() != TEXT_DOCUMENT_READY)
@@ -302,6 +311,7 @@ namespace loka
         this->state(out.fact_, TextDocumentFact());
         this->state(out.request_, TextPosition::None());
         this->state(out.replacement_, TextReplacement());
+        this->state(out.splice_, TextSplice());
         TextDocumentRegistration *row = new TextDocumentRegistration(out);
         this->enrollParticipant(*row);
       }
@@ -388,14 +398,16 @@ namespace loka
     } // namespace scene
     namespace detail
     {
-      /** Completed body-write result; birth reading is present only for a landed write. */
+      /** Completed body-write result; only successful rail writes carry a reading. */
       class TextBodyWrite
       {
       public:
         enum Landed
         {
           LANDED_NONE,
-          LANDED_REPLACEMENT
+          LANDED_REPLACEMENT,
+          LANDED_SPLICE,
+          LANDED_UNRECONCILED
         };
         static TextBodyWrite NothingTaken()
         {
@@ -415,6 +427,25 @@ namespace loka
         {
           return TextBodyWrite(LANDED_REPLACEMENT, replacement, reply, reading);
         }
+        TextBodyWrite withSplice(const TextSplice &splice,
+                                 const scene::Reply<TextSplice> &reply,
+                                 Landed landed,
+                                 const scene::TextStoreReading &reading) const
+        {
+          return TextBodyWrite(landed, this->replacement_, this->reply_, reading, splice, reply);
+        }
+        const TextSplice &splice() const
+        {
+          return this->splice_;
+        }
+        const scene::Reply<TextSplice> &spliceReply() const
+        {
+          return this->spliceReply_;
+        }
+        bool hasReading() const
+        {
+          return this->landed_ == LANDED_REPLACEMENT || this->landed_ == LANDED_SPLICE;
+        }
         Landed landed() const
         {
           return this->landed_;
@@ -429,7 +460,7 @@ namespace loka
         }
         const scene::TextStoreReading &reading() const
         {
-          assert(this->landed() != LANDED_NONE);
+          assert(this->hasReading());
           return this->reading_;
         }
 
@@ -437,17 +468,23 @@ namespace loka
         TextBodyWrite(Landed landed,
                       const TextReplacement &replacement,
                       const scene::Reply<TextReplacement> &reply,
-                      const scene::TextStoreReading &reading)
+                      const scene::TextStoreReading &reading,
+                      const TextSplice &splice = TextSplice(),
+                      const scene::Reply<TextSplice> &spliceReply = scene::Reply<TextSplice>())
             : landed_(landed),
               replacement_(replacement),
               reply_(reply),
-              reading_(reading)
+              reading_(reading),
+              splice_(splice),
+              spliceReply_(spliceReply)
         {
         }
         const Landed landed_;
         const TextReplacement replacement_;
         const scene::Reply<TextReplacement> reply_;
         const scene::TextStoreReading reading_;
+        const TextSplice splice_;
+        const scene::Reply<TextSplice> spliceReply_;
       };
       /** Publish-local reply authority; no seat survives the document link. */
       class TextDocumentReplyAccess
@@ -455,6 +492,14 @@ namespace loka
         static scene::WriteSeat<scene::Reply<TextReplacement> > seat(scene::RequestWithReply<TextReplacement> &request)
         {
           return scene::ComposableNode::textDocumentReplySeat(request);
+        }
+        static scene::WriteSeat<TextSplice> spliceSeat(scene::RequestQueueBase<TextSplice> &request)
+        {
+          return scene::ComposableNode::textDocumentSpliceSeat(request);
+        }
+        static scene::WriteSeat<scene::Reply<TextSplice> > spliceReplySeat(scene::RequestQueueBase<TextSplice> &request)
+        {
+          return scene::ComposableNode::textDocumentSpliceReplySeat(request);
         }
         friend class TextDocumentPublisher;
       };
@@ -531,12 +576,12 @@ namespace loka
         Visitor visitor(controller, KEEP_REQUESTS);
         documents.visit(visitor);
       }
-      TextBodyWrite TextDocumentPublisher::writeBody(scene::TextDocumentRegistration &row,
-                                                     scene::IPlatformController &controller,
-                                                     Requests requests,
-                                                     scene::TextStoreRow *store,
-                                                     bool read,
-                                                     const scene::TextStoreReading &first)
+      TextBodyWrite TextDocumentPublisher::writeReplacement(scene::TextDocumentRegistration &row,
+                                                            scene::IPlatformController &controller,
+                                                            Requests requests,
+                                                            scene::TextStoreRow *store,
+                                                            bool read,
+                                                            const scene::TextStoreReading &first)
       {
         if (requests != TAKE_REQUESTS || row.phase_.value() == scene::TextStorePhase::STORE_AWAITED)
           return TextBodyWrite::NothingTaken();
@@ -570,10 +615,78 @@ namespace loka
         }
         return TextBodyWrite::Refused(pending, reason);
       }
+      TextBodyWrite TextDocumentPublisher::writeBody(scene::TextDocumentRegistration &row,
+                                                     scene::IPlatformController &controller,
+                                                     Requests requests,
+                                                     scene::TextStoreRow *store,
+                                                     bool read,
+                                                     const scene::TextStoreReading &first)
+      {
+        if (requests != TAKE_REQUESTS || row.phase_.value() == scene::TextStorePhase::STORE_AWAITED)
+          return TextBodyWrite::NothingTaken();
+        const TextBodyWrite replacement = writeReplacement(row, controller, requests, store, read, first);
+        return writeSplice(row, controller, read, first, replacement);
+      }
+      TextBodyWrite TextDocumentPublisher::writeSplice(scene::TextDocumentRegistration &row,
+                                                       scene::IPlatformController &controller,
+                                                       bool read,
+                                                       const scene::TextStoreReading &first,
+                                                       const TextBodyWrite &replacement)
+      {
+        TextDocument &document = *row.document_.remote();
+        const scene::WriteSeat<TextSplice> seat = TextDocumentReplyAccess::spliceSeat(document.splice_);
+        if (!seat.isValid())
+          return replacement;
+        const TextSplice pending = seat.state()->get();
+        if (pending.isNone())
+          return replacement;
+        seat.set(TextSplice());
+        TextSpliceResult reason = TEXT_SPLICE_UNAVAILABLE;
+        TextBodyWrite::Landed landed = replacement.landed();
+        if (landed == TextBodyWrite::LANDED_REPLACEMENT)
+          reason = TEXT_SPLICE_STALE;
+        else if (row.phase_.value() == scene::TextStorePhase::STORE_LINKED && read)
+        {
+          if (first.marked())
+            reason = TEXT_SPLICE_COMPOSING;
+          else
+          {
+            const unsigned long revision = advanceRevision(document.fact_.get().textRevision(), first.changed());
+            unsigned long from, to;
+            if (!TextDocument::offset(pending.from(), revision, from)
+                || !TextDocument::offset(pending.to(), revision, to))
+              reason = TEXT_SPLICE_STALE;
+            else
+            {
+              TextStoreSource source(pending.inserted());
+              scene::TextStoreReading reading;
+              scene::TextStoreRow &store = *row.store();
+              reason = controller.applyTextSplice(store, from, to, source, reading);
+              if (reason == TEXT_SPLICE_OK)
+              {
+                TextSplice applied(pending);
+                applied.inserted_.placement_ = source.appliedPlacement();
+                TextChangedRange range;
+                assert(reading.queryRange(range) && range.start() == from);
+                return replacement.withSplice(
+                    pending, scene::formReply(pending, applied, reason), TextBodyWrite::LANDED_SPLICE, reading);
+              }
+              if (reason == TEXT_SPLICE_ALLOCATION && controller.peekTextStore(store))
+                landed = TextBodyWrite::LANDED_UNRECONCILED;
+            }
+          }
+        }
+        return replacement.withSplice(pending,
+                                      scene::Reply<TextSplice>::Refused(pending, reason),
+                                      landed,
+                                      replacement.hasReading() ? replacement.reading() : scene::TextStoreReading());
+      }
       void TextDocumentPublisher::replyBodyWrite(scene::TextDocumentRegistration &row, const TextBodyWrite &write)
       {
         if (write.replacement().stage() != TextReplacement::NONE && row.document_.remote())
           TextDocumentReplyAccess::seat(row.document_.remote()->replacement_).set(write.reply(), true);
+        if (!write.splice().isNone() && row.document_.remote())
+          TextDocumentReplyAccess::spliceReplySeat(row.document_.remote()->splice_).set(write.spliceReply(), true);
       }
       void TextDocumentPublisher::publish(scene::TextDocumentRegistration &row,
                                           scene::IPlatformController &controller,
@@ -583,7 +696,8 @@ namespace loka
         if (!linked)
           return;
         TextDocument &document = *linked;
-        if (!document.fact_.isValid() || !document.request_.isValid() || !document.replacement_.isValid())
+        if (!document.fact_.isValid() || !document.request_.isValid() || !document.replacement_.isValid()
+            || !document.splice_.isValid())
           return;
         const TextDocumentFact previous = document.fact_.get();
         const scene::WriteSeat<TextDocumentFact> fact = document.fact_.writeSeat();
@@ -611,9 +725,8 @@ namespace loka
         }
         store = row.store();
         scene::TextStoreReading rereading;
-        const bool reread =
-            (landed != TextBodyWrite::LANDED_NONE) || (store && controller.readTextStore(*store, rereading));
-        const scene::TextStoreReading &second = landed != TextBodyWrite::LANDED_NONE ? write.reading() : rereading;
+        const bool reread = write.hasReading() || (store && controller.readTextStore(*store, rereading));
+        const scene::TextStoreReading &second = write.hasReading() ? write.reading() : rereading;
         scene::TextChangeNote changes;
         if (read)
           changes.note(first);
@@ -632,23 +745,24 @@ namespace loka
           state = TEXT_DOCUMENT_UNAVAILABLE;
           break;
         case scene::TextStorePhase::STORE_LINKED:
-          state = landed != TextBodyWrite::LANDED_NONE ? TEXT_DOCUMENT_READY
-                  : store ? (combined.marked() ? TEXT_DOCUMENT_MARKED : TEXT_DOCUMENT_READY)
-                          : TEXT_DOCUMENT_UNAVAILABLE;
+          state = write.hasReading() ? TEXT_DOCUMENT_READY
+                  : store            ? (combined.marked() ? TEXT_DOCUMENT_MARKED : TEXT_DOCUMENT_READY)
+                                     : TEXT_DOCUMENT_UNAVAILABLE;
           break;
         }
         const scene::TextStoreReading &last = reread ? second : first;
-        const TextPosition caret = (state == TEXT_DOCUMENT_READY || state == TEXT_DOCUMENT_MARKED) && (read || reread)
+        const bool selectionKnown = (read || reread) && !(landed == TextBodyWrite::LANDED_UNRECONCILED && !reread);
+        const TextPosition caret = (state == TEXT_DOCUMENT_READY || state == TEXT_DOCUMENT_MARKED) && selectionKnown
                                        ? TextDocument::position(finalRevision, last.caret())
                                        : TextPosition::None();
-        const TextPosition anchor = (state == TEXT_DOCUMENT_READY || state == TEXT_DOCUMENT_MARKED) && (read || reread)
+        const TextPosition anchor = (state == TEXT_DOCUMENT_READY || state == TEXT_DOCUMENT_MARKED) && selectionKnown
                                         ? TextDocument::position(finalRevision, last.anchor())
                                         : TextPosition::None();
         TextChangedRange range;
-        // Birth carries the whole native range even though it reports no pending edit.
-        const bool reported =
-            landed != TextBodyWrite::LANDED_NONE ? second.queryRange(range) : combined.queryRange(range);
-        assert(landed == TextBodyWrite::LANDED_NONE || (reported && range.start() == 0));
+        // Successful body writes carry a range even though they report no pending edit.
+        const bool reported = !(landed == TextBodyWrite::LANDED_UNRECONCILED && !reread)
+                              && (write.hasReading() ? second.queryRange(range) : combined.queryRange(range));
+        assert(landed != TextBodyWrite::LANDED_REPLACEMENT || (reported && range.start() == 0));
         const TextPosition changedStart =
             reported ? TextDocument::position(finalRevision, range.start()) : TextPosition::None();
         const TextPosition insertedEnd =

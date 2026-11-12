@@ -182,8 +182,20 @@ public:
   }
   virtual bool readTextStore(loka::app::scene::TextStoreRow &row, loka::app::scene::TextStoreReading &out)
   {
+#ifdef TEST_BUILD
+    if (loka::app::testing::consumeTextStoreReadFailure())
+      return false;
+#endif
     out = static_cast<NullTextStore &>(row).take();
     return true;
+  }
+  virtual loka::app::TextSpliceResult applyTextSplice(loka::app::scene::TextStoreRow &row,
+                                                      unsigned long from,
+                                                      unsigned long to,
+                                                      loka::app::TextStoreSource &source,
+                                                      loka::app::scene::TextStoreReading &out)
+  {
+    return static_cast<NullTextStore &>(row).splice(from, to, source, out);
   }
   virtual bool peekTextStore(loka::app::scene::TextStoreRow &row)
   {

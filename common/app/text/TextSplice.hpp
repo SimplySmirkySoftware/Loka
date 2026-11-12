@@ -95,6 +95,7 @@ namespace loka
             inserted_(inserted)
       {
       }
+      friend class detail::TextDocumentPublisher;
       Stage stage_;
       TextPosition from_;
       TextPosition to_;

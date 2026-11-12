@@ -782,3 +782,13 @@ loka_compile_pin(request-wall-direct-splice-reply
   REFUSES pins/refuses_request-wall-direct-splice-reply.cpp
   ACCEPTS pins/accepts_request-wall-direct-splice-reply.cpp
 )
+
+loka_compile_pin(request-text-splice-private
+  REFUSES pins/refuses_text_splice_private.cpp
+  ACCEPTS pins/accepts_text_splice_private.cpp
+)
+
+loka_compile_pin(request-text-splice-reply-write
+  REFUSES pins/refuses_text_splice_reply_write.cpp
+  ACCEPTS pins/accepts_text_splice_reply_write.cpp
+)

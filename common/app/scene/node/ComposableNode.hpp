@@ -805,6 +805,17 @@ namespace loka
         {
           return request.reply_.seat_.writeSeat();
         }
+        static WriteSeat<TextSplice> textDocumentSpliceSeat(RequestQueueBase<TextSplice> &request)
+        {
+          assert(request.pending() == 0);
+          if (request.pending() != 0)
+            return WriteSeat<TextSplice>();
+          return request.seat_.writeSeat();
+        }
+        static WriteSeat<Reply<TextSplice> > textDocumentSpliceReplySeat(RequestQueueBase<TextSplice> &request)
+        {
+          return request.reply_.seat_.writeSeat();
+        }
         friend class RootBoundaryWrapper;
         template <class PropsT> friend class StdCompositionBoundaryNodeBase;
 #ifdef TEST_BUILD

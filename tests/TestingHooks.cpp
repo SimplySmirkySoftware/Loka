@@ -989,10 +989,48 @@ namespace loka
     {
       namespace
       {
+        unsigned textSpliceFailures = 0;
+        TextSpliceResult textSpliceFailure = TEXT_SPLICE_OK;
+        unsigned textSpliceAfterChangeFailures = 0;
+        unsigned textStoreReadFailures = 0;
         unsigned textStoreBirthFailures = 0;
         scene::TextStoreBirth textStoreBirthFailure = scene::TEXT_STORE_BORN;
 
       } // namespace
+      void failTextSplices(TextSpliceResult reason, unsigned count)
+      {
+        textSpliceFailure = reason;
+        textSpliceFailures = count;
+      }
+      TextSpliceResult consumeTextSpliceFailure()
+      {
+        if (!textSpliceFailures)
+          return TEXT_SPLICE_OK;
+        --textSpliceFailures;
+        return textSpliceFailure;
+      }
+      void failTextSpliceAfterChange(unsigned count)
+      {
+        textSpliceAfterChangeFailures = count;
+      }
+      bool consumeTextSpliceAfterChangeFailure()
+      {
+        if (!textSpliceAfterChangeFailures)
+          return false;
+        --textSpliceAfterChangeFailures;
+        return true;
+      }
+      void failTextStoreReads(unsigned count)
+      {
+        textStoreReadFailures = count;
+      }
+      bool consumeTextStoreReadFailure()
+      {
+        if (!textStoreReadFailures)
+          return false;
+        --textStoreReadFailures;
+        return true;
+      }
       void failTextStoreBirths(scene::TextStoreBirth reason, unsigned count)
       {
         textStoreBirthFailure = reason;
