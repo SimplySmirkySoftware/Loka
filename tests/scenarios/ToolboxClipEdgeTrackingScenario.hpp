@@ -84,8 +84,7 @@ namespace loka
                     .TEST_ID("ClipEdge.BarClip")
                 << (Box().size(ClipEdgeGeometry::BAR_WIDTH, ClipEdgeGeometry::BAR_HEIGHT)
                     << (ScrollView(this->viewport_) << Box().size(100, 600))))
-            << Box().height(24)
-            << (Row() << Button("Next", &this->next_) << Button("Leak", &this->leak_)));
+            << Box().height(24) << (Row() << Button("Next", &this->next_) << Button("Leak", &this->leak_)));
       }
       unsigned acknowledgements() const
       {
