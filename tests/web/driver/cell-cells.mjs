@@ -151,6 +151,7 @@ export async function runCellCells(client, navigate) {
   assert.equal(normal.cellW,25);assert.equal(normal.cellH,Math.floor((240-18-normal.buttonH-12)/8));
   assert(normal.contained);assert.deepEqual(normal.overflow,[220,240]);
   await hit(0);
+  assert.notEqual(await client.evaluate('cells[0].textContent'),'.');
   await client.evaluate('window.kept=newGame;window.old=cells.slice();newGame.click()');
   assert((await inspect()).rows.every(r=>r.text==='.' && r.h>0));
   assert.equal(await client.evaluate('newGame===kept && old.every(e=>!e.isConnected)'),true);
