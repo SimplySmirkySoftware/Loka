@@ -8,6 +8,7 @@
 #include "ToolboxTextEditorScrollScenario.hpp"
 #include "ToolboxTextEditorKeysScenario.hpp"
 #include "ToolboxTextEditorJapaneseScenario.hpp"
+#include "ToolboxClipEdgeTrackingScenario.hpp"
 #include "ObservedMainDefinition.hpp"
 #include "RectSurfaceScenarioObservation.hpp"
 #include "ScenarioDriverSupport.hpp"
@@ -70,6 +71,11 @@ namespace loka
           this->borrowedApp_ = app;
         }
 
+        loka::testing::WholeDrawReceiver &clipReceiver()
+        {
+          return this->clipScenario_;
+        }
+
         virtual void compose(AppComposition &composition)
         {
           // Deliberate presentation twin of SmirkBenchAppConfig::compose:
@@ -85,6 +91,12 @@ namespace loka
             window.scene(scenario_tests::ObservedMainDefinition<scenario_tests::SmirkBenchPlainEditorProps,
                                                                scenario_tests::SmirkBenchPlainEditorNode>(
                 scenario_tests::SmirkBenchPlainEditorProps(&this->model_), 0));
+          }
+          else if (this->scenario_ == "clip-edge-tracking")
+          {
+            window.scene(
+                scenario_tests::ObservedMainDefinition<scenario_tests::ClipEdgeProps, scenario_tests::ClipEdgeNode>(
+                    scenario_tests::ClipEdgeProps(), 0));
           }
           else if (this->scenario_ == "attributed-editor-line")
           {
@@ -311,6 +323,21 @@ namespace loka
             }
             return;
           }
+          if (this->scenario_ == "clip-edge-tracking")
+          {
+            dsl::SnapRecord record;
+            if (this->clipScenario_.advance(
+                    elapsedSeconds, scene, *window->asToolboxWindow(), *controller, this->audit_, record)
+                == scenario_tests::SCENARIO_ADVANCE_DRIVER_COMPLETION_READY)
+            {
+              std::string status;
+              const bool ok = record.get("status", status) && status == dsl::SnapStatusOk();
+              (void)this->terminal_.emit(
+                  ok ? dsl::testing::SCENARIO_AUDIT_SUCCEEDED : dsl::testing::SCENARIO_AUDIT_FAILED, record);
+              (void)this->completionPublisher_.publish(window);
+            }
+            return;
+          }
           if (this->scenario_ == "attributed-editor-line" || this->scenario_ == "text-editor-plain")
           {
             dsl::SnapRecord record;
@@ -380,6 +407,7 @@ namespace loka
         scenario_tests::ToolboxTextEditorScrollScenario scrollScenario_;
         scenario_tests::ToolboxTextEditorKeysScenario keysScenario_;
         scenario_tests::ToolboxTextEditorJapaneseScenario japaneseScenario_;
+        scenario_tests::ToolboxClipEdgeTrackingScenario clipScenario_;
         long tick_;
         double lingerRemaining_;
         ScenarioCompletionPublisher completionPublisher_;
@@ -410,7 +438,14 @@ namespace loka
         return 1;
       }
       config.setApp(app.get());
-      app->run();
+      if (settings.scenario == "clip-edge-tracking")
+      {
+        // Receiver is config-owned; the borrow ends before App/window teardown.
+        loka::testing::WholeDrawReceiverScope measurement(config.clipReceiver());
+        app->run();
+      }
+      else
+        app->run();
       return 0;
     }
   } // namespace toolbox_tests
