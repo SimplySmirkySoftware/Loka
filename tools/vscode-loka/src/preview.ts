@@ -1,5 +1,6 @@
 import {createMailbox} from './mailbox.ts';
 import {renderPreviewHtml} from './previewHtml.ts';
+import type {App, Diagnostic} from './catalog.ts';
 import type {PreviewInput} from './previewHtml.ts';
 
 /** One prepared document supplies both native assignments. */
@@ -17,14 +18,13 @@ export type PreviewPanel = Readonly<{
   retire(): void;
 }>;
 /** Host services borrowed for the preview lifetime; clock callbacks are asynchronous.
- * Cost: admission once per replacement; one setting and file existence twice. */
+ * Cost: admission once per replacement; one catalog preparation and file existence twice. */
 export type PreviewPorts<T> = Readonly<{
   admitted(): boolean;
   folder(): string | undefined;
-  setting(name: 'module'): string;
+  prepare(): Readonly<{app: App; directory: string}> | Diagnostic;
   resolve(folder: string, relative: string): string;
   directory(file: string): string;
-  stem(file: string): string;
   existsSync(file: string): boolean;
   asWebviewUri(file: string): string;
   cspSource: string;
@@ -86,7 +86,7 @@ class Preview<T> {
   close(): void { this.mailbox.post({kind: 'CLOSE'}); }
 
   /** Cost: mailbox once per event; own state, at most one replacement/post/timer.
-   * Replacement reads one setting and checks two files; no foreign rows walked. */
+   * Replacement prepares one catalog row and checks two files; no foreign owner rows walked. */
   private handle(event: Event<T>): void {
     if (this.state.phase.kind === 'CLOSED') return;
 
@@ -114,18 +114,22 @@ class Preview<T> {
         input = {kind: 'message', id, nonce, cspSource: this.ports.cspSource,
           text: !admitted ? 'Trust the workspace to preview' : 'Open a workspace folder'};
       } else {
-        const relative = this.ports.setting('module');
-        const js = this.ports.resolve(folder, relative);
-        const wasm = js.replace(/\.js$/, '.wasm');
-        const jsExists = this.ports.existsSync(js), wasmExists = this.ports.existsSync(wasm);
-        if (!jsExists || !wasmExists) {
-          input = {kind: 'message', id, nonce, cspSource: this.ports.cspSource,
-            text: 'Build the module JavaScript and Wasm files first'};
+        const prepared = this.ports.prepare();
+        if ('message' in prepared) {
+          input = {kind: 'message', id, nonce, cspSource: this.ports.cspSource, text: prepared.message};
         } else {
-          const source = {directory: this.ports.directory(js), jsUri: this.ports.asWebviewUri(js),
-            wasmUri: this.ports.asWebviewUri(wasm), exportName: this.ports.stem(js)};
-          roots = [source.directory];
-          input = {kind: 'module', id, nonce, cspSource: this.ports.cspSource, ...source};
+          const js = this.ports.resolve(prepared.directory, prepared.app.js);
+          const wasm = js.replace(/\.js$/, '.wasm');
+          const jsExists = this.ports.existsSync(js), wasmExists = this.ports.existsSync(wasm);
+          if (!jsExists || !wasmExists) {
+            input = {kind: 'message', id, nonce, cspSource: this.ports.cspSource,
+              text: 'Build the module JavaScript and Wasm files first'};
+          } else {
+            roots = [this.ports.directory(js)];
+            input = {kind: 'module', id, nonce, cspSource: this.ports.cspSource,
+              jsUri: this.ports.asWebviewUri(js), wasmUri: this.ports.asWebviewUri(wasm),
+              exportName: prepared.app.exportName};
+          }
         }
       }
       const options = {enableScripts: input.kind === 'module', localResourceRoots: roots};

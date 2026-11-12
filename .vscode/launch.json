@@ -5,7 +5,8 @@
       "name": "Loka: Preview Extension",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}/tools/vscode-loka"],
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/tools/vscode-loka",
+        "${workspaceFolder}"],
       "preLaunchTask": "Build: Loka Preview Extension",
       "outFiles": ["${workspaceFolder}/tools/vscode-loka/out/**/*.js"]
     },

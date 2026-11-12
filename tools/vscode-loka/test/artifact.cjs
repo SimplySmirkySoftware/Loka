@@ -23,11 +23,11 @@ try {
   assert.equal(typeof extension.deactivate, 'function');
   assert.ok(intercepted > before, 'entry must import vscode through the redirected loader');
   extension.activate(f.context);
-  assert.deepEqual([...f.commands.keys()], ['loka.preview.open', 'loka.preview.build', 'loka.preview.reload']);
-  assert.equal(f.subscriptions.length, 7, 'UI, commands, and both task listeners registered');
+  assert.deepEqual([...f.commands.keys()], ['loka.preview.open', 'loka.preview.build', 'loka.preview.reload', 'loka.preview.configure', 'loka.preview.selectExample']);
+  assert.equal(f.subscriptions.length, 9, 'UI, commands, and both task listeners registered');
   assert.equal(f.context.subscriptions.length, 1, 'activation disposal registered');
   f.command('open');
-  assert.equal(f.subscriptions.length, 9, 'panel listeners registered');
+  assert.equal(f.subscriptions.length, 11, 'panel listeners registered');
   extension.deactivate();
   assert.ok(f.subscriptions.every(s => s.attempts === 1 && !s.active), 'deactivate must release every subscription');
   assert.equal(f.panels[0].disposeAttempts, 1);
