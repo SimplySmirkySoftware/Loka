@@ -515,9 +515,12 @@ Only `workspaceFolders[0]` is used. Open the repository in Remote WSL with
 Node/npm and the Emscripten tools available to tasks. With extension dependencies
 installed, select **Loka: Preview Extension** and press F5. The unchanged
 prelaunch task runs a clean `npm run build`; a failed build stops launch (do not
-choose Debug Anyway). The launch passes `${workspaceFolder}` as a separate
-argument to open the repository in the Extension Development Host. Opening a
-source file does not open or select a preview.
+choose Debug Anyway). The Extension Development Host cannot open the folder
+that the debugging window already has open: VS Code drops such a folder
+argument and opens an empty window, and Open Folder on the same folder only
+focuses the first window. Open a second checkout of the repository there (for
+example a git worktree on the WSL filesystem) and run the commands in that
+window. Opening a source file does not open or select a preview.
 
 The removed `loka.preview.module` and `loka.preview.buildCommand` settings are
 no longer read. Remove those overrides and set `loka.preview.buildDirectory`
@@ -631,10 +634,19 @@ including `preview shell mine`. `cmake --build <build/wasm/web> --target
 LokaMineWeb` compiled and linked with an environment stripped of every emsdk
 variable (`PATH=/usr/bin:/bin`).
 
-Nothing in this change is runtime-verified inside VS Code yet: F5 with the
-folder argument, Remote WSL authority, ProcessExecution inside the task service,
-and the trust refusal still require the owner's host hand run. The earlier
-HelloWorld hand run recorded for PR 5b predates these commands.
+Runtime-verified by hand on 2026-11-12 with VS Code 1.145.3 in Remote WSL
+(Ubuntu), VS Code started from a shell with the emsdk environment: F5 on
+**Loka: Preview Extension** starts the Extension Development Host; with a
+second checkout on the WSL filesystem opened there, **Configure**, **Select
+Example** (MineSweeper), **Build** and **Open Preview** show the 8x8 board and
+cells react to clicks; **Select Example** (HelloWorld) followed by **Build**
+replaces the panel with HelloWorld, whose buttons react. The same run showed
+that the development host opens empty when the launch passes the debugging
+window's own folder, which is why the launch no longer passes one.
+
+Not runtime-verified: the untrusted-workspace refusal, Build from a VS Code
+started without the emsdk environment, New Game inside the webview, the four
+themes, and webview resource enforcement.
 
 ### Cell projection and MineSweeper preview
 
