@@ -532,7 +532,9 @@ if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/clip-edge-tracking" then
         if editLeaked then pressTitled("Leak") end
         if thumbLeaked then pressTitled("Leak") end
         acknowledge()
-        move(600, 450)
+        -- Park the cursor at the screen origin before the capture, as the
+        -- editor gesture cells and laptop-arrow do.
+        move(0, 0)
     end)
     button:clear_value()
     if not gestureOk then say("clip-edge gesture failed: %s", tostring(gestureError)) end
