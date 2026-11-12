@@ -1,5 +1,4 @@
 #include "WebStackLayoutHandler.hpp"
-const loka::app::layout::RailSpacing WebLayoutSpacing(12, 4, 9);
 using namespace loka::app;
 using namespace loka::app::scene;
 int WebStackLayoutHandler::layoutNode(Node *node,
@@ -27,5 +26,5 @@ int WebStackLayoutHandler::layoutNode(Node *node,
       metrics.buttonHeight = button;
     }
   }
-  return layout::LayoutStack(stack, state, metrics, WebLayoutSpacing, traversal, range, spans);
+  return layout::LayoutStack(stack, state, metrics, this->controller_.spacing(), traversal, range, spans);
 }

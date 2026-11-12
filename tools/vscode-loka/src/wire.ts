@@ -1,9 +1,10 @@
 import type * as vscode from 'vscode';
-import {existsSync} from 'node:fs';
-import {basename, dirname, resolve} from 'node:path';
+import {existsSync, readFileSync} from 'node:fs';
+import {dirname, resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {createPreview} from './preview.ts';
 import type {PreviewDoors, PreviewPanel} from './preview.ts';
+import {readCatalog, currentExample} from './catalog.ts';
 import {createBuild} from './build.ts';
 
 type PanelAdapter = PreviewPanel & Readonly<{
@@ -83,14 +84,14 @@ export function createPanelAdapter(api: typeof vscode, panel: vscode.WebviewPane
 }
 
 /** Activation owns Build, the optional Preview and its UI subscriptions.
- * Cost: activation once; fixed seven subscriptions, no task or workspace scans. */
-export function wire(api: typeof vscode, _context: vscode.ExtensionContext): vscode.Disposable {
+ * Cost: activation once; fixed nine subscriptions, no task or workspace scans. */
+export function wire(api: typeof vscode, context: vscode.ExtensionContext): vscode.Disposable {
   let current: Slot | undefined;
   const output = api.window.createOutputChannel('Loka Preview');
   const status = api.window.createStatusBarItem(api.StatusBarAlignment.Left);
   status.show();
   /** Last-resort asynchronous diagnostic; even a broken diagnostic service cannot reject.
-   * Cost: once per asynchronous fault or cleanup failure; one output line, no rows. */
+   * Cost: once per asynchronous fault or cleanup failure; one contained output attempt, no rows. */
   const fault = (error: unknown): void => {
     try { output.appendLine('Loka Preview fault: ' + String(error)); }
     catch { /* The fault sink must remain nonthrowing even when reporting is unavailable. */ }
@@ -100,21 +101,65 @@ export function wire(api: typeof vscode, _context: vscode.ExtensionContext): vsc
   /** Cost: each settings/task/preview preparation; select the first folder without scanning. */
   const folder = () => api.workspace.workspaceFolders?.[0];
   /** Cost: each task or replacement once; read one folder-scoped setting. */
-  const setting = (name: 'module' | 'buildCommand'): string =>
+  const setting = (name: 'buildDirectory' | 'configureCommand'): string =>
     api.workspace.getConfiguration('loka.preview', folder()?.uri).get<string>(name)!;
   /** Cost: each owner status publication; one status item write. */
   const report = (message: string): void => { status.text = 'Loka: ' + message; };
-  const build = createBuild<vscode.TaskExecution>({admitted, fault, report,
-    /** Cost: admitted Build START once; construct/execute one task, no task rows walked. */
-    execute() {
+  /** Cost: each selection read/write; one folder-qualified preference key. */
+  const selectionKey = (workspace: vscode.WorkspaceFolder): string => 'loka.preview.example:' + workspace.uri.toString();
+  /** Cost: each admitted Select/Build/replacement; one file, linear decoder, no retained descriptor. */
+  const catalog = () => {
+    const directory = resolve(folder()!.uri.fsPath, setting('buildDirectory'));
+    return {directory, value: readCatalog(resolve(directory, 'loka-web-apps.json'), file => readFileSync(file, 'utf8'))};
+  };
+  /** Cost: each admitted Build/replacement; one preference read and catalog scan. */
+  const prepare = () => {
+    const {directory, value} = catalog();
+    if (value.kind !== 'catalog') return value;
+    const app = currentExample(value, context.workspaceState.get<string>(selectionKey(folder()!)));
+    return 'message' in app ? app : {app, directory};
+  };
+  /** Cost: command/task/Select settlement; borrow the current slot once, never capture a panel. */
+  const reload = (): void => { current?.doors.reload(); };
+  const build = createBuild<vscode.TaskExecution>({admitted, fault, report, reload,
+    /** Cost: admitted idle start once; Configure reads one setting, Build prepares one row. */
+    prepare(kind) {
       const workspace = folder();
-      if (!workspace) throw new Error('Open a workspace folder');
-      return api.tasks.executeTask(new api.Task({type: 'loka'}, workspace, 'Build', 'Loka',
-        new api.ShellExecution(setting('buildCommand'), {cwd: workspace.uri.fsPath})));
+      if (!workspace) return {message: 'Open a workspace folder'};
+      const cwd = workspace.uri.fsPath;
+      if (kind === 'CONFIGURE') return {kind, cwd, command: setting('configureCommand')};
+      const prepared = prepare();
+      return 'message' in prepared ? prepared : {kind, cwd, directory: prepared.directory, target: prepared.app.target};
     },
-    /** Cost: successful owned task once; read the activation slot at delivery time. */
-    reload() { current?.doors.reload(); },
+    /** Cost: admitted task once; construct/execute one task from the completed operation. */
+    execute(operation) {
+      return api.tasks.executeTask(new api.Task({type: 'loka'}, folder()!,
+        operation.kind === 'CONFIGURE' ? 'Configure' : 'Build', 'Loka',
+        operation.kind === 'CONFIGURE'
+          ? new api.ShellExecution(operation.command, {cwd: operation.cwd})
+          : new api.ProcessExecution('cmake', ['--build', operation.directory, '--target', operation.target], {cwd: operation.cwd})));
+    },
   });
+  /** Cost: Select once; one picker, at most one preference write and current-slot reload.
+   * The captured key belongs to the opening folder. Late success only borrows the slot,
+   * which shutdown clears before releasing UI. Late failures use only the window service. */
+  const select = async (): Promise<void> => {
+    try {
+      if (!admitted()) { await api.window.showErrorMessage('Trust the workspace to select an example'); return; }
+      const workspace = folder();
+      if (!workspace) { await api.window.showErrorMessage('Open a workspace folder'); return; }
+      const key = selectionKey(workspace);
+      const {value} = catalog();
+      if (value.kind !== 'catalog') { await api.window.showErrorMessage(value.message); return; }
+      const picked = await api.window.showQuickPick(value.apps.map(app => ({label: app.name, description: app.target, id: app.id})));
+      if (!picked) return;
+      await context.workspaceState.update(key, picked.id);
+      reload();
+    } catch (error) {
+      try { await api.window.showErrorMessage('Select Example failed: ' + String(error)); }
+      catch { /* Reporting failure must not escape the command's asynchronous continuation. */ }
+    }
+  };
   // Each native event forwards one owner event; each command reads the current slot once.
   // Preview fs ports perform two synchronous existence checks per replacement; path/UUID ports are constant work.
   // Clock ports schedule/cancel at most one Preview timer; message/output sinks write once per publication.
@@ -128,8 +173,7 @@ export function wire(api: typeof vscode, _context: vscode.ExtensionContext): vsc
           {enableScripts: false, retainContextWhenHidden: true, localResourceRoots: []}),
         {get: () => current, set: value => { current = value; }}, fault);
       createPreview(adapter, {
-        admitted, folder: () => folder()?.uri.fsPath, setting,
-        resolve, directory: dirname, stem: file => basename(file, '.js'), existsSync,
+        admitted, folder: () => folder()?.uri.fsPath, prepare, resolve, directory: dirname, existsSync,
         asWebviewUri: file => adapter.asWebviewUri(file), cspSource: adapter.cspSource,
         identity: randomUUID, clock: {after: (ms, callback) => setTimeout(callback, ms), cancel: clearTimeout},
         output: message => output.appendLine(message), status: report,
@@ -137,10 +181,12 @@ export function wire(api: typeof vscode, _context: vscode.ExtensionContext): vsc
       }, doors => adapter.connect(doors));
     }),
     api.commands.registerCommand('loka.preview.build', () => build.start()),
-    api.commands.registerCommand('loka.preview.reload', () => current?.doors.reload()),
+    api.commands.registerCommand('loka.preview.reload', reload),
+    api.commands.registerCommand('loka.preview.configure', () => build.start('CONFIGURE')),
+    api.commands.registerCommand('loka.preview.selectExample', select),
   ];
   /** Cost: activation shutdown once, not fault retirement; retire current, close its healthy owner
-   * to release its timer, then attempt each of seven activation releases. */
+   * to release its timer, then attempt each of nine activation releases. */
   return new api.Disposable(() => {
     build.dispose();
     if (current) {

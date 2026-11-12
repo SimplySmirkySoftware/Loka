@@ -3,6 +3,9 @@
 import copy
 import importlib.util
 import json
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location('generator', ROOT / 'tools/ci/gen_style_vocab.py')
@@ -28,3 +31,43 @@ assert fingerprint(reorder) != original
 assert len(g.resolved_schema(reorder)['fields']) == len(g.resolved_schema(vocab)['fields'])
 assert g.fingerprint({}) == 1415952421  # Independent FNV-1a vector for UTF-8 '{}'.
 print('schema: formatting/key-order stable; enum-remap/field-reorder sensitive; FNV vector passed')
+
+assert g.resolved_schema(vocab).get('webSkinSelection') == {'default': 0, 'names': ['web', 'win32', 'macos', 'classic']}
+for change in ('reorder', 'rename', 'spacing'):
+    altered = copy.deepcopy(vocab)
+    if change == 'reorder':
+        altered['webSkins'][1:3] = reversed(altered['webSkins'][1:3])
+    elif change == 'rename':
+        altered['webSkins'][1]['name'] = 'other'
+    else:
+        altered['webSkins'][1]['spacing'][0] += 1
+    assert (fingerprint(altered) == original) == (change == 'spacing')
+for rows in ([], {}, [{'name':'other','spacing':[1,2,3]}],
+             [{'name':'web','spacing':[True,2,3]}], [{'name':'web','spacing':[-1,2,3]}],
+             [{'name':'web','spacing':[32768,2,3]}], [{'name':'web','spacing':[1.5,2,3]}],
+             [{'name':'web','spacing':[1,2]}], [{'name':'web','spacing':[1,2,3]}]*2,
+             [{'name':1,'spacing':[1,2,3]}]):
+    altered = copy.deepcopy(vocab)
+    altered['webSkins'] = rows
+    try:
+        g.validate_web_skins(altered)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('invalid skins admitted')
+g.validate_web_skins(vocab)
+print('skins: mapping sensitive; spacing invariant; invalid tables refused')
+
+with tempfile.TemporaryDirectory(prefix='loka-skin-validation-') as temporary:
+    directory = Path(temporary)
+    invalid = copy.deepcopy(vocab)
+    invalid['webSkins'][-1]['spacing'][0] = True
+    source = directory / 'invalid.json'
+    source.write_text(json.dumps(invalid))
+    output = directory / 'output'
+    result = subprocess.run([sys.executable, str(ROOT / 'tools/ci/gen_style_vocab.py'),
+                             '--vocab', str(source), '--output-root', str(output)],
+                            capture_output=True, text=True)
+    assert result.returncode != 0 and 'ValueError' in result.stderr
+    assert not output.exists(), 'validation precedes every generated output'
+print('skins: invalid input produces no outputs')

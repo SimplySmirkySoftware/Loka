@@ -68,7 +68,7 @@ PR 1 initially projected one-line Text through INaturalSizeSource with fixed met
 
 Buttons are native `<button type="button">` elements. Mouse, Space and Enter use the same click export. Browser focus is read at completion; no keyboard or focus-event export is added. Layout containers other than ScrollView have no DOM elements.
 
-EditText, TextEditor, PopupMenu, ImageView, RectSurface, ScrollBar and CardBand are explicit refused handlers. A reached ScrollView visit settles once after projection, including refusal; a deferred visit leaves its request pending. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. IME, general pointer input, skins and hot reload remain outside this increment.
+EditText, TextEditor, PopupMenu, ImageView, RectSurface, ScrollBar and CardBand are explicit refused handlers. A reached ScrollView visit settles once after projection, including refusal; a deferred visit leaves its request pending. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. IME, general pointer input and hot reload remain outside this increment. Spacing-only skins are specified below.
 
 ## Host contract
 
@@ -492,48 +492,136 @@ the first Button to the whole offer and preserves the excess Buttons' previous
 rects and visibility, with the fourth Button's click route still working;
 restoring as 4x1 lays the same Buttons out again). Without an installed Chromium the driver prints a skip.
 
-### VS Code shell (PR 5a / 5b)
+### VS Code shell
 
 The shell procedures live in `tools/vscode-loka/src/previewHtml.ts` (documents),
-`src/preview.ts` (panel lifetime), and `src/build.ts` (task lifetime).
-PR 5b supplies the native VS Code ports, manifest contributions, and F5 launch configuration.
-Externally destroyed documents (panel close or window reload) terminate abruptly:
-there is no host disposal call and no completion acknowledgement.
+`src/preview.ts` (panel lifetime), `src/build.ts` (task lifetime), and
+`src/catalog.ts` (synchronous catalog decoding and current-example resolution).
+`src/wire.ts` supplies the native VS Code ports. Externally destroyed documents
+(panel close or window reload) terminate abruptly: there is no host disposal
+call and no completion acknowledgement.
 
 Each owner uses an event queue: nested calls only enqueue, so the current event
 may still install a document, post disposal, or launch a task before a queued
-close/dispose takes effect. Build retains early end facts and reconciles them by
-execution identity at acquisition, preferring process results; rejection or
-disposal drops them. Unexpected exceptions stop that owner's queue permanently;
+close/dispose takes effect. The task owner retains early end facts and reconciles
+them by execution identity at acquisition, preferring process results; rejection
+or disposal drops them. Unexpected exceptions stop that owner's queue permanently;
 recovery requires reopening the panel or reloading the window. Panel access uses
-an `install` / `postDispose` capability seam: the adapter must revoke capability
-synchronously on native disposal before posting CLOSE. PR 5a pins this contract
-with a strict fake; PR 5b connects native listeners before the first installation.
-Native disposal and fault retirement share a capability-taking cleanup path.
+an `install` / `postDispose` capability seam: the adapter revokes capability
+synchronously on native disposal before posting CLOSE. Native disposal and fault
+retirement share a capability-taking cleanup path.
 
+Only `workspaceFolders[0]` is used. Open the repository in Remote WSL with
+Node/npm and the Emscripten tools available to tasks. With extension dependencies
+installed, select **Loka: Preview Extension** and press F5. The unchanged
+prelaunch task runs a clean `npm run build`; a failed build stops launch (do not
+choose Debug Anyway). The Extension Development Host cannot open the folder
+that the debugging window already has open: VS Code drops such a folder
+argument and opens an empty window, and Open Folder on the same folder only
+focuses the first window. Open a second checkout of the repository there (for
+example a git worktree on the WSL filesystem) and run the commands in that
+window. Opening a source file does not open or select a preview.
 
-Open the repository in Remote WSL with Node/npm available to tasks. Run
-`npm ci --ignore-scripts` once in `tools/vscode-loka` (and again after lockfile
-changes), select **Loka: Preview Extension**, and press F5. Its pre-launch task
-runs a clean `npm run build`; a failed build stops launch (do not choose Debug
-Anyway). The Extension Development Host window opens without a folder: open the
-repository folder there, then use the **Loka: Open Preview**, **Loka: Build** and
-**Loka: Reload** commands; opening a source file does not open the preview.
-The task shell must already have emsdk available for **Loka: Build**.
-Build and every preview replacement read workspace trust afresh; an untrusted
-workspace runs no task and receives a script-free MESSAGE page.
+The removed `loka.preview.module` and `loka.preview.buildCommand` settings are
+no longer read. Remove those overrides and set `loka.preview.buildDirectory`
+and `loka.preview.configureCommand` together. The former is absolute or relative
+to the first workspace folder; the latter is responsible for configuring that
+directory. The extension neither infers nor rewrites presets. For the repository
+presets, the pairs are:
 
-Build-verified: the pinned TypeScript configuration emits a CommonJS entry;
-the built-artifact check loads it through `require`, activates the extension
-against a strict API fake, and verifies command/listener registration and disposal.
+| Preset | buildDirectory | configureCommand |
+| --- | --- | --- |
+| web | `build/wasm/web` | `emcmake cmake --preset web` |
+| testing-web | `build/wasm/testing` | `emcmake cmake --preset testing-web` |
 
-Runtime-verified (2026-11-11, VS Code 1.143.1, Remote WSL, Extension Development
-Host, by hand): Open Preview started the workspace-built HelloWorld module and its
-buttons responded; a successful **Loka: Build** reloaded the preview; a Build
-with the preview tab hidden reported `Previous document: completed`. Not
-runtime-verified: the untrusted-workspace refusal, the four themes, the outer
-scroll, the cache-busted Wasm refetch and webview resource enforcement.
+Use **Loka: Configure**, **Loka: Select Example**, **Loka: Build**, then
+**Loka: Open Preview**. Configure and Build share one task owner and refuse a
+second operation during acquisition or execution. Configure needs trust and a
+folder, but no catalog; success reports `Configured` without reloading. Build
+reads the catalog and selection at admission and starts a `cmake` process with
+`--build`, the absolute build directory, `--target`, and the selected target as
+separate arguments, with the workspace folder as cwd. Configure uses a shell
+command with the same cwd. Changes to the Configure shell's environment do not
+persist into a later Build task. Build keeps its immutable operation through
+completion, reports the captured target on success, and calls parameterless
+reload on the current panel, if any. It never opens a panel.
 
+Select reads the catalog after trust admission and presents its labels in
+producer order. It saves only the chosen identity in `workspaceState`, under a
+key containing the opening folder's URI. Cancellation does nothing. Successful
+persistence calls the activation's current-slot reload, never a captured panel.
+Picker, persistence, reload and error-notification failures are contained by the
+asynchronous handler. After activation disposal, late preference writes are
+allowed; success touches no panel, status item or output channel, and errors use
+only the window notification service. Overlapping Select commands leave the
+value actually committed to storage, regardless of invocation, picker-close or
+promise-settlement order. No selection phase, generation counter or descriptor
+cache is retained.
+
+Build and every preview replacement read trust afresh. Untrusted workspaces run
+no task and receive a script-free MESSAGE page; Select does not read the catalog.
+Catalog reads and validation are synchronous at Select, Build and replacement
+preparation, with no watcher or editor/configuration listener. Missing, malformed,
+unsupported-version, empty and unreadable catalogs diagnose **Configure**.
+A nonempty saved identity absent from a valid catalog diagnoses **Select Example**;
+it never falls back silently. Missing or empty selection uses `apps[0]`, without
+sorting or promising HelloWorld as the default. Explicit identity survives
+reordering. Validation precedes task creation and resource URI derivation, using
+the producer's lexical path rules. The build directory is the lexical containment root for catalog paths;
+the selected JavaScript file’s directory is the webview resource root;
+JavaScript, companion Wasm and factory name come from the validated row. Missing
+artifacts diagnose **Build**. Open reveals an existing panel; Reload replaces it.
+
+The following limitations are intentional and pinned by the shell tests:
+
+- Build completion and displayed artifacts are not paired. Selecting B during a
+  build of A can load B immediately and A's completion can reload B again. B may
+  be missing, stale or fail startup. Preview status can overwrite the captured
+  target's success report in the shared status item.
+- Replacement resolves selection, settings and a newly validated catalog when
+  preparing installation, including after disposal acknowledgement or the two
+  second timeout. Intermediate selections may never be displayed. Reloads
+  during DISPOSING retain the original deadline and produce no extra disposal
+  post or replacement.
+- Manual settings changes and catalog regeneration leave the current document
+  untouched until the next operation. A picker may save an identity removed
+  after it opened; subsequent resolution diagnoses it. Without explicit
+  selection, catalog reordering or membership changes may change the default.
+- A running task retains its initial target and directory. Success reloads the
+  panel that exists then, resolving the selection and directory at replacement
+  time, including after closing and reopening the panel or changing directories.
+- Reload during Build uses whatever artifacts exist at replacement and browser
+  fetch time. JavaScript and Wasm are not an atomic snapshot: missing, partial
+  or differently aged files can fail to load. The displayed document is not
+  guaranteed to be the completed task's result.
+- These stale/availability outcomes do not bypass trust, schema or lexical path
+  containment. Only the first workspace folder participates; no folder picker
+  is provided.
+
+Verified on Linux x86_64 with Node 24.19.0 and Emscripten 7.0.0: `npm run check` and `npm run build` exited 0,
+`node test/artifact.cjs` passed, `node --test` over the extension tests passed,
+and the mutation script with type checking enabled killed every mutant.
+The extension artifact is build-verified. Native `ctest --preset testing`
+exited 0; with Node available, `scriptVscodeLoka`, `scriptVscodeLokaLauncher`
+and `scriptScenarioTools` pass, while without emsdk,
+`scriptWebAppCatalogIntegration` prints its skip. The browser driver passed,
+including `preview shell mine`. `cmake --build <build/wasm/web> --target
+LokaMineWeb` compiled and linked with an environment stripped of every emsdk
+variable (`PATH=/usr/bin:/bin`).
+
+Runtime-verified by hand on 2026-11-12 with VS Code 1.145.3 in Remote WSL
+(Ubuntu), VS Code started from a shell with the emsdk environment: F5 on
+**Loka: Preview Extension** starts the Extension Development Host; with a
+second checkout on the WSL filesystem opened there, **Configure**, **Select
+Example** (MineSweeper), **Build** and **Open Preview** show the 8x8 board and
+cells react to clicks; **Select Example** (HelloWorld) followed by **Build**
+replaces the panel with HelloWorld, whose buttons react. The same run showed
+that the development host opens empty when the launch passes the debugging
+window's own folder, which is why the launch no longer passes one.
+
+Not runtime-verified: the untrusted-workspace refusal, Build from a VS Code
+started without the emsdk environment, New Game inside the webview, the four
+themes, and webview resource enforcement.
 
 ### Cell projection and MineSweeper preview
 
@@ -633,7 +721,8 @@ the build graph must visit a directory for it to register. Membership is
 lexical (the calling source directory's path), not resolved filesystem
 containment: a caller reached through a symlink beneath `example/` can register
 even when the symlink points outside that directory. Browser fixtures such
-as `LokaWebCounter` are excluded. No consumer reads this catalog yet.
+as `LokaWebCounter` are excluded. The VS Code preview extension reads this catalog at Select, Build and document
+replacement preparation; it does not maintain a second example list.
 
 Schema v1 is `{"version":1,"apps":[{"id","name","target","exportName","sourceDir","js"}]}`.
 `id` equals the unique `target` (`[A-Za-z0-9_]+`); `name` is the example directory
@@ -650,3 +739,76 @@ array; stale artifacts cannot restore removed registrations. Fields preserve
 spaces, non-ASCII text and semicolons. The serializer escapes backslash, quote,
 backspace, tab, newline, form feed and carriage return, and refuses other C0
 controls representable in CMake strings (NUL is not representable).
+
+
+## Spacing-only skins
+
+The factory option `lokaSkin` selects only the Web rail's immutable `RailSpacing`.
+The ordered `webSkins` table in `tools/style-vocab.json` generates the C++ rows
+and the JavaScript name resolver:
+
+| Name | Vertical gap | Horizontal gap | Standard window margin value |
+| --- | ---: | ---: | ---: |
+| `web` (default) | 12 | 4 | 9 |
+| `win32` | 6 | 6 | 10 |
+| `macos` | 6 | 6 | 16 |
+| `classic` | 8 | 8 | 12 |
+
+For example, await the module factory with `{lokaSkin: 'macos', locateFile}`,
+then call `module.web.start()`. BOOTSTRAP first admits scrollbar geometry and
+text/schema compatibility. Only after both succeed does `web_skin()` read that
+module's current `Module['lokaSkin']`, exactly once, before PlatformContext,
+Config or App construction. Names are case-sensitive. Missing, unknown and
+non-string names resolve to `web`, including inherited-property names such as
+`constructor` and `__proto__`. A signed import index below zero or at least
+COUNT is instead a protocol failure: it constructs none of those owners,
+returns the existing FAILED result and schedules the ordinary shutdown task.
+Completion releases the already-admitted text service.
+
+Each WebSession starts with a non-null pointer to the static `web` row and
+replaces it at most once after the bounds check. Controllers borrow the session's
+const reference; the builtin Box handler copies that value at construction.
+Later windows use the same selection. Changing the option after startup has no
+effect, and concurrently live modules select independently. There is no live
+skin switch, selection cache in JavaScript, allocation, observer or new clock.
+Cost: one startup import and at most four generated name comparisons; each
+layout consumer reads in O(1), with no additional tree walk.
+
+The existing admission fingerprint now also covers
+`webSkinSelection = {default: 0, names: [...]}`: array order defines name-to-index
+identity and length defines COUNT. A renamed or reordered table changes the
+fingerprint and refuses mismatched JavaScript/Wasm before root creation. Text
+wire version 2 and its nine words are unchanged. Spacing numbers are consumed
+only by C++ and remain outside the fingerprint; changing only those numbers
+leaves it unchanged. This detects accidental skew, not adversarial collisions.
+
+A skin leaves Button and Cell sizing rules, padding and borders unchanged
+(their allocated dimensions can still change with the space the new gaps
+leave), and does not change fonts, colours, scrollbar geometry, DPI policy,
+or explicit gap overrides. It does not
+apply a window content margin at the root. HelloWorld's inner ScrollView Box
+uses the selected standard margin and its default gaps change, while the
+measured root width breakpoint remains 400 (399 is one column; 400 and 420 are
+two). MineSweeper's New Game-to-board gap changes, moving the board and changing
+its remaining height. The root size and the board's Cell chrome are unchanged.
+
+Skin build-verified: Linux x86_64 C++98 testing, ASan, and NDEBUG release;
+Emscripten 7.0.0 Debug fixture and Release `LokaHelloWeb` / `LokaMineWeb`.
+The host and Node/Wasm fake suites pass, including the unchanged instruction
+goldens, and the full native suite passes. The ASan web/layout tests ran with
+leak detection disabled, so they give no leak verdict. The spacing mutations
+compile and reach their discriminating assertions.
+
+`lokaSkin` is a plain property of the module argument, read through
+`Module['lokaSkin']` when `web_skin()` runs. It is not listed in
+`INCOMING_MODULE_JS_API`: Emscripten accepts only its own API names there and
+warns about any other entry.
+
+Skin browser-verified (Chromium on Linux, through the driver), for each of
+`web`, `win32`, `macos` and `classic`: the fixture's gaps, an explicit gap
+override that no skin changes, and a selection that stays frozen after start;
+HelloWorld at measured root content-box widths 399 / 400 / 420 with its inner
+padding and an unmoved two-column threshold; MineSweeper's Button-to-board gap
+with clicks and New Game still working. Two modules with different skins stay
+independent while both are alive. Without an installed Chromium the driver
+prints a skip.

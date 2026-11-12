@@ -772,3 +772,13 @@ loka_compile_pin(request-text-replacement-reply-write
   REFUSES pins/refuses_text_replacement_reply_write.cpp
   ACCEPTS pins/accepts_text_replacement_reply_write.cpp
 )
+
+loka_compile_pin(request-wall-direct-splice
+  REFUSES pins/refuses_request-wall-direct-splice.cpp
+  ACCEPTS pins/accepts_request-wall-direct-splice.cpp
+)
+
+loka_compile_pin(request-wall-direct-splice-reply
+  REFUSES pins/refuses_request-wall-direct-splice-reply.cpp
+  ACCEPTS pins/accepts_request-wall-direct-splice-reply.cpp
+)

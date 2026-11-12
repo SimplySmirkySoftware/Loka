@@ -159,7 +159,7 @@ bool ToolboxAttributedTextTable::reconcileProjection(const AttributedString &val
     if (starts)
     {
       TextStyleSpan &descriptor = this->spans_[span];
-      descriptor.segment = s;
+      descriptor.source = TextSegmentRange(s);
       descriptor.start = character;
       descriptor.style = segment.style;
       this->fonts_[span] = ToolboxTextFontDescriptor(segment.style);
@@ -178,7 +178,9 @@ bool ToolboxAttributedTextTable::reconcileProjection(const AttributedString &val
       row.end = offset;
       input += unit.consumed;
     }
+    // Deliberate contributor-range twin: SyntheticTextWidthSource::append in common/app/layout/TextLineBreaker.cpp.
     this->spans_[span].end = character;
+    this->spans_[span].source = this->spans_[span].source.through(s);
     previous = &segment;
   }
   if (character != this->characters_.size() || filledSpans != this->spans_.size())
