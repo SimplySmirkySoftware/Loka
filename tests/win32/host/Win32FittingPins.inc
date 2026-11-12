@@ -5,6 +5,35 @@ namespace loka
     class Win32AttributedTextAccess
     {
     public:
+      static void
+      present(Win32AttributedTextContext &context, const loka::app::AttributedString &value, const RECT &seat)
+      {
+        context.presented_.commit(Win32PresentedText(value, seat), context.paintScope());
+      }
+      static bool eligibleWithoutRows(Win32AttributedTextContext &context, const LinkHit &hit)
+      {
+        loka::app::TextLineBreaker *rows = context.table_.lines_;
+        context.table_.lines_ = 0;
+        const bool eligible = context.linkHitEligible(hit);
+        context.table_.lines_ = rows;
+        return eligible;
+      }
+      static HitAnswer prepare(Win32AttributedTextContext &context, POINT point, LinkHit &out)
+      {
+        return context.prepareLinkHit(point, out);
+      }
+      static bool eligible(const Win32AttributedTextContext &context, const LinkHit &hit)
+      {
+        return context.linkHitEligible(hit);
+      }
+      static void draw(Win32AttributedTextContext &context, HDC dc, const RECT &seat)
+      {
+        context.draw(dc, seat);
+      }
+      static void place(Win32AttributedTextContext &context, int x, int y, int w, int h)
+      {
+        context.relayout(x, y, w, h);
+      }
       static void refuseSecondProbe(Win32AttributedTextTable &table)
       {
         table.advances_[2] = -1;

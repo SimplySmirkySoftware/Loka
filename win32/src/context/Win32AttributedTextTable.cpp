@@ -22,6 +22,21 @@ public:
         original_(GetCurrentObject(dc, OBJ_FONT))
   {
   }
+  FontSelection(HDC dc, HGDIOBJ original)
+      : dc_(dc),
+        original_(original)
+  {
+  }
+  bool restore()
+  {
+    if (!this->original_)
+      return true;
+    HGDIOBJ previous = SelectObject(this->dc_, this->original_);
+    if (!previous || previous == HGDI_ERROR)
+      return false;
+    this->original_ = 0;
+    return true;
+  }
   ~FontSelection()
   {
     if (this->original_)
@@ -93,6 +108,77 @@ public:
 
 private:
   const Win32AttributedTextTable &table_;
+};
+
+/** Visits this table's row positions without fitting or native work. */
+class Win32AttributedTextTable::RowWalker
+{
+public:
+  RowWalker(const TextLineBreaker &lines, int top)
+      : lines_(lines),
+        index_(0),
+        top_(top)
+  {
+  }
+  bool next(const TextLineRecord *&line, int &top)
+  {
+    if (this->index_ == this->lines_.lineCount())
+      return false;
+    line = &this->lines_.line(this->index_++);
+    top = this->top_;
+    this->top_ += line->metrics.ascent + line->metrics.descent + line->metrics.leading;
+    return true;
+  }
+
+private:
+  const TextLineBreaker &lines_;
+  std::size_t index_;
+  int top_;
+};
+
+/** Walks accepted ranges and their logical advance boxes. Width refusal is
+    returned with the range so draw can preserve its per-batch failure order. */
+class Win32AttributedTextTable::FragmentWalker
+{
+public:
+  struct Range
+  {
+    const TextFragment *fragment;
+    std::size_t end;
+    int left, right;
+    bool widthKnown;
+  };
+  FragmentWalker(const Win32AttributedTextTable &table, const TextLineRecord &line, const FittedLine &fit, int left)
+      : table_(table),
+        line_(line),
+        fit_(fit),
+        index_(0),
+        x_(left + fit.offset)
+  {
+  }
+  bool next(Range &range)
+  {
+    if (this->index_ == this->line_.fragmentCount)
+      return false;
+    range.fragment = &this->table_.lines_->fragment(this->line_.firstFragment + this->index_++);
+    range.end = range.fragment->end < this->fit_.paintedEnd ? range.fragment->end : this->fit_.paintedEnd;
+    range.left = this->x_;
+    const WidthSource source(this->table_);
+    int advance = 0;
+    range.widthKnown = source.width(range.fragment->start, range.end, range.fragment->span, advance);
+    this->x_ += advance;
+    range.right = this->x_;
+    if (range.end != range.fragment->end)
+      this->index_ = this->line_.fragmentCount;
+    return true;
+  }
+
+private:
+  const Win32AttributedTextTable &table_;
+  const TextLineRecord &line_;
+  const FittedLine &fit_;
+  std::size_t index_;
+  int x_;
 };
 
 Win32AttributedTextTable::Win32AttributedTextTable()
@@ -257,6 +343,12 @@ bool Win32AttributedTextTable::joinLines(std::wstring &out) const
   return true;
 }
 
+bool Win32AttributedTextTable::needsEllipsis(const TextLineRecord &line, int width, const BlockStyle &block) const
+{
+  return (!block.hasWrap_ || block.wrap_ == TEXT_WRAP_NONE) && block.hasTruncation_
+         && block.truncation_ == TEXT_TRUNCATION_ELLIPSIS && width > 0 && line.width > width && line.fragmentCount;
+}
+
 // Twin: apple/toolbox/src/context/ToolboxAttributedTextTable.cpp fitLine.
 // Win32 uses UTF-16/GDI, clips narrower-than-dots lines, scans from zero,
 // and cuts off on probe refusal; Toolbox uses bytes/TextWidth, omits those
@@ -265,19 +357,17 @@ bool Win32AttributedTextTable::fitLine(const TextLineRecord &line,
                                        int seatWidth,
                                        const BlockStyle &block,
                                        const WidthSource &source,
-                                       FontSelection &measure,
+                                       FontSelection *measure,
                                        FittedLine &out) const
 {
-  const bool ellipsis = (!block.hasWrap_ || block.wrap_ == TEXT_WRAP_NONE) && block.hasTruncation_
-                        && block.truncation_ == TEXT_TRUNCATION_ELLIPSIS && seatWidth > 0 && line.width > seatWidth
-                        && line.fragmentCount;
+  const bool ellipsis = this->needsEllipsis(line, seatWidth, block);
   const std::size_t lastSpan =
       line.fragmentCount ? this->lines_->fragment(line.firstFragment + line.fragmentCount - 1).span : 0;
   int budget = seatWidth;
   int dotsWidth = 0;
   if (ellipsis)
   {
-    if (!measure.measureDots(this->fonts_[lastSpan], dotsWidth))
+    if (!measure || !measure->measureDots(this->fonts_[lastSpan], dotsWidth))
       return false;
     budget = budget > dotsWidth ? budget - dotsWidth : 0;
   }
@@ -337,20 +427,25 @@ bool Win32AttributedTextTable::draw(HDC dc, const RECT &clip, const BlockStyle &
   bool painted = true;
   const WidthSource source(*this);
   int y = clip.top;
-  for (std::size_t i = 0; i < this->lines_->lineCount() && painted; ++i)
+  RowWalker rows(*this->lines_, clip.top);
+  const TextLineRecord *row;
+  while (painted && rows.next(row, y))
   {
-    const TextLineRecord &line = this->lines_->line(i);
+    const TextLineRecord &line = *row;
     FittedLine fitted;
-    if (!this->fitLine(line, clip.right - clip.left, block, source, selection, fitted))
+    if (!this->fitLine(line, clip.right - clip.left, block, source, &selection, fitted))
     {
       painted = false;
       break;
     }
     int x = clip.left + fitted.offset;
-    for (std::size_t f = 0; f < line.fragmentCount && painted; ++f)
+    FragmentWalker fragments(*this, line, fitted, clip.left);
+    FragmentWalker::Range accepted;
+    while (painted && fragments.next(accepted))
     {
-      const TextFragment &fragment = this->lines_->fragment(line.firstFragment + f);
-      const std::size_t end = fragment.end < fitted.paintedEnd ? fragment.end : fitted.paintedEnd;
+      const TextFragment &fragment = *accepted.fragment;
+      const std::size_t end = accepted.end;
+      x = accepted.left;
       SetTextColor(dc, loka::win32::Win32PaintTextInk(this->spans_[fragment.span].style.color_, SURFACE_GROUND_WINDOW));
       painted = selection.select(this->fonts_[fragment.span]);
       std::size_t start = fragment.start;
@@ -374,8 +469,6 @@ bool Win32AttributedTextTable::draw(HDC dc, const RECT &clip, const BlockStyle &
         x += batch;
         start = next;
       }
-      if (end != fragment.end)
-        break;
     }
     if (painted && fitted.ellipsis == ELLIPSIS_DRAWN)
     {
@@ -384,10 +477,73 @@ bool Win32AttributedTextTable::draw(HDC dc, const RECT &clip, const BlockStyle &
       painted = selection.select(this->fonts_[fitted.dotsSpan])
                 && ExtTextOutW(dc, x, y + line.metrics.ascent, ETO_CLIPPED, &clip, L"...", 3, NULL);
     }
-    y += line.metrics.ascent + line.metrics.descent + line.metrics.leading;
   }
   SetTextColor(dc, previousText);
   SetTextAlign(dc, alignment);
   SetBkMode(dc, background);
   return painted;
+}
+
+HitAnswer Win32AttributedTextTable::hitFittedRow(
+    const TextLineRecord &line, const FittedLine &fitted, const RECT &seat, POINT point, LinkHit &out) const
+{
+  FragmentWalker fragments(*this, line, fitted, seat.left);
+  FragmentWalker::Range accepted;
+  while (fragments.next(accepted))
+  {
+    if (!accepted.widthKnown)
+      return HIT_REFUSED;
+    if (point.x >= accepted.left && point.x < accepted.right)
+    {
+      const TextSegmentRange &range = this->spans_[accepted.fragment->span].source;
+      if (this->snapshot_.segment(range.first()).link.isNone())
+        return HIT_NONE;
+      const LinkHit hit = {range.first(), range.last(), seat.right - seat.left, seat.bottom - seat.top};
+      out = hit;
+      return HIT_LINK;
+    }
+  }
+  return HIT_NONE; // Dots and the clipped tail never name a link.
+}
+
+HitAnswer
+Win32AttributedTextTable::hitAt(HDC dc, const RECT &seat, const BlockStyle &block, POINT point, LinkHit &out) const
+{
+  if (!this->valid())
+    return HIT_REFUSED;
+  if (seat.right <= seat.left || seat.bottom <= seat.top || point.x < seat.left || point.x >= seat.right
+      || point.y < seat.top || point.y >= seat.bottom)
+    return HIT_NONE;
+  RowWalker rows(*this->lines_, seat.top);
+  const TextLineRecord *line;
+  int top;
+  while (rows.next(line, top))
+  {
+    if (point.y < top || point.y >= top + line->metrics.ascent + line->metrics.descent)
+      continue;
+    const WidthSource source(*this);
+    FittedLine fitted;
+    LinkHit local = LinkHit();
+    HitAnswer answer;
+    if (this->needsEllipsis(*line, seat.right - seat.left, block))
+    {
+      HGDIOBJ original = GetCurrentObject(dc, OBJ_FONT);
+      if (!original)
+        return HIT_REFUSED;
+      FontSelection selection(dc, original);
+      answer = this->fitLine(*line, seat.right - seat.left, block, source, &selection, fitted)
+                   ? this->hitFittedRow(*line, fitted, seat, point, local)
+                   : HIT_REFUSED;
+      if (!selection.restore())
+        answer = HIT_REFUSED;
+    }
+    else
+      answer = this->fitLine(*line, seat.right - seat.left, block, source, 0, fitted)
+                   ? this->hitFittedRow(*line, fitted, seat, point, local)
+                   : HIT_REFUSED;
+    if (answer == HIT_LINK)
+      out = local;
+    return answer;
+  }
+  return HIT_NONE;
 }

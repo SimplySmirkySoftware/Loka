@@ -15,6 +15,19 @@ namespace loka
   }
 } // namespace loka
 
+/** Completed client-coordinate hit, published only after native cleanup. */
+struct LinkHit
+{
+  std::size_t firstSegment, lastSegment;
+  int seatWidth, seatHeight;
+};
+enum HitAnswer
+{
+  HIT_LINK,
+  HIT_NONE,
+  HIT_REFUSED
+};
+
 /** Completed PER_RUN snapshot. Owns native units and derived rows; HFONTs are
     borrowed from the controller and revoked by its WM_SETFONT broadcast. */
 class Win32AttributedTextTable
@@ -46,6 +59,7 @@ public:
   }
   /** Serializes all completed lines, including empty lines, with LF separators. */
   bool joinLines(std::wstring &out) const;
+  HitAnswer hitAt(HDC, const RECT &, const loka::app::BlockStyle &, POINT, LinkHit &) const;
   bool draw(HDC, const RECT &, const loka::app::BlockStyle &) const;
 
 private:
@@ -56,6 +70,8 @@ private:
     int width, height;
   };
   loka::app::MeasurementResult<int, Extent> measurement_;
+  class RowWalker;
+  class FragmentWalker;
   class WidthSource;
   class FontSelection;
   enum Ellipsis
@@ -72,11 +88,13 @@ private:
     Ellipsis ellipsis;
     std::size_t dotsSpan;
   };
+  bool needsEllipsis(const loka::app::TextLineRecord &, int, const loka::app::BlockStyle &) const;
+  HitAnswer hitFittedRow(const loka::app::TextLineRecord &, const FittedLine &, const RECT &, POINT, LinkHit &) const;
   bool fitLine(const loka::app::TextLineRecord &line,
                int seatWidth,
                const loka::app::BlockStyle &block,
                const WidthSource &source,
-               FontSelection &measure,
+               FontSelection *measure,
                FittedLine &out) const;
   bool buildRows(const loka::app::AttributedString &,
                  const loka::app::BlockStyle &,

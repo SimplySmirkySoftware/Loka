@@ -347,3 +347,6 @@ LOKA_TEST(testWin32WmCloseCommitDestroyedWindowSkipsAsk)
 LOKA_TEST(testWin32QueryEndSessionCommitsTextInputWithoutChangingAnswer)
 LOKA_TEST(testWin32MenuCommitDetachedIdentitySkipsCommand)
 LOKA_TEST(testWin32WmCloseCommitDetachedIdentitySkipsAsk)
+
+LOKA_TEST(testWin32LinkHitGeometry)
+LOKA_TEST(testWin32LinkHitCleanup)
