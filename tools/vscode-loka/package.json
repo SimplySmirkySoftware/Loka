@@ -37,22 +37,32 @@
         "command": "loka.preview.reload",
         "title": "Reload",
         "category": "Loka"
+      },
+      {
+        "command": "loka.preview.selectExample",
+        "title": "Select Example",
+        "category": "Loka"
+      },
+      {
+        "command": "loka.preview.configure",
+        "title": "Configure",
+        "category": "Loka"
       }
     ],
     "configuration": {
       "title": "Loka Preview",
       "properties": {
-        "loka.preview.module": {
+        "loka.preview.buildDirectory": {
           "type": "string",
-          "default": "build/wasm/web/example/HelloWorld/LokaHelloWeb.js",
+          "default": "build/wasm/web",
           "scope": "resource",
-          "description": "Path relative to the first workspace folder to the JavaScript output of loka_add_web_app. The export name and companion .wasm file use the same stem."
+          "description": "Build directory, absolute or relative to the first workspace folder, containing loka-web-apps.json."
         },
-        "loka.preview.buildCommand": {
+        "loka.preview.configureCommand": {
           "type": "string",
-          "default": "emcmake cmake --preset web && cmake --build --preset web --target LokaHelloWeb",
+          "default": "emcmake cmake --preset web",
           "scope": "resource",
-          "description": "Shell command to build the preview module in the first workspace folder. The task shell must already have emsdk in its environment."
+          "description": "Shell command that configures the selected build directory. The task environment must provide emsdk."
         }
       }
     }
@@ -60,7 +70,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
-      "description": "Preview runs workspace JavaScript and Wasm; Build runs a workspace shell command."
+      "description": "Preview runs workspace JavaScript and Wasm; Configure runs a workspace shell command and Build runs CMake."
     },
     "virtualWorkspaces": false
   }
