@@ -137,7 +137,12 @@ LRESULT SendMessageW(HWND h, UINT message, WPARAM w, LPARAM l)
 BOOL GetClientRect(HWND h, RECT *r)
 {
   if (win32_host::refuseClientRect)
+  {
+    // Refusal still writes a defined (empty) rect: callers that ignore the
+    // result (Win32RectSurfaceContext.cpp WM_PAINT) must not read garbage.
+    r->left = r->top = r->right = r->bottom = 0;
     return FALSE;
+  }
   *r = h->rect;
   r->right -= r->left;
   r->bottom -= r->top;
