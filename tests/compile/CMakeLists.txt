@@ -806,6 +806,41 @@ loka_compile_pin(request-text-splice-reply-write
   ACCEPTS pins/accepts_text_splice_reply_write.cpp
 )
 
+loka_compile_pin(scene-text-documents-visit-private
+  REFUSES pins/refuses_scene-text-documents-visit-private.cpp
+  ACCEPTS pins/accepts_scene-text-documents-visit-private.cpp
+)
+
+loka_compile_pin(scene-text-documents-disconnect-private
+  REFUSES pins/refuses_scene-text-documents-disconnect-private.cpp
+  ACCEPTS pins/accepts_scene-text-documents-disconnect-private.cpp
+)
+
+loka_compile_pin(scene-focus-disconnect-private
+  REFUSES pins/refuses_scene-focus-disconnect-private.cpp
+  ACCEPTS pins/accepts_scene-focus-disconnect-private.cpp
+)
+
+loka_compile_pin(composable-node-participants-private
+  REFUSES pins/refuses_composable-node-participants-private.cpp
+  ACCEPTS pins/accepts_composable-node-participants-private.cpp
+)
+
+loka_compile_pin(composable-node-attach-participants-private
+  REFUSES pins/refuses_composable-node-attach-participants-private.cpp
+  ACCEPTS pins/accepts_composable-node-attach-participants-private.cpp
+)
+
+loka_compile_pin(composable-node-withdraw-participants-private
+  REFUSES pins/refuses_composable-node-withdraw-participants-private.cpp
+  ACCEPTS pins/accepts_composable-node-withdraw-participants-private.cpp
+)
+
+loka_compile_pin(composable-node-reclaim-participants-private
+  REFUSES pins/refuses_composable-node-reclaim-participants-private.cpp
+  ACCEPTS pins/accepts_composable-node-reclaim-participants-private.cpp
+)
+
 # The Toolbox storage contract is checked with the C++98 host QuickDraw types.
 loka_compile_pin(toolbox-release-missing
   REFUSES pins/refuses_toolbox_release_missing.cpp
