@@ -77,8 +77,8 @@ for (const variant of ['timeout', 'signal', 'escaped-residual', 'launcher-kill']
       assert.notEqual(result.code, 0, result.log);
       await until(async () => (await Promise.all([...pids.map(p => p.pid), ready.xpid]
         .map(pid => absent(`/proc/${pid}`)))).every(Boolean));
+      assert.equal(await absent(ready.directory), true);
       if (variant !== 'launcher-kill') {
-        assert.equal(await absent(directory), true);
         const outcome = await json(join(parent, 'outcome.json'));
         assert.match(outcome.errors.join('\n'), variant === 'signal' ? /SIGTERM/ : /fake step timed out/);
       }

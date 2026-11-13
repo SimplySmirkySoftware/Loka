@@ -747,6 +747,7 @@ namespace toolbox_host { GrafPtr frontWindow = 0; }
 // Compile the real plain leaf alongside the real attributed leaf in this fixture.
 #include "context/ToolboxTextContext.cpp"
 #include "ToolboxTextHitPaint.cpp"
+#include "ToolboxTextBindingLiveness.inc"
 void DrawString(const unsigned char *text)
 {
   toolbox_host::pascalDraws.push_back(HostPascalBytes(text));
@@ -1237,6 +1238,8 @@ static void DrawGrowIcon(ToolboxWindow::WindowPort *) {}
 #include "ToolboxWindowPaint.cpp"
 
 #endif
+#include "ToolboxHitLedger.inc"
+
 void ToolboxScenePlatformController::retireNodeContext(loka::app::scene::NodeContext *context,
                                                        loka::app::scene::NativeLifetimeHint lifetimeHint)
 {
@@ -1261,3 +1264,12 @@ void ToolboxWindow::requestInvalidateWithReason(ToolboxFullDrawReason reason)
 #endif
 
 #include "ToolboxWindowEditCommand.cpp"
+
+loka::app::scene::NodeContext *ToolboxScenePlatformController::selectedPress(const Point &point, PressRow &row) const
+{
+  ResolvedPress selected;
+  if (!this->pressLedger_.topmostAt(point, *this, selected))
+    return 0;
+  row = selected.row;
+  return selected.context;
+}

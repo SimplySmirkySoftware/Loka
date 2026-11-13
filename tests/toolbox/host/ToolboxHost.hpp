@@ -387,6 +387,10 @@ public:
   loka::app::CellNode *node_;
   Rect rect_;
   ToolboxCellContext() : node_(0) {}
+  loka::core::State<loka::core::String> *liveTextState() const
+  {
+    return this->node_ && !this->node_->props.ownsText_ ? this->node_->props.text_ : 0;
+  }
   void draw(ToolboxScenePlatformController *)
   {
     LOKA_VERIFY(false);
@@ -476,11 +480,12 @@ public:
   typedef ToolboxHitLedger::CellHit CellHit;
   typedef ToolboxHitLedger::PopupHit PopupHit;
   ToolboxHitLedger hitLedger_;
-  const std::vector<ButtonHit> &buttonHits() const
+  loka::app::scene::NodeContext *selectedPress(const Point &, PressRow &) const;
+  const ToolboxPressRows<ButtonHit, PressRow::BUTTON_HIT> &buttonHits() const
   {
     return this->hitLedger_.buttonHits_;
   }
-  const std::vector<CellHit> &cellHits() const
+  const ToolboxPressRows<CellHit, PressRow::CELL_HIT> &cellHits() const
   {
     return this->hitLedger_.cellHits_;
   }
@@ -488,9 +493,18 @@ public:
   {
     return this->hitLedger_.textHits_;
   }
-  void installHit(const ButtonHit &hit) { this->hitLedger_.buttonHits_.push_back(hit); }
-  void installHit(const CellHit &hit) { this->hitLedger_.cellHits_.push_back(hit); }
-  void installHit(const PopupHit &hit) { this->hitLedger_.popupHits_.push_back(hit); }
+  void installHit(const ButtonHit &hit)
+  {
+    this->hitLedger_.buttonHits_.store(hit);
+  }
+  void installHit(const CellHit &hit)
+  {
+    this->hitLedger_.cellHits_.store(hit);
+  }
+  void installHit(const PopupHit &hit)
+  {
+    this->hitLedger_.popupHits_.store(hit);
+  }
   /** Synthetic render for legacy fixtures that install rows directly.
       Ground hits precede the native/edit faces those fixtures place above them.
       New ordering pins use the production render walk instead. */
@@ -498,13 +512,13 @@ public:
   {
     this->pressLedger_.begin();
     for (std::size_t i = 0; i < this->hitLedger_.buttonHits_.size(); ++i)
-      this->pressLedger_.append(PressRow::BUTTON_HIT, i);
+      this->hitLedger_.buttonHits_.reach(i, this->pressLedger_);
     for (std::size_t i = 0; i < this->hitLedger_.cellHits_.size(); ++i)
-      this->pressLedger_.append(PressRow::CELL_HIT, i);
+      this->hitLedger_.cellHits_.reach(i, this->pressLedger_);
     for (std::size_t i = 0; i < this->hitLedger_.popupHits_.size(); ++i)
-      this->pressLedger_.append(PressRow::POPUP_HIT, i);
+      this->hitLedger_.popupHits_.reach(i, this->pressLedger_);
     for (std::size_t i = 0; i < this->hitLedger_.editHits_.size(); ++i)
-      this->pressLedger_.append(PressRow::EDIT_HIT, i);
+      this->hitLedger_.editHits_.reach(i, this->pressLedger_);
     for (std::size_t i = 0; i < this->editControls_.size(); ++i)
       this->pressLedger_.append(PressRow::EDIT_CONTROL, i);
     for (std::size_t i = 0; i < this->scrollBarLedger_.scrollBarControls_.size(); ++i)
@@ -592,8 +606,16 @@ public:
                               const loka::app::ScrollBarProps &,
                               loka::app::scene::NodeContext *,
                               loka::app::scene::NativeLifetimeHint);
-  void bindEnabledState(loka::core::State<bool> *) {}
-  void unbindEnabledState(loka::core::State<bool> *) {}
+  std::vector<loka::core::State<bool> *> boundEnabled, unboundEnabled;
+  std::vector<loka::core::State<loka::core::String> *> boundText, unboundText;
+  void bindEnabledState(loka::core::State<bool> *s)
+  {
+    this->boundEnabled.push_back(s);
+  }
+  void unbindEnabledState(loka::core::State<bool> *s)
+  {
+    this->unboundEnabled.push_back(s);
+  }
   bool hasLiveBinding(loka::core::State<bool> *) const;
   void clearControls();
   void retireScrollBarBinding(ScrollBarControlBinding &, loka::app::scene::NativeLifetimeHint);
@@ -785,14 +807,15 @@ public:
   void recordTextHit(const Rect &, short, short, loka::core::State<loka::core::String> *,
                      loka::app::scene::BoundaryNode *, bool, short, ToolboxTextContext *) { ++toolbox_host::textHits; }
 #endif
-  void bindTextState(loka::core::State<loka::core::String> *) {}
-  void unbindTextState(loka::core::State<loka::core::String> *) {}
-  bool hasLiveBinding(loka::core::State<loka::core::String> *s) const
+  void bindTextState(loka::core::State<loka::core::String> *s)
   {
-    for (std::size_t i = 0; i < editControls_.size(); ++i)
-      if (editControls_[i].text == s) return true;
-    return false;
+    this->boundText.push_back(s);
   }
+  void unbindTextState(loka::core::State<loka::core::String> *s)
+  {
+    this->unboundText.push_back(s);
+  }
+  bool hasLiveBinding(loka::core::State<loka::core::String> *) const;
   void activateEditControl(std::size_t index);
   void reachNativeButton(short id);
   void reachNativeBar(short id);

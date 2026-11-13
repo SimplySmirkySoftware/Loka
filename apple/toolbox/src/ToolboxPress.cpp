@@ -351,7 +351,7 @@ void ToolboxScenePlatformController::reachPopupHit(ToolboxPopupMenuContext *cont
   for (std::size_t i = 0; i < this->hitLedger_.popupHits_.size(); ++i)
     if (this->hitLedger_.popupHits_[i].context == context)
     {
-      this->pressLedger_.append(PressRow::POPUP_HIT, i);
+      this->hitLedger_.popupHits_.reach(i, this->pressLedger_);
       return;
     }
 }
