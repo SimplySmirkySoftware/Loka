@@ -338,10 +338,12 @@ export async function handshake(owner, cell, files, connect = connectCDP) {
         let last = '';
         try {
           await owner.wait(async () => {
+            await errorCheck();
             last = await cdp.evaluate(statusExpression);
             return last === stepStatuses[name];
           }, observationDeadline, 'status');
         } catch (error) {
+          await errorCheck();
           throw new Error(`${error.message}; expected ${JSON.stringify(stepStatuses[name])}, last read ${JSON.stringify(last)}`);
         }
       }
@@ -349,11 +351,13 @@ export async function handshake(owner, cell, files, connect = connectCDP) {
         let last = '';
         try {
           await owner.wait(async () => {
+            await errorCheck();
             const ui = await cdp.evaluate(toastExpression);
             last = ui?.text ?? '';
             return ui && !ui.picker && ui.toast === (phase === 'toast');
           }, observationDeadline, 'toast/picker');
         } catch (error) {
+          await errorCheck();
           throw new Error(`${error.message}; expected ${JSON.stringify(refusalText)} ${phase === 'toast' ? 'present' : 'absent'} and picker absent, last read ${JSON.stringify(last)}`);
         }
       }

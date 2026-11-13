@@ -121,10 +121,10 @@ function fixture(kind, options = {}) {
   };
   const connect = async () => ({evaluate: async expression => {
     calls.push(['evaluate', expression]);
-    observed = true;
+    observed = expression === (options.errorUI ?? statusExpression);
     if (options.cdpError) throw new Error('CDP failed');
     if (expression === trustExpression) return !options.noTrust;
-    if (expression === toastExpression) return {text: 'last notification', picker: false, toast: options.noToast ? false : steps[kind][index][1] === 'toast'};
+    if (expression === toastExpression) return {text: 'last notification', picker: options.picker ?? false, toast: options.noToast ? false : steps[kind][index][1] === 'toast'};
     assert.equal(expression, statusExpression);
     return options.noStatus || options.noStatusAt === steps[kind][index][0] ? 'not ready' : stepStatuses[steps[kind][index][0]];
   }});
@@ -154,7 +154,7 @@ for (const [name, options, message] of [
   ['wrong sequence', {raw: JSON.stringify({cell: 'K1', phase: 'ready', facts: {}})}, /identity/],
   ['missing status selector', {noStatus: true}, /status timed out/],
   ['no trust click', {noTrust: true}, /Trust button timed out/],
-  ['error during observation', {errorAfterUI: true}, /host failed/],
+  ['error during observation', {errorAfterUI: true, noStatus: true}, /host failed/],
   ['CDP failure', {cdpError: true}, /CDP failed/],
   ['early exit', {early: true}, /exited early/],
   ['nonzero exit', {exit: 9}, /Exit:/]
@@ -163,6 +163,11 @@ for (const [name, options, message] of [
   await assert.rejects(f.run(), message);
   assert.equal(f.owner.abort.signal.aborted, true);
   assert.equal(f.acks.length, options.exit === 9 ? 6 : options.noStatus ? 2 : 0);
+});
+test('step failure: error during unsatisfied toast observation', async () => {
+  const f = fixture('R', {errorAfterUI: true, errorUI: toastExpression, picker: true});
+  await assert.rejects(f.run(), /host failed/);
+  assert.deepEqual(f.acks, [0, 1, 2]);
 });
 test('steps: exit deadline is 15 seconds after final go', async t => {
   t.mock.timers.enable({apis: ['setTimeout']});

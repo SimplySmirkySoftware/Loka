@@ -89,10 +89,12 @@ else:
             pid = int(until(lambda: (root / 'watch').read_text() if (root / 'watch').exists() else None))
             handles.append(os.pidfd_open(pid))
             assert alive(handles[0])
-            (root / 'go').touch()
+            if variant != 'launcher-kill':
+                (root / 'go').touch()
             if variant == 'stuck':
                 inner.send_signal(signal.SIGTERM)
             if variant == 'launcher-kill':
+                time.sleep(float(os.environ.get('LOKA_TEST_WATCH_DELAY', '0')))
                 launcher = int((root / 'launcher').read_text())
                 fd = os.pidfd_open(launcher)
                 signal.pidfd_send_signal(fd, signal.SIGKILL)

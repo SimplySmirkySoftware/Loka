@@ -42,12 +42,13 @@ function supervised(args, env = {}) {
   });
   return {child, closed};
 }
-for (const variant of ['a', 'b', 'c', 'd', 'e', 'stuck', 'launcher-kill']) {
+for (const variant of ['a', 'b', 'c', 'd', 'e', 'stuck', 'launcher-kill', 'launcher-kill-delayed']) {
   const name = 'real supervisor control ' + variant;
   test(name, options(name, ['python3']), async () => {
     assert.equal(exclusion(['python3']), '');
     const directory = await mkdtemp('/tmp/loka-supervisor-test-');
-    const run = supervised(['python3', join(here, 'supervisor-fixture.py'), 'watch', variant, directory]);
+    const run = supervised(['python3', join(here, 'supervisor-fixture.py'), 'watch', variant === 'launcher-kill-delayed' ? 'launcher-kill' : variant, directory],
+      {LOKA_TEST_WATCH_DELAY: variant === 'launcher-kill-delayed' ? '1' : '0'});
     try {
       const result = await run.closed;
       assert.equal(result.code, 0, result.log);

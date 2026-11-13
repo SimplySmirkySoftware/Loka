@@ -915,8 +915,7 @@ same execution object. The window includes events before command settlement and
 within an isolated fixture, not proof of causation. K1 uses the same subscription
 code in a separate launch; it does not prove that R's particular subscription
 instance could fire. The same-launch folder-setting update awaits
-`ConfigurationTarget.WorkspaceFolder` and reads a newly obtained configuration;
-its real-run evidence is pending.
+`ConfigurationTarget.WorkspaceFolder` and reads a newly obtained configuration.
 
 Status observations are narrow. `Loka: Running` means the document called
 `module.web.start()`, reported status 0 and the extension accepted its `started`
@@ -1033,6 +1032,11 @@ every launch.
   collected them; afterwards neither sleep, no `code` or Xvfb process, no X
   lock and no run directory remained (counted by exact command name,
   independently of the supervisor's report).
+  SIGTERM before any task had started: the run failed as interrupted, nothing
+  remained. SIGKILL of the launcher itself while the task ran: the supervisor
+  collected every process (VS Code's and both sleeps) and exited 137; the X
+  lock and the run directory stayed behind, as that path cannot run the
+  launcher's own cleanup.
 - Vehicle tests: step mechanism, task identity, the single signalling door,
   supervisor units, and real-process controls for the supervisor (subreaper
   missing, self-check removed, collection removed, a passing flow that leaves a
