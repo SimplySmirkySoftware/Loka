@@ -1,7 +1,8 @@
 // Executed only by owner.test.mjs; never a VS Code replacement in the smoke entry.
+import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {appendFileSync, readFileSync} from 'node:fs';
-import {mkdir, readFile, rename, writeFile} from 'node:fs/promises';
+import {mkdir, mkdtemp, readFile, rename, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {RunOwner} from './run.mjs';
@@ -28,9 +29,20 @@ if (['code', 'child', 'grandchild'].includes(mode)) {
       if (stat.slice(stat.lastIndexOf(')') + 2).startsWith('Z ')) process.exit(0);
     } catch (error) { if (error.code === 'ENOENT') process.exit(0); else throw error; }
   }, 20);
+} else if (mode === 'displays') {
+  const owners = [];
+  try {
+    for (let i = 0; i < 2; i++) owners.push(new RunOwner(await mkdtemp('/tmp/loka-display-test-')));
+    const displays = await Promise.all(owners.map(owner => owner.startX()));
+    assert.notEqual(displays[0].DISPLAY, displays[1].DISPLAY);
+    for (const owner of owners)
+      assert.equal(Number(await readFile(`/tmp/.X${owner.x.display}-lock`, 'utf8')), owner.x.child.pid);
+  } finally {
+    const results = await Promise.allSettled(owners.map(owner => owner.cleanup()));
+    for (const result of results) if (result.status === 'rejected') throw result.reason;
+  }
 } else {
-  const owner = new RunOwner(directory, {graceMs: 100, censusMs: 500,
-    ...(variant === 'group-residual' ? {killGroup() {}} : {})});
+  const owner = new RunOwner(directory);
   const cancel = () => owner.abort.abort(new Error('Interrupted: SIGTERM'));
   process.on('SIGTERM', cancel);
   const errors = [];
@@ -45,11 +57,12 @@ if (['code', 'child', 'grandchild'].includes(mode)) {
     }, Date.now() + 5000, 'fake descendants ready');
     await publish(join(directory, '../ready.json'), {pid: process.pid,
       xpid: owner.x.child.pid, display: owner.x.display});
-    await owner.wait(() => false, Date.now() + (variant === 'signal' ? 10000 : 100), 'fake release');
+    await owner.wait(() => false, Date.now() + (['signal', 'launcher-kill'].includes(variant) ? 10000 : 100), 'fake step');
   } catch (error) { errors.push(error.message); }
   finally {
     try { await owner.cleanup(); } catch (error) { errors.push(error.message); }
     process.off('SIGTERM', cancel);
+    process.exitCode = 1;
     await publish(join(directory, '../outcome.json'), {errors});
   }
 }
