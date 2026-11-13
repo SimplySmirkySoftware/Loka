@@ -16,6 +16,20 @@ namespace loka
 #include "app/layout/MeasurementResult.hpp"
 #include "context/ToolboxLayoutUtil.hpp"
 
+/** Deliberate twin of Win32 LinkHit/HitAnswer in Win32AttributedTextTable.hpp.
+    Completed batch span contribution against one logical Toolbox seat. */
+struct ToolboxLinkHit
+{
+  std::size_t firstSegment, lastSegment;
+  Rect seat;
+};
+enum ToolboxHitAnswer
+{
+  TOOLBOX_HIT_LINK,
+  TOOLBOX_HIT_NONE,
+  TOOLBOX_HIT_REFUSED
+};
+
 /** Context-owned completed PER_RUN projection. A null break is unknown; clear
     releases every derived row together. No port transaction survives build. */
 class ToolboxAttributedTextTable
@@ -64,6 +78,12 @@ public:
   {
     return this->valid() ? this->measurement_.extent().width : 0;
   }
+  /** Walk accepted advance cells; native measurement is restored on return. */
+  ToolboxHitAnswer hitAt(const Rect &seat,
+                         const ToolboxScenePlatformController &controller,
+                         const loka::app::BlockStyle &block,
+                         Point local,
+                         ToolboxLinkHit &out) const;
   bool draw(short x,
             short top,
             const ToolboxScenePlatformController &controller,
@@ -86,6 +106,7 @@ private:
   };
   loka::app::MeasurementResult<short, Extent> measurement_;
   class WidthSource;
+  class FragmentWalker;
   struct FontMeasurement
   {
     loka::app::TextLineMetrics line;

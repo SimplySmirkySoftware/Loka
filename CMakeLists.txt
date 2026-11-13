@@ -720,7 +720,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     add_test(NAME testToolboxViewportSuppression_${_suppression}
       COMMAND LokaToolboxAttributedTextTests suppression-${_suppression})
   endforeach()
-  foreach(_span_case span-characterization span-refusals span-links span-cache span-geometry
+  foreach(_span_case link-hit link-eligibility link-draw span-characterization span-refusals span-links span-cache span-geometry
       span-compensation span-inline-growth span-heap-growth span-underfill span-char-growth span-char-shrink)
     add_test(NAME testToolbox_${_span_case} COMMAND LokaToolboxAttributedTextTests ${_span_case})
   endforeach()

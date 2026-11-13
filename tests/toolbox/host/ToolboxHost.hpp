@@ -1144,6 +1144,8 @@ namespace toolbox_host
     short family;
   };
   extern std::string textTrace;
+  /** Arguments in textTrace order, including font/ink changes with no DrawText. */
+  extern std::vector<long> textArguments;
   struct Fill
   {
     Rect rect;
