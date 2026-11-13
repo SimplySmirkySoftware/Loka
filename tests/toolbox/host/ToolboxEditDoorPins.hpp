@@ -373,9 +373,24 @@ namespace edit_door
     LOKA_VERIFY(std::strlen(record.site) >= std::strlen(expected));
     LOKA_VERIFY(std::strcmp(record.site + std::strlen(record.site) - std::strlen(expected), expected) == 0);
   }
+  void noWindow()
+  {
+    Fixture f;
+    // The host controller already exposes its borrowed window pointer. Restore
+    // it before fixture teardown; absence must refuse before creating a row.
+    f.controller.window_ = 0;
+    const ToolboxEditPresentation result =
+        f.controller.ensureEditTextControl(f.context(f.first), f.rect(), f.text.state(), NATIVE_HINT_DEFAULT);
+    f.controller.window_ = &f.nativeWindow;
+    LOKA_VERIFY(!result.te);
+    LOKA_VERIFY(f.controller.editControls_.size() == 0);
+  }
+
   bool run(const char *mode)
   {
-    if (std::strncmp(mode, "edit-refusal-", 13) == 0)
+    if (std::strcmp(mode, "edit-no-window") == 0)
+      noWindow();
+    else if (std::strncmp(mode, "edit-refusal-", 13) == 0)
       refusal(mode + 13);
     else if (std::strncmp(mode, "edit-door-", 10) == 0)
       interval(mode + 10);
