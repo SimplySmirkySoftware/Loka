@@ -1,5 +1,6 @@
 const fs = require('node:fs/promises');
 const {join} = require('node:path');
+const flow = require('./flow.cjs');
 
 // One writer per file; rename publishes a completed value to the launcher.
 async function publish(directory, name, value) {
@@ -118,19 +119,31 @@ class TaskObserver {
     if (this.events.slice(from).some(e => e.kind === 'start')) throw new Error('Unexpected task start');
     return {starts: 0, executions: 0};
   }
-  async configure(folder, command, exit) {
+  /** Cost: one task operation; wrappers construct one expected identity for the shared observer. */
+  configure(folder, command, exit, budget = 20000) {
+    return this.perform(folder, {name: 'Configure', command}, exit, budget);
+  }
+  build(folder, directory, target) {
+    return this.perform(folder, {name: 'Build', args: ['--build', directory, '--target', target]}, 0, 120000);
+  }
+  /** Cost: one command; bounded polling over this observer's events since admission. */
+  async perform(folder, expected, exit, budget) {
     const from = this.begin();
-    const pending = this.life.command(this.vscode, 'loka.preview.configure');
+    const pending = this.life.command(this.vscode, 'loka.preview.' + expected.name.toLowerCase());
     const rows = () => this.events.slice(from);
     const start = await this.life.until(() => rows().find(e => e.kind === 'start'), 10000, 'Task start');
     this.life.check();
     const task = start.execution.task;
-    if (task.name !== 'Configure' || task.source !== 'Loka' || task.definition.type !== 'loka'
-      || task.scope !== folder || !(task.execution instanceof this.vscode.ShellExecution)
-      || task.execution.commandLine !== command || task.execution.options?.cwd !== folder.uri.fsPath)
-      throw new Error('Task identity mismatch');
+    const execution = task.execution;
+    const shape = expected.name === 'Configure'
+      ? execution instanceof this.vscode.ShellExecution && execution.commandLine === expected.command
+      : execution instanceof this.vscode.ProcessExecution && execution.process === 'cmake'
+        && JSON.stringify(execution.args) === JSON.stringify(expected.args);
+    if (task.name !== expected.name || task.source !== 'Loka' || task.definition.type !== 'loka'
+      || task.scope !== folder || !shape || execution.options?.cwd !== folder.uri.fsPath)
+      throw new Error('Task identity mismatch: expected ' + JSON.stringify(expected));
     const end = await this.life.until(() => rows().find(e => e.kind === 'end' && e.execution === start.execution),
-      20000, 'Task end');
+      budget, 'Task end');
     await this.life.pause(500);
     this.life.check();
     if (rows().filter(e => e.kind === 'start').length !== 1) throw new Error('Expected exactly one task start');
@@ -169,7 +182,7 @@ exports.runSuite = async function (vscode, directory, kind, life) {
     life.check();
     const n = sequence++;
     const value = {cell, phase, facts: {...result, finalTrusted: vscode.workspace.isTrusted, tabs: tabs(),
-      ...(kind === 'R' ? observer.negative() : {}), ...facts}};
+      ...(kind === 'R' ? observer.negative() : {}), ...(kind === 'F' ? {executions: vscode.tasks.taskExecutions.length} : {}), ...facts}};
     life.check();
     await fs.writeFile(join(directory, `step-${n}.json.tmp`), JSON.stringify(value));
     life.check();
@@ -207,11 +220,37 @@ exports.runSuite = async function (vscode, directory, kind, life) {
     await step('R5', 'cleared');
     observer.negative();
   } else {
-    const trustCell = kind === 'T3' ? 'T1' : "T1'";
+    const trustCell = kind === 'F' ? 'F1' : kind === 'T3' ? 'T1' : "T1'";
     await exports.grantTrust(vscode, published => step(trustCell, 'ready', {}, published), life, () => life.check());
     life.check();
     result.trustGranted = true;
     await step(trustCell, 'trusted');
+    if (kind === 'F') {
+      const rows = flow.skins(JSON.parse(await fs.readFile(join(directory, 'flow.json'), 'utf8')));
+      const entry = async cell => { observer.idle(); await step(cell, 'entry'); };
+      const select = async (cell, name) => {
+        await entry(cell);
+        await flow.picker(vscode, life, step, cell, rows.findIndex(r => r.name === name));
+        await step(cell);
+        await flow.picker(vscode, life, step, cell, 0, true);
+      };
+      await entry('F1');
+      await step('F1', 'observed', await observer.configure(folder, configuration().get('configureCommand'), 0, 60000));
+      const apps = flow.fixture(JSON.parse(await fs.readFile(join(result.buildDirectory, 'loka-web-apps.json'), 'utf8')));
+      await entry('F2');
+      await step('F2', 'observed', await observer.build(folder, result.buildDirectory, apps[0].target));
+      await entry('F3');
+      if (tabs().includes('Loka Preview')) throw new Error('F3 already has Preview tab');
+      await open('F3');
+      await select('F4', 'macos');
+      await entry('F5');
+      await flow.picker(vscode, life, step, 'F5', 1);
+      await step('F5');
+      await entry('F6');
+      await step('F6', 'observed', await observer.build(folder, result.buildDirectory, apps[1].target));
+      await select('F7', 'web');
+      return;
+    }
     if (kind === 'T3') {
       const from = observer.begin();
       await life.command(vscode, 'loka.preview.build');
@@ -232,5 +271,5 @@ exports.run = function () {
   const life = new Lifetime();
   return life.run(() => exports.runSuite(require('vscode'), process.env.LOKA_SMOKE_CELL,
     process.env.LOKA_SMOKE_KIND, life), error => publish(process.env.LOKA_SMOKE_CELL,
-    'error.json', {error: String(error.stack || error)}));
+    'error.json', {error: String(error.stack || error)}), process.env.LOKA_SMOKE_KIND === 'F' ? 420000 : 180000);
 };

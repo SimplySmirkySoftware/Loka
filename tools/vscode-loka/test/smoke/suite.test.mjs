@@ -195,3 +195,30 @@ for (const kind of ['T3', 'R']) test('suite operations and files: ' + kind, {tim
     if (kind === 'R') assert.ok(calls.indexOf('notifications.clearAll') > calls.indexOf('loka.preview.selectExample'));
   } finally { await rm(directory, {recursive: true, force: true}); }
 });
+
+for (const mode of ['good', 'process', 'args missing', 'args reordered', 'args extra', 'cwd', 'shell']) {
+  test('Build uses the same task identity matcher: ' + mode, async t => {
+    t.mock.timers.enable({apis: ['setTimeout', 'Date'], now: 0});
+    const life = new Lifetime(), f = tasksFixture(life);
+    class ProcessExecution { constructor() { this.process = 'cmake'; this.args = ['--build', '/build', '--target', 'LokaMineWeb']; this.options = {cwd: '/fixture'}; } }
+    f.vscode.ProcessExecution = ProcessExecution;
+    f.execution.task.name = 'Build';
+    const execution = new ProcessExecution();
+    if (mode === 'process') execution.process = 'other';
+    if (mode === 'args missing') execution.args.pop();
+    if (mode === 'args extra') execution.args.push('--clean-first');
+    if (mode === 'args reordered') execution.args.reverse();
+    if (mode === 'cwd') execution.options.cwd = '/other';
+    f.execution.task.execution = mode === 'shell' ? new f.vscode.ShellExecution('cmake --build /build', {cwd: '/fixture'}) : execution;
+    f.vscode.commands.executeCommand = name => {
+      assert.equal(name, 'loka.preview.build');
+      f.emit('onDidStartTask'); f.emit('onDidStartTaskProcess'); f.emit('onDidEndTaskProcess');
+      return Promise.resolve();
+    };
+    const pending = life.run(() => f.observer.build(f.folder, '/build', 'LokaMineWeb'), async () => {}).catch(e => e);
+    await setImmediate(); t.mock.timers.tick(500); await setImmediate();
+    const value = await pending;
+    if (mode === 'good') assert.equal(value.exit, 0);
+    else assert.match(value.message, /identity mismatch/);
+  });
+}
