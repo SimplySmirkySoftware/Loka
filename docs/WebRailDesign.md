@@ -1098,19 +1098,30 @@ every launch.
   process, a crash-handler-like child that ends within the grace, a stuck
   launcher, a killed launcher).
 
-- Flow launch F (emsdk 7.0.0 in the environment), same day and rig: F1–F7
-  passed; the whole smoke with every cell required took about 31 s. Extension
-  mutations on the built `out/`: the skin not saved, and the skin not passed to
-  the module factory (both F4: HelloWorld's marker stayed at 9), the example
-  not saved and Build ignoring the selection (both F5: the build-first message
-  never appeared), a wrong Build target (F2: task identity), a failing
-  Configure command (F1: exit status). A source mutation making the Web root
-  pass a zero margin failed F6 only (MineSweeper's marker at 0,0) while F3 and
-  F4 still passed, which is the difference between the two fixtures. SIGTERM
-  to the supervisor during the real F2 build: the run failed as interrupted
-  and no process, X lock or run directory remained. Without emcmake on PATH:
-  F skipped by name, the other launches passed, exit 0; with
-  `LOKA_REQUIRE_VSCODE_FLOW=1`: failure.
+- Flow launch F (emsdk 7.0.0 in the environment), same day and rig, all at the
+  final tree of that change: F1–F7 passed; the whole smoke with every cell
+  required took about 31 s with a warm Emscripten cache (a cold cache was not
+  timed). The run directory peaked near 67 MB (three VS Code profiles and the
+  Web build tree) and was gone afterwards; no file under the Emscripten SDK
+  changed during the run and no Emscripten temporary directory was left.
+- Mutations for F, each failing the named cell: the skin not saved, and the
+  skin not passed to the module factory (both F4: HelloWorld's marker stayed at
+  9); the example not saved (F5: the build-first message never appeared); Build
+  always building the first example (F6: task identity, while F2 passed); a
+  wrong Build target (F2); a failing Configure command (F1). A source mutation
+  making the Web root pass a zero margin failed F6 only (MineSweeper's marker
+  at 0,0) while F3 and F4 passed, which is the difference between the two
+  fixtures.
+- Interruptions during the real F2 build (up to 38 build processes inside the
+  run tree at the time), counted by working directory independently of the
+  supervisor: SIGTERM to the supervisor, and the build task's deadline
+  shortened to 1.5 s — the run failed and no process, X lock or run directory
+  remained. SIGKILL of the launcher: the supervisor reported 30 residual
+  processes (compilers, ninja, cmake, VS Code), collected them, removed the
+  run directory and exited 137; only the X lock stayed, because Xvfb was
+  killed rather than stopped.
+- Without emcmake on PATH: F skipped by name, the other launches passed,
+  exit 0; with `LOKA_REQUIRE_VSCODE_FLOW=1`: failure.
 
 On GitHub's hosted Ubuntu runner an extracted archive exits with SIGTRAP at
 launch until its `chrome-sandbox` helper is owned by root with mode 4755, which

@@ -23,13 +23,14 @@ export const webviewExpression = `(() => {
     const d = document.querySelector('iframe#active-frame')?.contentDocument;
     if (!d?.body) return null;
     const b = d.body.getBoundingClientRect();
-    const rows = [...d.body.querySelectorAll('*')].slice(0, 2048).map(e => {
+    const all = [...d.body.querySelectorAll('*')];
+    const rows = all.slice(0, 2048).map(e => {
       const r = e.getBoundingClientRect(), style = d.defaultView.getComputedStyle(e);
       return {tag: e.tagName.toLowerCase(), text: (e.innerText ?? '').trim().slice(0, 256), leaf: e.children.length === 0,
         x: Math.round(r.left - b.left), y: Math.round(r.top - b.top), width: r.width, height: r.height,
         visible: style.display !== 'none' && style.visibility !== 'hidden' && style.visibility !== 'collapse' && e.checkVisibility()};
     });
-    return {text: d.body.innerText.trim().slice(0, 4096), scripts: d.querySelectorAll('script').length, rows};
+    return {text: d.body.innerText.trim().slice(0, 4096), scripts: d.querySelectorAll('script').length, total: all.length, rows};
   } catch { return null; }
 })()`;
 
@@ -42,6 +43,8 @@ function markerRows(value) {
 
 export function webviewMatches(value, status, expected) {
   if (!value || !Array.isArray(value.rows) || status !== expected.status) return false;
+  // A capped snapshot cannot prove "exactly one marker" or "no marker": refuse it rather than judge a part.
+  if (value.total !== value.rows.length) return false;
   const markers = markerRows(value);
   if (expected.kind === 'message') return value.text === expected.text && value.scripts === 0
     && Object.values(markers).every(rows => rows.length === 0);

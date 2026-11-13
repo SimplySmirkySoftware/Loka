@@ -69,7 +69,7 @@ for (const mode of ['pass', 'already open', 'wrong labels', 'duplicate widgets',
   });
 }
 
-const body = (offset = 9) => ({text: 'Loka Sample', scripts: 3, rows: [
+const body = (offset = 9) => ({text: 'Loka Sample', scripts: 3, total: 1, rows: [
   {tag: 'span', text: 'Loka Sample', leaf: true, x: offset, y: offset, width: 50, height: 10, visible: true}]});
 const expected = {kind: 'module', status: 'Loka: Running', id: apps[0].id, offset: 9};
 for (const mode of ['good', 'no target', 'multiple', 'no body', 'open throws', 'evaluate throws', 'cancel', 'target changes']) {
@@ -116,10 +116,10 @@ test('module rejects missing, duplicate, hidden, zero size, stale offset and wro
 });
 test('message needs readable body, exact unprefixed text, no scripts and no fixture markers', () => {
   const message = {kind: 'message', status: 'Loka: ' + flow.message, text: flow.message};
-  const value = {text: flow.message, scripts: 0, rows: []};
+  const value = {text: flow.message, scripts: 0, total: 0, rows: []};
   assert.equal(webviewMatches(value, message.status, message), true);
   for (const bad of [null, {}, {...value, text: message.status}, {...value, scripts: 1},
-    {...value, rows: body().rows}]) assert.equal(webviewMatches(bad, message.status, message), false);
+    {...value, total: 1, rows: body().rows}]) assert.equal(webviewMatches(bad, message.status, message), false);
 });
 test('F4 and F7 reopened picker verifies Requested independently from focus', async () => {
   for (const cell of ['F4', 'F7']) {
@@ -233,8 +233,8 @@ test('F1–F7 suite and launcher share the existing file handshake end to end', 
     if (expression === statusExpression) return status;
     assert.equal(expression, pickerExpression); return pickerUI;
   }, async webview() {
-    if (status === 'Loka: ' + flow.message) return {text: flow.message, scripts: 0, rows: []};
-    return {rows: [{tag: selected ? 'button' : 'span', text: flow.markers[apps[selected].id].text, leaf: true,
+    if (status === 'Loka: ' + flow.message) return {text: flow.message, scripts: 0, total: 0, rows: []};
+    return {total: 1, rows: [{tag: selected ? 'button' : 'span', text: flow.markers[apps[selected].id].text, leaf: true,
       x: rows.find(r => r.name === skin).spacing[2],
       y: rows.find(r => r.name === skin).spacing[2], width: 10, height: 10, visible: true}]};
   }};
@@ -300,6 +300,7 @@ test('generic page snapshot bounds rows and text and reports geometry without fi
   const read = () => runInNewContext(webviewExpression, {document: {querySelector: () => ({contentDocument: d})}});
   const snapshot = read();
   assert.equal(snapshot.rows.length, 2048);
+  assert.equal(snapshot.total, 2050);
   assert.equal(snapshot.text.length, 4096);
   assert.equal(snapshot.scripts, 2);
   assert.deepEqual(JSON.parse(JSON.stringify(snapshot.rows[0])), {
@@ -320,4 +321,16 @@ test('launcher matches fixture text, selector and leaf requirement from generic 
   assert.equal(webviewMatches(value, mine.status, mine), false);
   value.rows[0].tag = 'button'; value.rows[0].leaf = false;
   assert.equal(webviewMatches(value, mine.status, mine), true);
+});
+
+test('a capped snapshot is refused: a duplicate marker beyond the cap cannot pass as unique', () => {
+  const row = text => ({tag: 'span', text, leaf: true, x: 16, y: 16, width: 10, height: 10, visible: true});
+  const rows = [row('Loka Sample'), ...Array(2047).fill(row('filler'))];
+  const expected = {kind: 'module', status: 'Loka: Running', id: 'LokaHelloWeb', offset: 16};
+  assert.equal(webviewMatches({text: '', scripts: 1, total: 2048, rows}, 'Loka: Running', expected), true);
+  // Same visible rows, but the page had more elements than the snapshot carries (e.g. a second marker at 2049).
+  assert.equal(webviewMatches({text: '', scripts: 1, total: 2050, rows}, 'Loka: Running', expected), false);
+  const message = {kind: 'message', status: 'Loka: m', text: 'm'};
+  assert.equal(webviewMatches({text: 'm', scripts: 0, total: 1, rows: [row('x')]}, 'Loka: m', message), true);
+  assert.equal(webviewMatches({text: 'm', scripts: 0, total: 3000, rows: Array(2048).fill(row('x'))}, 'Loka: m', message), false);
 });
