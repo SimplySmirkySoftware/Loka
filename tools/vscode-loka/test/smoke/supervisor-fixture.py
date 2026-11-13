@@ -8,6 +8,7 @@ import select
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import supervisor
 
@@ -49,6 +50,10 @@ elif mode == 'payload':
         time.sleep(60)
     sys.exit(0)
 elif mode == 'inner':
+    # Negative controls can intentionally retain their tree. The outer production
+    # supervisor removes it only after collecting every fixture descendant.
+    supervisor.create_run_root = lambda: Path(tempfile.mkdtemp(
+        prefix='inner-', dir=os.environ['LOKA_SMOKE_RUN_ROOT']))
     if variant in ('a', 'b'):
         supervisor.enable_subreaper = lambda: None
     if variant == 'b':
