@@ -12,14 +12,17 @@ namespace loka
     namespace detail
     {
       class TextDocumentPublisher;
+      class TextDocumentViewAccess;
     }
     namespace scene
     {
       class TextDocumentRegistration;
+      class TextViewClaim;
+      class TextDocumentViewContext;
       class IPlatformController;
       /** Membership twin of SceneFocus; documents publish independently, not through one focus edge.
        * Retirement doors are teardown-only; traversal stays with trusted framework callers. */
-      class SceneTextDocuments : private MemberList<TextDocumentRegistration>
+      class SceneTextDocuments : private MemberList<TextDocumentRegistration>, private MemberList<TextViewClaim>
       {
       public:
         /** Receives rows while membership and traversal remain with the Scene. */
@@ -76,6 +79,8 @@ namespace loka
         Phase phase_;
         friend struct ::loka::app::testing::TextDocumentAccess;
         friend class Scene;
+        friend class TextDocumentViewContext;
+        friend class ::loka::app::detail::TextDocumentViewAccess;
         friend class TextDocumentRegistration;
         friend class ::loka::app::detail::TextDocumentPublisher;
       };

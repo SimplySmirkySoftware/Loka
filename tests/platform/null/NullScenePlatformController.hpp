@@ -28,6 +28,14 @@ namespace loka
   } // namespace testing
 } // namespace loka
 
+class NullTextDocumentViewContext;
+namespace loka
+{
+  namespace app
+  {
+    class TextDocumentEditorNode;
+  }
+} // namespace loka
 class NullButtonContext;
 class NullEditTextContext;
 class NullScrollBarContext;
@@ -165,6 +173,70 @@ public:
   }
   virtual ~NullScenePlatformController();
   bool handleEditCommand(loka::app::EditVerb verb);
+  NullTextDocumentViewContext *createTextViewContext(loka::app::TextDocumentEditorNode &node);
+  virtual bool attachTextView(loka::app::scene::TextStoreRow &,
+                              loka::app::scene::NodeContext &,
+                              const loka::app::TextViewPresentation &);
+  virtual void detachTextView(loka::app::scene::TextStoreRow &);
+  virtual void applyTextViewPresentation(loka::app::scene::TextStoreRow &, const loka::app::TextViewPresentation &);
+  /** Null-only call evidence; no production observability surface. */
+  struct TextViewCall
+  {
+    enum Kind
+    {
+      ATTACH,
+      DETACH,
+      PRESENT,
+      TRANSFER
+    };
+    TextViewCall()
+        : kind(ATTACH),
+          row(0),
+          borrowed(false)
+    {
+    }
+    TextViewCall(Kind k, loka::app::scene::TextStoreRow &r, bool b)
+        : kind(k),
+          row(&r),
+          borrowed(b)
+    {
+    }
+    Kind kind;
+    const loka::app::scene::TextStoreRow *row;
+    bool borrowed;
+  };
+  /** Bounded fixture evidence: recording detach must not allocate. */
+  class TextViewCalls
+  {
+  public:
+    TextViewCalls()
+        : count_(0)
+    {
+    }
+    void push_back(const TextViewCall &call)
+    {
+      assert(this->count_ < capacity);
+      if (this->count_ < capacity)
+        this->entries_[this->count_++] = call;
+    }
+    std::size_t size() const
+    {
+      return this->count_;
+    }
+    const TextViewCall &operator[](std::size_t index) const
+    {
+      assert(index < this->count_);
+      return this->entries_[index];
+    }
+
+  private:
+    enum
+    {
+      capacity = 128
+    };
+    TextViewCall entries_[capacity];
+    unsigned count_;
+  } textViewCalls;
   virtual bool readNativeFocus(loka::app::scene::NodeContext *&out)
   {
     loka::app::FocusParticipant *row =
