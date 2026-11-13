@@ -625,7 +625,7 @@ namespace loka
 
       static const Win32AttributedTextTable &table(const Win32AttributedTextContext &context)
       {
-        return context.table_;
+        return context.links_.table();
       }
       static bool hasNode(const Win32AttributedTextContext &context)
       {
@@ -796,9 +796,11 @@ void testWin32AttributedTextPerRunProjection()
     }
     const PaintQuery query = {Win32RetirableContext::paintScope(), PLACEMENT_ELIGIBLE};
     LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_EXACT);
+    // A successful partial repaint of the same value at the same seat keeps the
+    // known presentation; a partial paint never establishes it (host pins).
     IntersectClipRect(dc, 0, 0, 10, 10);
     AttributedAccess::draw(*context, dc, rect);
-    LOKA_VERIFY(!AttributedAccess::known(*context));
+    LOKA_VERIFY(AttributedAccess::known(*context));
     SelectClipRgn(dc, NULL);
     IntersectClipRect(dc, 0, 0, 400, 200);
     node.props = AttributedTextProps(AttributedString());

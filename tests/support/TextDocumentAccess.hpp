@@ -66,6 +66,18 @@ namespace loka
         {
           return store(document)->commitProbe_.calls;
         }
+        static scene::PostResult postSpliceDirect(TextDocument &document, const TextSplice &splice)
+        {
+          return document.splice_.post(splice);
+        }
+        static unsigned spliceRing(const TextDocument &document)
+        {
+          return document.splice_.pending();
+        }
+        static bool splicePending(const TextDocument &document)
+        {
+          return !document.splice_.state()->get().isNone();
+        }
         static bool pending(const TextDocument &document)
         {
           return !document.request_.get().isNone();

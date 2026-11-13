@@ -3,6 +3,7 @@
 
 #include "app/scene/Node.hpp"
 #include "app/text/TextStore.hpp"
+#include "app/text/TextSplice.hpp"
 #include "app/text/TextStoreSource.hpp"
 #include "app/scene/projection/PlatformNodeHandler.hpp"
 #include "app/scene/boundary/BoundaryApplyInfo.hpp"
@@ -187,6 +188,24 @@ namespace loka
         virtual bool applyTextRequest(TextStoreRow &, unsigned long)
         {
           return false;
+        }
+        /** Validate ordered, in-body, canonical endpoints and native integer widths in
+            every build; invalid ranges refuse RANGE without changes. Complete all fallible
+            conversion, representability, overflow and capacity checks before changing
+            body or selection. Refusal preserves body, selection, undo and pending marks;
+            native veto returns UNAVAILABLE. Rails unable to guarantee this keep the default.
+            Replace the selected range and collapse selection to the inserted placement.
+            Consume all marks produced inside this door. OK returns an unchanged, unmarked
+            reading with range [nativeFrom, nativeFrom + inserted native length], removed
+            length nativeTo - nativeFrom, and caret == anchor at the native placement.
+            Rails with native undo record one editing step; rails without undo are exempt.
+            Called at most once per document completion, walking only this store's body
+            and inserted source. Unexpected partial failure asserts in lifecycle audit;
+            release returns ALLOCATION with marks intact for kernel reconciliation. */
+        virtual TextSpliceResult
+        applyTextSplice(TextStoreRow &, unsigned long, unsigned long, TextStoreSource &, TextStoreReading &)
+        {
+          return TEXT_SPLICE_UNAVAILABLE;
         }
         /** Both native ends must be canonical. Progress emits maximal whole UTF-8
             units, normalizing CR, LF and CRLF to LF. Every other result leaves

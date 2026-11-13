@@ -112,8 +112,26 @@ typedef void (*FARPROC)();
 typedef const wchar_t *LPCWSTR;
 typedef RECT *LPRECT;
 struct POINT { int x, y; };
+struct MSG
+{
+};
+struct ACCEL
+{
+};
+typedef void *HACCEL;
+struct SCROLLINFO
+{
+};
+#define WM_LBUTTONDOWN 0x0201
+#define WM_LBUTTONUP 0x0202
+#define WM_CAPTURECHANGED 0x0215
+#define WM_CANCELMODE 0x001f
 struct HostWindow;
 typedef HostWindow *HWND;
+HWND SetCapture(HWND);
+BOOL ReleaseCapture();
+HWND GetCapture();
+HWND WindowFromPoint(POINT);
 #define CALLBACK
 #define WINAPI
 typedef LRESULT (*WNDPROC)(HWND, UINT, WPARAM, LPARAM);

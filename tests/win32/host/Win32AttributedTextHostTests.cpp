@@ -135,6 +135,7 @@ BOOL ExtTextOutW(HDC dc, int x, int y, UINT flags, const RECT *clip, const WCHAR
 #include "Win32FittingPins.inc"
 #include "Win32MeasurementPins.inc"
 #include "Win32LinkHitPins.inc"
+#include "Win32LinkPressPins.inc"
 namespace loka
 {
   namespace testing
@@ -346,6 +347,12 @@ static void pinStaticTextColor()
 
 int main(int argc, char **argv)
 {
+  pinLinkPressPartialPresentation();
+  pinLinkPressProcedure();
+  pinLinkPressHistory();
+  pinLinkPressDoor2();
+  pinLinkPressContinuations();
+  LOKA_VERIFY(win32_host::coverQueries == 0);
   if (argc == 2 && std::strcmp(argv[1], "link-run") == 0)
   {
     pinLinkHitRunCoverage();

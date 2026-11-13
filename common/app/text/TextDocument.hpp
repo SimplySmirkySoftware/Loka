@@ -1,6 +1,6 @@
 #ifndef LOKA_APP_TEXT_DOCUMENT_HPP
 #define LOKA_APP_TEXT_DOCUMENT_HPP
-#include "app/text/TextReplacement.hpp"
+#include "app/text/TextSplice.hpp"
 #include "app/scene/TwinLink.hpp"
 namespace loka
 {
@@ -43,6 +43,14 @@ namespace loka
       {
         return this->replacement_.reply().state();
       }
+      /** One pending splice; publication refuses admission. Cancellation delivers no
+          reply. Positions must belong to this document (caller's precondition). */
+      scene::PostResult splice(const TextSplice &value);
+      /** Last taken splice result; receipts retain no body bytes. */
+      core::State<scene::Reply<TextSplice> > *spliceReply() const
+      {
+        return this->splice_.reply().state();
+      }
       bool queryLength(unsigned long &out) const;
       bool queryLineCount(unsigned long &out) const;
       bool queryLineRange(unsigned long line, TextPosition &start, TextPosition &end) const;
@@ -70,6 +78,7 @@ namespace loka
       scene::NodeState<TextDocumentFact> fact_;
       scene::Request<TextPosition> request_;
       scene::RequestWithReply<TextReplacement> replacement_;
+      scene::RequestQueue<TextSplice, 1> splice_;
       scene::TwinLink<TextDocument, scene::TextDocumentRegistration> registration_;
       friend class TextReader;
       friend class scene::ComposableNode;

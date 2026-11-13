@@ -27,4 +27,5 @@ void testTextCommitSettlesBeforeQuitReservation();
 void testTextCommitObservationHook();
 void testTextPublicationContinuesAfterWithdrawal();
 void testTextWholeReplacementContracts();
+void testTextDocumentSpliceContracts();
 #endif

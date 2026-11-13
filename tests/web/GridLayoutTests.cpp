@@ -275,7 +275,7 @@ namespace
                                        webtest::GRID_NATURAL,
                                        webtest::GRID_SCROLL,
                                        webtest::GRID_PADDED};
-    const int firstY[] = {0, 0, 23, 23, 0, 5};
+    const int firstY[] = {0, 9, 23, 23, 0, 5};
     const int secondY[] = {40, 40, 51, 23, 40, 45};
     for (unsigned i = 0; i < 6; ++i)
     {
@@ -283,11 +283,11 @@ namespace
       webtest::gridCell() = cells[i];
       WebSession session;
       LOKA_VERIFY(session.start(&webtest::CreateGrid, 0) == WebSession::STARTED);
-      const int inset = i == 5 ? 5 : 0;
+      const int inset = i == 5 ? 5 : i == 1 ? 9 : 0;
       LOKA_VERIFY(Label("a").x == inset && Label("a").y == firstY[i]);
-      LOKA_VERIFY(Label("b").x == inset + 50 && Label("b").y == firstY[i]);
+      LOKA_VERIFY(Label("b").x == inset + (i == 1 ? 41 : 50) && Label("b").y == firstY[i]);
       LOKA_VERIFY(Label("c").y == secondY[i] && Label("d").y == secondY[i]);
-      LOKA_VERIFY(Label("a").width == 50 && Label("d").height == 23);
+      LOKA_VERIFY(Label("a").width == (i == 1 ? 41 : 50) && Label("d").height == 23);
       if (i == 2 || i == 3)
         LOKA_VERIFY(Label("after").y == secondY[i] + 23);
       if (i == 4)

@@ -1485,6 +1485,11 @@ ASCII spaces and tabs through the shared breaker, while macOS lets AppKit
 choose its word breaks, so hyphens and non-Latin scripts can wrap differently
 across rails.
 
+On Win32, pressing and releasing over the same link run activates it: the
+app's `activatedLink` box receives the target. Links have no hover or pressed
+look. A modal or another window taking the mouse cancels a pending press.
+Link activation on the other rails follows in separate work.
+
 On Win32, plain `Text` with wrap=NONE, CLIP truncation, and CENTER/RIGHT alignment
 can wrap overflowing words inside its one-line-high native control; ellipsis uses
 the native single-line mode and takes precedence over wrapping. Wrapped plain

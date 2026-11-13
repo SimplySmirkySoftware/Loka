@@ -94,9 +94,9 @@ namespace
     LOKA_VERIFY(ctx != 0);
 
     const webtest::Resource &row = webtest::resources[token];
-    LOKA_VERIFY(row.x == 10 && row.y == 10 && row.width == 200 && row.height == 100);
+    LOKA_VERIFY(row.x == 19 && row.y == 19 && row.width == 182 && row.height == 82);
     LOKA_VERIFY(row.documentWidth == 400 && row.extent > 100);
-    LOKA_VERIFY(body.viewport.get() == loka::core::Frame(0, 23, 185, 88));
+    LOKA_VERIFY(body.viewport.get() == loka::core::Frame(0, 23, 167, 70));
     LOKA_VERIFY(row.originY == 30);
     for (std::map<uint32_t, webtest::Resource>::const_iterator i = webtest::resources.begin();
          i != webtest::resources.end();
@@ -156,7 +156,7 @@ namespace
     webtest::appliedX = webtest::appliedY = -1;
     session.wake(IMMEDIATE, 1);
     LOKA_VERIFY(session.scroll(token, 9999, 9999, 2) == WebSession::ACCEPTED);
-    LOKA_VERIFY(body.viewport.get().x == 215 && body.viewport.get().y == row.extent - 88 - 7);
+    LOKA_VERIFY(body.viewport.get().x == 233 && body.viewport.get().y == row.extent - 70 - 7);
     {
       loka::core::Operation turn;
       body.request.set(ScrollTarget::Top());
@@ -202,7 +202,7 @@ namespace
       body.width.set(0);
     }
     session.wake(IMMEDIATE, 4);
-    LOKA_VERIFY(row.documentWidth == 185 && body.viewport.get().height == 100);
+    LOKA_VERIFY(row.documentWidth == 167 && body.viewport.get().height == 82);
     // A failed traversal preserves the completed native metrics and drops the reached request.
     const int oldExtent = row.extent;
     webtest::failMeasure = -1;
@@ -222,7 +222,7 @@ namespace
       changedSeat.height = 80;
       Access::scrollVisit(*ctx, changedSeat);
       LOKA_VERIFY(ctx->apply(loka::core::Frame(0, 20, 0, 0)));
-      LOKA_VERIFY(row.x == 10 && row.y == 10 && row.width == 200 && row.height == 100);
+      LOKA_VERIFY(row.x == 19 && row.y == 19 && row.width == 182 && row.height == 82);
     }
     webtest::failMeasure = 0;
     session.wake(IMMEDIATE, 6);
@@ -230,11 +230,11 @@ namespace
     webtest::gutterVertical = 9;
     webtest::gutterHorizontal = 8;
     LOKA_VERIFY(session.resize(root, 220, 120, 6.1) == WebSession::ACCEPTED);
-    LOKA_VERIFY(body.viewport.get().width == 191);
+    LOKA_VERIFY(body.viewport.get().width == 173);
     webtest::geometryMeasurable = false;
     webtest::gutterVertical = 2;
     LOKA_VERIFY(session.resize(root, 220, 120, 6.2) == WebSession::ACCEPTED);
-    LOKA_VERIFY(body.viewport.get().width == 191);
+    LOKA_VERIFY(body.viewport.get().width == 173);
     webtest::geometryMeasurable = true;
     LOKA_VERIFY(session.resize(root, 220, 20, 6.3) == WebSession::ACCEPTED);
     LOKA_VERIFY(body.viewport.get().height == 0 && row.extent > 0);
@@ -314,7 +314,7 @@ namespace
                           ->props.viewport_.state()
                           ->get()
                           .width
-                      == 193);
+                      == 175);
         }
       LOKA_VERIFY(scrollers == 2);
       {
@@ -552,7 +552,7 @@ namespace
     int width = 320, height = 200;
     LOKA_VERIFY(root.create(session.routes(), session.tokens(), ROOT, 0, width, height));
     {
-      WebScenePlatformController controller(session, root.token(), width, height);
+      WebScenePlatformController controller(session, root.token(), width, height, 0);
       EditTextNode edit((EditTextProps()));
       TextEditorNode editor((TextEditorProps()));
       PopupMenuNode popup((PopupMenuProps()));
@@ -594,7 +594,7 @@ namespace
     int width = 320, height = 200;
     LOKA_VERIFY(root.create(session.routes(), session.tokens(), ROOT, 0, width, height));
     {
-      WebScenePlatformController controller(session, root.token(), width, height);
+      WebScenePlatformController controller(session, root.token(), width, height, 0);
       loka::app::ButtonNode node(loka::app::Button("Test").props);
       loka::app::scene::LayoutState state;
       webtest::failCreate = 1;
@@ -779,7 +779,10 @@ namespace
       RosterConfig &self = *static_cast<RosterConfig *>(data);
       if (document.value < self.limit)
         self.roster.open(Document(document.value + 1));
-      return WindowProps().size(320, 200).scene(loka::app::scene::Boundary<webtest::Counter>());
+      return WindowProps()
+          .size(320, 200)
+          .contentMargin(document.value == 0 ? loka::app::layout::LayoutGap() : loka::app::layout::LayoutGap::of(23))
+          .scene(loka::app::scene::Boundary<webtest::Counter>());
     }
     static void Asked(void *data)
     {
@@ -936,6 +939,107 @@ namespace
     LOKA_VERIFY(false && "admission must precede Config construction");
     return 0;
   }
+  loka::app::layout::LayoutGap marginInput;
+  class MarginBody : public loka::app::scene::BoundaryNodeFor<MarginBody>
+  {
+  public:
+    loka::app::scene::NodeState<loka::core::Frame> viewport;
+    static MarginBody *current;
+    explicit MarginBody(const loka::app::scene::BoundaryPropsFor<MarginBody> &props)
+        : loka::app::scene::BoundaryNodeFor<MarginBody>(props)
+    {
+      current = this;
+      this->state(this->viewport, loka::core::Frame());
+    }
+    virtual void composeNode(loka::app::scene::NodeComposition &c)
+    {
+      using namespace loka::app;
+      c.declare(ScrollView(this->viewport)
+                << (Box().width(webtest::gutterVertical ? 200 : 210).height(150) << Text("local")));
+    }
+  };
+  MarginBody *MarginBody::current = 0;
+  class MarginConfig : public AppConfigurable
+  {
+  public:
+    explicit MarginConfig(PlatformContext *platform)
+        : AppConfigurable(platform)
+    {
+    }
+    virtual void compose(AppComposition &c)
+    {
+      c << WindowDef(
+          WindowProps().size(220, 120).contentMargin(marginInput).scene(loka::app::scene::Boundary<MarginBody>()));
+    }
+  };
+  AppConfigurable *CreateMargin(PlatformContext *platform)
+  {
+    return new MarginConfig(platform);
+  }
+  void VerifyOffer(WebWindow &window, int margin, int width, int height)
+  {
+    const loka::app::scene::LayoutState &offer = Access::rootOffer(*window.controller());
+    LOKA_VERIFY(offer.x == margin && offer.y == margin);
+    LOKA_VERIFY(offer.width == (width < 2 * margin ? 0 : width - 2 * margin));
+    LOKA_VERIFY(offer.height == (height < 2 * margin ? 0 : height - 2 * margin));
+    LOKA_VERIFY(window.nativeFrame().get() == loka::core::Frame(0, 0, width, height));
+  }
+  void RootMarginTest()
+  {
+    const int defaults[] = {9, 10, 16, 12};
+    for (int skin = 0; skin < 4; ++skin)
+      for (int explicitValue = 0; explicitValue < 3; ++explicitValue)
+        for (int gutter = 0; gutter < 2; ++gutter)
+        {
+          webtest::Fixture fixture;
+          Reset(fixture);
+          webtest::skinSelection = skin;
+          webtest::gutterVertical = gutter ? 15 : 0;
+          webtest::gutterHorizontal = gutter ? 12 : 0;
+          marginInput = explicitValue == 0 ? loka::app::layout::LayoutGap()
+                                           : loka::app::layout::LayoutGap::of(explicitValue == 1 ? 0 : 23);
+          const int margin = explicitValue == 0 ? defaults[skin] : explicitValue == 1 ? 0 : 23;
+          WebSession session;
+          LOKA_VERIFY(session.start(&CreateMargin, 0) == WebSession::STARTED);
+          const uint32_t root = webtest::token(ROOT);
+          WebWindow &window = *session.routes().find(root)->root;
+          VerifyOffer(window, margin, 220, 120);
+          const webtest::Resource &scroll = webtest::resources[webtest::token(SCROLL)];
+          const int seatWidth = 220 - 2 * margin, seatHeight = 120 - 2 * margin;
+          const int viewportWidth = seatWidth - webtest::gutterVertical;
+          const int contentWidth = gutter ? 200 : 210;
+          const bool horizontal = contentWidth > viewportWidth;
+          LOKA_VERIFY(scroll.x == margin && scroll.y == margin && scroll.width == seatWidth
+                      && scroll.height == seatHeight);
+          LOKA_VERIFY(scroll.documentWidth == (viewportWidth > contentWidth ? viewportWidth : contentWidth)
+                      && scroll.extent == 150);
+          LOKA_VERIFY(
+              MarginBody::current->viewport.get()
+              == loka::core::Frame(0, 0, viewportWidth, seatHeight - (horizontal ? webtest::gutterHorizontal : 0)));
+          const webtest::Resource &text = webtest::resources[webtest::token(TEXT)];
+          LOKA_VERIFY(text.x == 0 && text.y == 0 && text.parent == webtest::token(SCROLL));
+          LOKA_VERIFY(session.scroll(webtest::token(SCROLL), 999, 999, 1) == WebSession::ACCEPTED);
+          LOKA_VERIFY(scroll.originX == scroll.documentWidth - viewportWidth);
+          LOKA_VERIFY(scroll.originY == 150 - MarginBody::current->viewport.get().height);
+          LOKA_VERIFY(session.resize(root, 173, 91, 2) == WebSession::ACCEPTED);
+          VerifyOffer(window, margin, 173, 91);
+          WebScenePlatformController *controller = window.controller();
+          {
+            loka::core::Operation turn;
+            LOKA_VERIFY(window.sceneManager()->commitTransaction(
+                0, new loka::app::scene::Scene(loka::app::scene::Boundary<MarginBody>().clone())));
+          }
+          session.wake(IMMEDIATE, 3);
+          LOKA_VERIFY(window.controller() == controller);
+          VerifyOffer(window, margin, 173, 91);
+          LOKA_VERIFY(webtest::resources[webtest::token(SCROLL)].height == 91 - 2 * margin);
+          LOKA_VERIFY(session.resize(root, 7, 11, 4) == WebSession::ACCEPTED);
+          VerifyOffer(window, margin, 7, 11);
+          Shutdown(session);
+        }
+    std::puts(
+        "RootMargin defaults/zero/23, axes/gutters/local projection, resize/replacement/clamp/nativeFrame passed");
+  }
   void SkinStartTest()
   {
     webtest::Fixture fixture;
@@ -982,6 +1086,7 @@ namespace
       WebWindow *window = selected.routes().find(i->first)->root;
       LOKA_VERIFY(&window->controller()->spacing() == &selected.spacing());
       LOKA_VERIFY(window->controller()->spacing().standardWindowMargin() == 16);
+      VerifyOffer(*window, roots == 1 ? 16 : 23, 320, 200);
     }
     LOKA_VERIFY(roots > 1);
     Shutdown(selected);
@@ -1184,6 +1289,7 @@ int main(int argc, char **argv)
     std::fflush(stdout);                                                                                               \
     name();                                                                                                            \
   } while (0)
+  RUN(RootMarginTest);
   RUN(WebCellTests);
   RUN(WebGridLayoutTests);
   RUN(WebStackLayoutTests);
@@ -1211,6 +1317,7 @@ int main(int argc, char **argv)
   RUN(RootVisibilityTest);
   RUN(TwoRootTest);
 #undef RUN
-  std::puts("31 Web test groups passed (20 legacy, 6 projection, 1 scroll, 1 stack, 1 grid, 1 Cell, 1 skin)");
+  std::puts(
+      "32 Web test groups passed (20 legacy, 6 projection, 1 scroll, 1 stack, 1 grid, 1 Cell, 1 skin, 1 root margin)");
   return 0;
 }

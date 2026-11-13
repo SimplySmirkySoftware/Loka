@@ -364,3 +364,51 @@ Revisions advance at most once per completion. Advancing from `ULONG_MAX` is a
 contract violation diagnosed by a debug assertion. Revision wrap is outside the
 v1 contract; release builds do not add a hot-path saturation check. Even a 32-bit
 revision takes over a year to exhaust at 100 advancing completions per second.
+
+
+### Partial edits (page 3b)
+
+`document(doc)` also declares a private `RequestQueue<TextSplice, 1>`. The only
+app admission door is `doc.splice(value)`: NONE and severed declarations are
+INVALID; publication, an occupied seat, or any ring entry is QUEUE_FULL. This
+always-on gate keeps the ring empty. The publisher's private take door asserts
+that invariant and refuses to take a nonempty ring in release builds. A splice's
+positions must belong to the same document; positions carry revisions, not
+identity. `spliceReply()` is read-only and its receipts retain no Blob.
+
+Completion reads the store, takes replacement, takes splice, considers caret,
+then publishes the fact, replacement reply, and splice reply in that order.
+Each reply reacquires the document link immediately before writing, so a direct
+observer can cancel subsequent replies by withdrawing the declaration. Awaited
+stores and command refresh retain splice requests. A landed replacement makes
+the splice STALE; a refused replacement may still permit the splice. Refused or
+unreadable stores answer UNAVAILABLE, composition answers COMPOSING and retains
+caret, and positions are checked against the previous revision plus the first
+reading's change. Old positions answer STALE before entering the rail.
+
+The rail's `applyTextSplice` validates ordered, canonical, representable native
+endpoints in every build. All fallible conversion, allocation, overflow and
+capacity checks precede any body or selection change. Refusal preserves body,
+selection, undo and marks. Native veto is UNAVAILABLE. Success collapses selection
+to the inserted placement, consumes its own notification marks, and returns an
+unchanged, unmarked reading with the inserted native range and selection. Rails
+with undo record one editing step; rails without undo are exempt. The default
+refuses UNAVAILABLE. Native rail implementations remain separate store-row work.
+
+Successful splice uses the door's reading and range directly, advances revision
+once, drops an old caret request and preserves origin. Placement clamping is
+reported as CLAMPED. RANGE, NOT_REPRESENTABLE, ALLOCATION, CAPACITY and UNAVAILABLE
+refusals preserve ordinary caret and first/second-reading behavior. A rail that
+unexpectedly changes the body before ALLOCATION has violated the atomicity
+contract: lifecycle audit diagnoses it; release leaves marks intact. Only for
+ALLOCATION does the publisher peek for an unreconciled change. If present, it
+advances the revision once and drops stale caret; if rereading also fails, caret,
+anchor and changed range are absent until a later reading can establish them.
+
+Cancellation through withdrawal, document destruction or Scene replacement is
+synchronous and produces no reply. Pending Blob ownership ends at the declaring
+Node state's reclaim, not at detach. Taken values last only through publication;
+receipts keep no bytes. Direct observers cannot post during publication. Deferred
+observers may post for the next completion, with no automatic wake-up. Automatic
+Enter/indent behavior needs a separate input-command entrance (Q3b-E); batching
+and sealed-Blob overloads are also outside this page.
