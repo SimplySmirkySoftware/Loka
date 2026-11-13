@@ -896,7 +896,7 @@ namespace loka
          * (TextDocumentRegistration) can name it as a base: GCC 4.0.1 and 4.2
          * do not apply friendship to a base-specifier and refuse the protected
          * name there. Registering a participant still goes through the
-         * protected participants_ ledger, so naming the type grants nothing. */
+         * private participants_ ledger, so naming the type grants nothing. */
         struct Participant
         {
           virtual ~Participant() {}
@@ -1114,6 +1114,7 @@ namespace loka
           }
         }
 
+      private:
         void attachParticipants(Scene &scene)
         {
           for (size_t i = 0; i < this->participants_.size(); ++i)
@@ -1133,6 +1134,7 @@ namespace loka
           this->participants_.clear();
         }
 
+      protected:
         void enrollParticipant(Participant &entry) { this->participants_.push_back(&entry); }
         void unlinkParticipant(Participant &entry)
         {
@@ -1200,6 +1202,8 @@ namespace loka
         AttachedContext attached_;
         friend class ComposableNodeTestAccess;
         std::vector<CallbackEntryBase *> callbacks_;
+
+      private:
         std::vector<Participant *> participants_;
       };
 
