@@ -139,6 +139,125 @@ namespace
   {
     ++*static_cast<int *>(data);
   }
+  void pumpClickMessage()
+  {
+    MSG message;
+    if (PeekMessageW(&message, 0, 0, 0, PM_REMOVE))
+    {
+      TranslateMessage(&message);
+      DispatchMessageW(&message);
+    }
+    else
+      Sleep(1);
+  }
+
+  // Deliberate test-local twin of Win32LinkPressTests' WH_MOUSE/SendInput
+  // probe: observe all three recipients, with cleanup owned by this scope.
+  class ClipMouseProbe
+  {
+    HWND targets_[3];
+    unsigned downs_[3], ups_[3];
+    unsigned others_;
+    POINT savedCursor_;
+    HHOOK hook_;
+    static ClipMouseProbe *active_;
+
+    static LRESULT CALLBACK mouseHook(int code, WPARAM message, LPARAM param)
+    {
+      if (code == HC_ACTION && active_)
+      {
+        const HWND target = reinterpret_cast<MOUSEHOOKSTRUCT *>(param)->hwnd;
+        if ((message == WM_LBUTTONDOWN || message == WM_LBUTTONUP) && target != active_->targets_[0]
+            && target != active_->targets_[1] && target != active_->targets_[2])
+          ++active_->others_;
+        for (unsigned i = 0; i < 3; ++i)
+          if (target == active_->targets_[i])
+          {
+            if (message == WM_LBUTTONDOWN)
+              ++active_->downs_[i];
+            if (message == WM_LBUTTONUP)
+              ++active_->ups_[i];
+          }
+      }
+      return CallNextHookEx(0, code, message, param);
+    }
+    ClipMouseProbe(const ClipMouseProbe &);
+    ClipMouseProbe &operator=(const ClipMouseProbe &);
+
+  public:
+    ClipMouseProbe(HWND parent, HWND clip, HWND button)
+    {
+      this->targets_[0] = parent;
+      this->targets_[1] = clip;
+      this->targets_[2] = button;
+      ZeroMemory(this->downs_, sizeof(this->downs_));
+      ZeroMemory(this->ups_, sizeof(this->ups_));
+      this->others_ = 0;
+      LOKA_VERIFY(GetCursorPos(&this->savedCursor_));
+      LOKA_VERIFY(!active_);
+      active_ = this;
+      this->hook_ = SetWindowsHookExW(WH_MOUSE, mouseHook, 0, GetCurrentThreadId());
+      LOKA_VERIFY(this->hook_);
+    }
+    ~ClipMouseProbe()
+    {
+      if (GetCapture())
+        LOKA_VERIFY(ReleaseCapture());
+      LOKA_VERIFY(UnhookWindowsHookEx(this->hook_));
+      active_ = 0;
+      LOKA_VERIFY(SetCursorPos(this->savedCursor_.x, this->savedCursor_.y));
+    }
+    // Returns false when no window of this thread retrieved the input in
+    // three attempts: the guest's foreground can drop to none between
+    // taking it and clicking, and then the input never reaches this thread.
+    // A click that arrives anywhere is checked exactly, so a misrouted
+    // click (the clip window, or a window outside the three) stays red.
+    bool clickAt(HWND root, const POINT &point, HWND expected)
+    {
+      for (int attempt = 0; attempt < 3; ++attempt)
+      {
+        ZeroMemory(this->downs_, sizeof(this->downs_));
+        ZeroMemory(this->ups_, sizeof(this->ups_));
+        this->others_ = 0;
+        if (GetCapture())
+          LOKA_VERIFY(ReleaseCapture());
+        SetForegroundWindow(root);
+        LOKA_VERIFY(SetWindowPos(root, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE));
+        LOKA_VERIFY(SetCursorPos(point.x, point.y));
+        INPUT input[2];
+        ZeroMemory(input, sizeof(input));
+        input[0].type = INPUT_MOUSE;
+        input[0].mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+        input[1].type = INPUT_MOUSE;
+        input[1].mi.dwFlags = MOUSEEVENTF_LEFTUP;
+        LOKA_VERIFY(SendInput(2, input, sizeof(INPUT)) == 2);
+        const DWORD start = GetTickCount();
+        // Await any observed up so misrouting fails the recipient assertion,
+        // not just a timeout. Both edges are injected before waiting.
+        while (this->ups_[0] + this->ups_[1] + this->ups_[2] + this->others_ == 0 && GetTickCount() - start < 5000)
+          pumpClickMessage();
+        if (GetCapture())
+          LOKA_VERIFY(ReleaseCapture());
+        if (this->downs_[0] + this->downs_[1] + this->downs_[2] + this->ups_[0] + this->ups_[1] + this->ups_[2]
+                + this->others_
+            == 0)
+        {
+          std::printf("[retry] real click: no window of this thread received the input (attempt %d)\n", attempt + 1);
+          continue;
+        }
+        LOKA_VERIFY(this->others_ == 0);
+        for (unsigned i = 0; i < 3; ++i)
+        {
+          const unsigned wanted = this->targets_[i] == expected ? 1u : 0u;
+          LOKA_VERIFY(this->downs_[i] == wanted);
+          LOKA_VERIFY(this->ups_[i] == wanted);
+        }
+        return true;
+      }
+      return false;
+    }
+  };
+  ClipMouseProbe *ClipMouseProbe::active_ = 0;
 } // namespace
 
 // Pins 2-8 are red on the base: the Win32 Box/Card arms ignore childClip_.
@@ -582,6 +701,61 @@ void testWin32ClipBoxEmptyAreaHitPassesThrough()
     // m4 (removing HTTRANSPARENT). WindowFromPoint tests same-thread hit routing.
     LOKA_VERIFY(WindowFromPoint(emptyPoint) == parent);
     LOKA_VERIFY(WindowFromPoint(buttonPoint) == buttonWindow);
+  }
+}
+
+void testWin32ClipBoxEmptyAreaRealClickPassesThrough()
+{
+  for (int insideScroll = 0; insideScroll < 2; ++insideScroll)
+  {
+    // Keep these seats and points identical to EmptyAreaHitPassesThrough.
+    Fixture f;
+    BoxNode *clip = box(160, 90);
+    // Buttons fill their offer; this unflagged seat leaves real empty space
+    // to the right of the one Button without adding another native parent.
+    BoxNode *buttonSeat = box(70, 0, false);
+    ButtonNode *button = new ButtonNode(ButtonProps().text("hit"));
+    buttonSeat->addChild(button);
+    clip->addChild(buttonSeat);
+    ScrollViewNode *scroll = 0;
+    if (insideScroll)
+    {
+      scroll = new ScrollViewNode((ScrollViewProps()));
+      scroll->addChild(clip);
+      f.tree = scroll;
+    }
+    else
+      f.tree = clip;
+    f.at();
+    HWND clipWindow = context(clip)->hwnd();
+    HWND parent = insideScroll ? child(native(scroll), L"LOKA_SCROLL_VIEW") : f.root();
+    HWND buttonWindow = child(clipWindow, L"Button");
+    LOKA_VERIFY(parent && buttonWindow == native(button));
+    LOKA_VERIFY(GetParent(clipWindow) == parent);
+    const RECT buttonRect = rect(buttonWindow);
+    RECT client;
+    LOKA_VERIFY(GetClientRect(clipWindow, &client));
+    LOKA_VERIFY(buttonRect.right < client.right && buttonRect.bottom > buttonRect.top);
+    POINT emptyPoint = {(buttonRect.right + client.right) / 2, (buttonRect.top + buttonRect.bottom) / 2};
+    POINT buttonPoint = {(buttonRect.left + buttonRect.right) / 2, (buttonRect.top + buttonRect.bottom) / 2};
+    LOKA_VERIFY(ClientToScreen(clipWindow, &emptyPoint));
+    LOKA_VERIFY(ClientToScreen(clipWindow, &buttonPoint));
+    ShowWindow(f.root(), SW_SHOW);
+    const BOOL requestedForeground = SetForegroundWindow(f.root());
+    const DWORD start = GetTickCount();
+    while (requestedForeground && GetForegroundWindow() != f.root() && GetTickCount() - start < 5000)
+      pumpClickMessage();
+    if (!requestedForeground || GetForegroundWindow() != f.root())
+    {
+      std::printf("[skip] real click: no foreground\n");
+      return;
+    }
+    ClipMouseProbe mouse(parent, clipWindow, buttonWindow);
+    if (!mouse.clickAt(f.root(), emptyPoint, parent) || !mouse.clickAt(f.root(), buttonPoint, buttonWindow))
+    {
+      std::printf("[skip] real click: input did not arrive in three attempts\n");
+      return;
+    }
   }
 }
 

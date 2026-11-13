@@ -20,6 +20,7 @@ void testWin32ClipBoxReservedContextWall();
 void testWin32ClipBoxNaturalHeightAndFirstChannelRefusal();
 
 void testWin32ClipBoxEmptyAreaHitPassesThrough();
+void testWin32ClipBoxEmptyAreaRealClickPassesThrough();
 void testWin32ClipBoxGroundStaysBelowUnits();
 
 #endif
