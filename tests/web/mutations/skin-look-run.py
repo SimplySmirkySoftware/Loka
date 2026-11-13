@@ -3,6 +3,9 @@
 
 Each mutant is compiled before its discriminator runs. Exact source bytes are
 restored in finally; the restored build and discriminator must pass as well.
+
+An interrupted run (SIGTERM) restores the source bytes only. Build children may
+still be writing outputs, so rebuild both presets before trusting the build tree.
 """
 import argparse
 import os
