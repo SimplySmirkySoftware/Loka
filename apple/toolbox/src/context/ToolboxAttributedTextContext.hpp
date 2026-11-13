@@ -42,6 +42,15 @@ public:
   virtual short layout(loka::app::scene::IPlatformController *controller, loka::app::scene::LayoutState &state);
   virtual void render(loka::app::scene::IPlatformController *controller);
 
+  /** Logical seat containment only; no measurement. */
+  bool containsPoint(Point local) const;
+  /** Complete native measurement before the callback-free eligibility question. */
+  ToolboxHitAnswer prepareLinkHit(Point local, ToolboxLinkHit &out) const;
+  /** Current attachment, placement, exact projection and presented value agree. */
+  bool queryEligibleRun(const ToolboxLinkHit &hit, loka::app::AttributedString::LinkRun &out) const;
+  /** Forward delivery without lending the node to the caller. */
+  bool writeActivatedLink(const loka::app::AttributedString::LinkRun &run);
+
 private:
   friend class loka::testing::ToolboxAttributedTextContextAccess;
   virtual void retireNativeProjection();

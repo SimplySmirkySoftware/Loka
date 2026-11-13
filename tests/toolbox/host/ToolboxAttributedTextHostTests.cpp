@@ -19,6 +19,8 @@ namespace loka
 {
   namespace testing
   {
+    using namespace loka::app;
+    using namespace loka::app::scene;
     class ToolboxAttributedTextContextAccess
     {
     public:
@@ -33,6 +35,72 @@ namespace loka
       static Rect paintRect(const ToolboxAttributedTextContext &c)
       {
         return c.paintRect_;
+      }
+      static void placement(ToolboxAttributedTextContext &c, bool present)
+      {
+        if (present)
+          c.completePlacement();
+        else
+          c.invalidatePlacement();
+      }
+      static void presentation(ToolboxAttributedTextContext &c,
+                               const AttributedString &value,
+                               bool known = true,
+                               bool foreign = false)
+      {
+        PaintScope scope = ToolboxPaintScope();
+        if (foreign)
+          ++scope.ownerKey;
+        if (known)
+          c.presented_.commit(value, scope);
+        else
+          c.presented_.invalidate();
+      }
+      static void clearTable(ToolboxAttributedTextContext &c)
+      {
+        c.table_.clear();
+      }
+      static void move(ToolboxAttributedTextContext &c)
+      {
+        ++c.rect_.left;
+      }
+      static void currentContext(AttributedTextNode &node, NodeContext *context)
+      {
+        node.context = context;
+      }
+      static unsigned predicates(const ToolboxAttributedTextContext &c, const ToolboxLinkHit &hit)
+      {
+        unsigned bits = 0;
+        if (IsAttachedCurrentContext(&c))
+          bits |= 1u;
+        if (c.node_)
+          bits |= 2u;
+        if (c.node_ && c.node_->props.text_)
+          bits |= 4u;
+        if (c.placementPresent())
+          bits |= 8u;
+        if (c.table_.valid())
+          bits |= 16u;
+        if (c.presented_.isKnown())
+          bits |= 32u;
+        if (!c.presented_.isKnown() || c.presented_.scope() == ToolboxPaintScope())
+          bits |= 64u;
+        if (!c.presented_.isKnown() || !c.table_.valid() || c.presented_.value().hasSameSegmentValues(c.table_.value()))
+          bits |= 128u;
+        if (!c.table_.valid() || !c.node_ || !c.node_->props.text_
+            || c.table_.value().hasSameSegmentValues(c.node_->props.text_->get()))
+          bits |= 256u;
+        if (hit.seat.left == c.rect_.left && hit.seat.top == c.rect_.top && hit.seat.right == c.rect_.right
+            && hit.seat.bottom == c.rect_.bottom)
+          bits |= 512u;
+        AttributedString::LinkRun run;
+        const bool linked =
+            c.node_ && c.node_->props.text_ && c.node_->props.text_->get().queryLinkRun(hit.firstSegment, run);
+        if (!c.node_ || !c.node_->props.text_ || linked)
+          bits |= 1024u;
+        if (!linked || run.last >= hit.lastSegment)
+          bits |= 2048u;
+        return bits;
       }
       static bool known(const ToolboxAttributedTextContext &c)
       {
@@ -501,6 +569,8 @@ namespace
 
 #include "ToolboxTextMeasurementPins.hpp"
 #include "ToolboxAttributedSpanPins.hpp"
+#include "ToolboxLinkDrawCharacterization.hpp"
+#include "ToolboxLinkHitPins.hpp"
 #include "ToolboxScrollViewPins.hpp"
 #include "ToolboxToolbarPins.hpp"
 
@@ -583,6 +653,21 @@ namespace
 
 int main(int argc, char **argv)
 {
+  if (argc == 2 && std::string(argv[1]) == "link-hit")
+  {
+    LinkHitPins();
+    return 0;
+  }
+  if (argc == 2 && std::string(argv[1]) == "link-eligibility")
+  {
+    LinkEligibilityPins();
+    return 0;
+  }
+  if (argc == 2 && std::string(argv[1]) == "link-draw")
+  {
+    LinkDrawCharacterization();
+    return 0;
+  }
   if (argc == 2 && std::string(argv[1]) == "span-links")
   {
     SpanLinks();

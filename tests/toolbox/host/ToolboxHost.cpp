@@ -28,6 +28,7 @@ namespace toolbox_host
   std::vector<Fill> fills;
   std::vector<Draw> draws;
   std::string textTrace;
+  std::vector<long> textArguments;
   std::vector<std::string> pascalDraws, windowTitles, widthPayloads, measurePayloads;
   std::vector<long> backgroundColors, foregroundColors;
   int erases = 0, widths = 0, measures = 0, fonts = 0, metrics = 0;
@@ -45,6 +46,7 @@ namespace toolbox_host
     fills.clear();
     draws.clear();
     textTrace.clear();
+    textArguments.clear();
     foregroundColors.clear();
     pascalDraws.clear();
     widthPayloads.clear();
@@ -266,17 +268,20 @@ void SetPort(GrafPtr value)
 void TextFont(short value)
 {
   toolbox_host::textTrace += "F";
+  toolbox_host::textArguments.push_back(value);
   port->txFont = value;
   ++toolbox_host::fonts;
 }
 void TextSize(short value)
 {
   toolbox_host::textTrace += "S";
+  toolbox_host::textArguments.push_back(value);
   port->txSize = value;
 }
 void TextFace(Style value)
 {
   toolbox_host::textTrace += "T";
+  toolbox_host::textArguments.push_back(value);
   port->txFace = value;
 }
 short GetDefFontSize()
@@ -349,12 +354,15 @@ short StringWidth(const unsigned char *text)
 void MoveTo(short x, short y)
 {
   toolbox_host::textTrace += "M";
+  toolbox_host::textArguments.push_back(x);
+  toolbox_host::textArguments.push_back(y);
   penX = x;
   penY = y;
 }
 void DrawText(const void *bytes, short offset, short length)
 {
   toolbox_host::textTrace += "D";
+  toolbox_host::textArguments.push_back(length);
   const toolbox_host::Draw draw = {toolbox_host::currentClip(),
                                    penX,
                                    penY,
@@ -889,6 +897,7 @@ short ToolboxScenePlatformController::measureTextWidth(const loka::core::String 
 void ForeColor(long ink)
 {
   toolbox_host::textTrace += "I";
+  toolbox_host::textArguments.push_back(ink);
   port->fgColor = ink;
   toolbox_host::foregroundColors.push_back(ink);
 }
