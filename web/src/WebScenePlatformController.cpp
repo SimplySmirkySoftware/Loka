@@ -49,7 +49,7 @@ namespace
   };
   Handler<TextNode, WebElementContext, loka::web::TEXT> TextHandler;
   Handler<ButtonNode, WebElementContext, loka::web::BUTTON> ButtonHandler;
-  Handler<CellNode, WebElementContext, loka::web::BUTTON> CellHandler;
+  Handler<CellNode, WebElementContext, loka::web::CELL> CellHandler;
   Handler<ScrollViewNode, WebScrollContext, loka::web::SCROLL> ScrollHandler;
   RefusedNodeHandler Refused[] = {RefusedNodeHandler(NodeTypeToken<EditTextNode>()),
                                   RefusedNodeHandler(NodeTypeToken<TextEditorNode>()),
@@ -241,7 +241,10 @@ namespace
         block = t->props.blockStyle_;
       }
       else if (ButtonNode *b = node ? node->asButtonNode() : 0)
+      {
         state = b->props.text_;
+        block = BlockStyle().align(TEXT_ALIGN_CENTER);
+      }
       else if (CellNode *c = node ? node->asCellNode() : 0)
       {
         state = c->props.text_;

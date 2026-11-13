@@ -68,7 +68,7 @@ PR 1 initially projected one-line Text through INaturalSizeSource with fixed met
 
 Buttons are native `<button type="button">` elements. Mouse, Space and Enter use the same click export. Browser focus is read at completion; no keyboard or focus-event export is added. Layout containers other than ScrollView have no DOM elements.
 
-EditText, TextEditor, PopupMenu, ImageView, RectSurface, ScrollBar and CardBand are explicit refused handlers. A reached ScrollView visit settles once after projection, including refusal; a deferred visit leaves its request pending. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. IME, general pointer input and hot reload remain outside this increment. Spacing-only skins are specified below.
+EditText, TextEditor, PopupMenu, ImageView, RectSurface, ScrollBar and CardBand are explicit refused handlers. A reached ScrollView visit settles once after projection, including refusal; a deferred visit leaves its request pending. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. IME, general pointer input and hot reload remain outside this increment. Skin spacing and inline paint are specified below.
 
 ## Host contract
 
@@ -279,9 +279,14 @@ untouched. The PR 1 fixed metric table is no longer used.
 
 Button chrome is Web-specific generated geometry: insetX 8, insetY 4, border 1.
 It is not common style vocabulary or a claim about Win32 theme geometry. Creation
-sets appearance none, border-box, padding 4px 8px, border 1px solid, margin zero,
+sets appearance none, border-box, padding 4px 8px, border-width 1px,
+border-style solid, margin zero,
 minimum width/height zero, preformatted whitespace, and hidden overflow. Outline
-is untouched. Every render applies the default Env and measured line-height.
+is untouched. Every render applies the default Env, measured line-height, and
+centred label alignment (also used by Cell). Skin paint is written per-element
+inline after chrome initialization: Button face, border colour and radius; Cell
+has its own face and border colour with zero radius. Width and height measurement
+are unchanged by alignment.
 Natural width is label advance + 18 and height is H + 10, including empty labels;
 the upper bound is checked before addition. Browser cells exercise native Tab,
 Space, Enter and focus-visible outline, content/padding/border geometry and narrow
@@ -706,7 +711,7 @@ stays visible. Refusal inside ScrollView conservatively prevents its commit even
 though Cell's height does not require measurement. PROTOCOL retains its existing
 debug assertion and release behavior without retry. No new retry clock exists.
 
-The accepted preview appearance is Web Button chrome: padding, border,
+The accepted preview appearance is Web chrome with square Cell corners: padding, border,
 `appearance:none`, no wrapping, and hidden overflow. At width 27, the content
 width is 9 CSS pixels; a glyph may clip. Narrowing does not truncate snapshot
 bytes. Width remains part of snapshot identity. No styling aims for native Cell
@@ -820,11 +825,11 @@ must not be read as verification of the inset root offer. Current host/Wasm
 acceptance lives in `RootMarginTest` and `SkinStartTest`; browser cells require
 an independent driver run to establish document overflow and native hit testing.
 
-## Spacing-only skins
+## Skin spacing and inline paint
 
-The factory option `lokaSkin` selects only the Web rail's immutable `RailSpacing`.
+The factory option `lokaSkin` selects the Web rail's immutable spacing and paint.
 The ordered `webSkins` table in `tools/style-vocab.json` generates the C++ rows
-and the JavaScript name resolver:
+and the JavaScript name resolver and paint maps:
 
 | Name | Vertical gap | Horizontal gap | Standard window margin value |
 | --- | ---: | ---: | ---: |
@@ -849,7 +854,10 @@ replaces it at most once after the bounds check. Controllers borrow the session'
 const reference; the builtin Box handler copies that value at construction.
 Later windows use the same selection. Changing the option after startup has no
 effect, and concurrently live modules select independently. There is no live
-skin switch, selection cache in JavaScript, allocation, observer or new clock.
+skin switch, observer or new clock. The existing `web_skin` pull also stores the
+resolved index in module-local `WebDOM.skin` (initially zero); repeated harness
+pulls replace it without touching the document. Production pulls once. Later
+elements use that stored index, never reread the Module option.
 Cost: one startup import and at most four generated name comparisons; each
 layout consumer reads in O(1), with no additional tree walk.
 
@@ -861,9 +869,35 @@ wire version 2 and its nine words are unchanged. Spacing numbers are consumed
 only by C++ and remain outside the fingerprint; changing only those numbers
 leaves it unchanged. This detects accidental skew, not adversarial collisions.
 
-A skin leaves Button and Cell sizing rules, padding and borders unchanged
+The closed ten-field `webSkins[*].look` record supplies scheme, ground, primary
+and secondary text, Button face/border/radius, disabled text, and Cell face/border.
+The generator validates every skin before writing any output: exact fields,
+lowercase six-digit hex or Canvas/CanvasText/GrayText/ButtonFace/ButtonText/
+ButtonBorder, radius an exact integer 0..16 (not bool), scheme light or auto.
+It emits fixed property maps in `LokaWebStyle.skinLook`; names are never CSS.
+Creation writes paint per-element inline through `style.setProperty`, after
+common cssText and chrome initialization. No stylesheet or document-level style
+resource is installed. Roots own background and the `--loka-text` /
+`--loka-secondary` inherited values. OS skins set `color-scheme:light`; web omits
+that declaration and follows the host scheme. The browser picks scrollbar,
+focus and selection colours inside a light-scheme root. `:active` and hover
+are not styled. Fidelity is approximate, not runtime-verified against native themes.
+
+`web_set_text_style` remains the colour writer: UNSET/PRIMARY use
+`var(--loka-text)`, SECONDARY uses `var(--loka-secondary)`, named inks stay named.
+Each enabled projection removes its own `--loka-text`; disabled projection writes
+the selected disabledText, idempotently without an enabled cache. This affects
+PRIMARY/UNSET only. Cell currently has no enabled prop and renders enabled;
+disabled Cell adapter paint can be tested at the JS boundary but is not an
+app-facing Cell state transition. Paint dies with its element; retained hide/show
+and relayout do not reset it. CELL is a separate resource kind after SCROLL,
+but click admission routes both Button and Cell through the BUTTON input door.
+JS and wasm are a paired build from the same Emscripten link; resource kinds and
+paint values are not included in the admission fingerprint.
+
+A skin leaves Button and Cell sizing rules, padding and border widths unchanged
 (their allocated dimensions can still change with the space the new gaps
-leave), and does not change fonts, colours, scrollbar geometry, DPI policy,
+leave), and does not change fonts, scrollbar geometry, DPI policy,
 or explicit gap overrides. The selected standard window margin is applied at
 the root when Window contentMargin is unspecified; explicit zero stays zero.
 HelloWorld explicitly uses contentMargin(0), so its inner ScrollView Box
@@ -940,7 +974,7 @@ leaves later cells reported as not run because an earlier cell failed.
 | F1 | Configure task identity and exit 0, `Configured`, and a catalog file. Before F2, fixture ids must be `LokaHelloWeb` and `LokaMineWeb` in that order. |
 | F2 | Build task identity for apps[0], exit 0 and `Built <target>` before a panel exists. |
 | F3 | First Open, `Running`, and HelloWorld's `Loka Sample` leaf offset for `web`. This offset is inner Box padding, not Window content margin. |
-| F4 | Picker selects `macos`; HelloWorld's offset changes to that skin's spacing; reopening reports only `macos` as `Requested`. |
+| F4 | Picker selects `macos`; root background and first Button background/radius match the vocabulary; HelloWorld's offset changes to that skin's spacing; reopening reports only `macos` as `Requested`. |
 | F5 | Select Example chooses apps[1], whose JavaScript is absent; status is `Loka: Build the module JavaScript and Wasm files first`, body is the unprefixed text, with no script or fixture marker. |
 | F6 | Build task identity for apps[1] and exit 0; `Running` and MineSweeper's `New Game` button offset for `macos`. This is Window content margin. It does not require the transient `Built` status. |
 | F7 | Select `web` with focus checked independently of `Requested`; MineSweeper's Window content margin changes; reopening reports only `web` as `Requested`. |
@@ -962,7 +996,10 @@ visible, positive-sized fixture marker, at its body-relative offset rounded to
 pixels within ±1. Skin names and spacing[2] come from `tools/style-vocab.json`
 `webSkins`; equal `web` and `macos` values fail the fixture premise.
 
-F checks those two layout facts, not all skin values, pixels, continued module
+F also checks root background and first Button background/radius after F4 and F7
+against the vocabulary. Fixed CDP code reads computed colours (including host
+system-colour probes); data is compared in Node, never spliced into evaluated
+expressions. F does not cover all skin values, pixels, continued module
 health, old-document disposal completion, restart persistence or theme coverage.
 Installed-extension manifest enforcement, Reload, Remote WSL/Windows hosts and
 the default relative build path remain outside the smoke. CDP captures no images.

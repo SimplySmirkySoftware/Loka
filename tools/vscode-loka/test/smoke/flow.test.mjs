@@ -18,6 +18,7 @@ const labels = ['web, Requested', 'win32', 'macos', 'classic'];
 
 test('fixture and skin facts refuse changed premises', () => {
   assert.equal(flow.fixture({version: 1, apps}), apps);
+  assert.throws(()=>flow.skins({webSkins:rows.map(r=>({...r,look:undefined}))}),/paint/);
   for (const bad of [{}, {version: 1, apps: []}, {version: 1, apps: [...apps].reverse()}])
     assert.throws(() => flow.fixture(bad), /Fixture premise changed/);
   assert.throws(() => flow.skins({webSkins: rows.map(r => ({...r, spacing: [1, 2, 3]}))}), /must differ/);
@@ -161,7 +162,7 @@ test('webview expression reacquires active-frame and requires a body, including 
   assert.equal(read(), null);
   current = {contentDocument: {body: null}};
   assert.equal(read(), null);
-  current = {contentDocument: {body: {innerText: flow.message, getBoundingClientRect: () => ({left: 5, top: 10}), querySelectorAll: () => []},
+  current = {contentDocument: {body: {querySelector:()=>null,innerText: flow.message, getBoundingClientRect: () => ({left: 5, top: 10}), querySelectorAll: () => []},
     querySelectorAll: () => []}};
   assert.equal(read().text, flow.message);
   current = undefined;
@@ -234,7 +235,9 @@ test('F1–F7 suite and launcher share the existing file handshake end to end', 
     assert.equal(expression, pickerExpression); return pickerUI;
   }, async webview() {
     if (status === 'Loka: ' + flow.message) return {text: flow.message, scripts: 0, total: 0, rows: []};
-    return {total: 1, rows: [{tag: selected ? 'button' : 'span', text: flow.markers[apps[selected].id].text, leaf: true,
+    const look=rows.find(r=>r.name===skin).look;
+    const colour=v=>v.startsWith('#')?'rgb('+v.slice(1).match(/../g).map(x=>parseInt(x,16)).join(', ')+')':v;
+    return {paint:{root:{background:colour(look.ground)},button:{background:colour(look.face),radius:look.radius+'px'},system:{Canvas:'Canvas',ButtonFace:'ButtonFace'}},total: 1, rows: [{tag: selected ? 'button' : 'span', text: flow.markers[apps[selected].id].text, leaf: true,
       x: rows.find(r => r.name === skin).spacing[2],
       y: rows.find(r => r.name === skin).spacing[2], width: 10, height: 10, visible: true}]};
   }};
@@ -282,7 +285,7 @@ test('webview failure diagnostics retain only marker facts and 60 body character
     {tabs: ['Loka Preview']}, apps, 10), error => {
     assert.match(error.message, /expected .*last read /);
     const last = JSON.parse(error.message.split('last read ')[1]);
-    assert.deepEqual(last, {status: 'Loka: Running', markers: {
+    assert.deepEqual(last, {paint:null,status: 'Loka: Running', markers: {
       LokaHelloWeb: [{id: 'LokaHelloWeb', x: 16, y: 16, visible: true}], LokaMineWeb: []},
       scripts: 3, text: 'a'.repeat(60)});
     assert.ok(!error.message.includes('PRIVATE_TAIL'));
@@ -293,7 +296,7 @@ test('webview failure diagnostics retain only marker facts and 60 body character
 test('generic page snapshot bounds rows and text and reports geometry without fixture matching', () => {
   const element = {tagName: 'BUTTON', innerText: '  ' + 'z'.repeat(300) + '  ', children: [{}],
     getBoundingClientRect: () => ({left: 14.4, top: 19.6, width: 50, height: 10}), checkVisibility: () => true};
-  const d = {body: {innerText: 'b'.repeat(5000), getBoundingClientRect: () => ({left: 5, top: 10}),
+  const d = {body: {querySelector:()=>null,innerText: 'b'.repeat(5000), getBoundingClientRect: () => ({left: 5, top: 10}),
     querySelectorAll(selector) { assert.equal(selector, '*'); return Array(2050).fill(element); }},
     defaultView: {getComputedStyle: () => ({display: 'block', visibility: 'visible'})},
     querySelectorAll(selector) { assert.equal(selector, 'script'); return [1, 2]; }};
@@ -333,4 +336,19 @@ test('a capped snapshot is refused: a duplicate marker beyond the cap cannot pas
   const message = {kind: 'message', status: 'Loka: m', text: 'm'};
   assert.equal(webviewMatches({text: 'm', scripts: 0, total: 1, rows: [row('x')]}, 'Loka: m', message), true);
   assert.equal(webviewMatches({text: 'm', scripts: 0, total: 3000, rows: Array(2048).fill(row('x'))}, 'Loka: m', message), false);
+});
+
+
+test('F4/F7 paint comparisons reject stale root, Button face and radius independently', async () => {
+  const {paintMatches}=await import('./observe.mjs');
+  for(const name of ['macos','web']) {
+    const look=rows.find(r=>r.name===name).look;
+    const c=v=>v.startsWith('#')?'rgb('+v.slice(1).match(/../g).map(x=>parseInt(x,16)).join(', ')+')':v;
+    const paint={root:{background:c(look.ground)},button:{background:c(look.face),radius:look.radius+'px'},system:{Canvas:'Canvas',ButtonFace:'ButtonFace'}};
+    assert(paintMatches(paint,look));
+    for(const [part,key] of [['root','background'],['button','background'],['button','radius']]) {
+      const bad=structuredClone(paint);bad[part][key]='stale';assert.equal(paintMatches(bad,look),false);
+    }
+    assert.equal(paintMatches(null,look),false);
+  }
 });

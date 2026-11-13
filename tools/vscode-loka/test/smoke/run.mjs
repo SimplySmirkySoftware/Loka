@@ -361,7 +361,8 @@ export async function observeFlow(owner, cell, cdp, name, phase, facts, apps, de
     const skin = name === 'F4' || name === 'F6' ? 'macos' : 'web';
     const expected = name === 'F5' ? {kind: 'message', status: 'Loka: ' + flow.message, text: flow.message}
       : {kind: 'module', status: 'Loka: Running', id: apps[name === 'F6' || name === 'F7' ? 1 : 0].id,
-        offset: cell.skins.find(r => r.name === skin).spacing[2]};
+        offset: cell.skins.find(r => r.name === skin).spacing[2],
+        ...(['F4','F7'].includes(name) ? {look:cell.skins.find(r=>r.name===skin).look} : {})};
     await observe(owner, () => checked(async () => ({status: await cdp.evaluate(statusExpression), body: await web()})),
       value => webviewMatches(value.body, value.status, expected), expected, deadline, 'webview', webviewDiagnostic);
   }

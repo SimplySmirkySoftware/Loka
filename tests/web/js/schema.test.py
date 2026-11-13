@@ -110,3 +110,45 @@ with tempfile.TemporaryDirectory(prefix='loka-extension-skins-') as temporary:
         assert result.returncode == 1, 'skin-only stale/missing output must fail checker'
         assert str(skin_output) in result.stderr
 print('extension skins: renamed/reordered JSON output; skin-only stale and missing checker controls passed')
+
+# Every rejected look must leave every output byte untouched, including when
+# the invalid row is last (validation cannot be interleaved with writes).
+invalid_looks = []
+base = vocab['webSkins'][-1]['look']
+for field in base:
+    missing = dict(base); del missing[field]; invalid_looks.append(missing)
+extra = dict(base, pressed='#ffffff'); invalid_looks.append(extra)
+for field, values in [('radius', [-1,17,True,False,1.5,'4',None]),
+                      ('scheme', ['dark','LIGHT',None,[]])]:
+    for value in values:
+        invalid_looks.append(dict(base, **{field:value}))
+for field in g.LOOK_COLOR_FIELDS:
+    for value in ['red','#ABCDEF','#12345','#123456\n','Canvas;','Canvas}', 'Canvas"',None,True,[]]:
+        invalid_looks.append(dict(base, **{field:value}))
+with tempfile.TemporaryDirectory(prefix='loka-look-') as temporary:
+    root = Path(temporary)
+    source = root / 'input.json'
+    for relative in g.OUTPUTS:
+        g.write(root, relative, 'unchanged sentinel\n')
+    for look in invalid_looks:
+        altered = copy.deepcopy(vocab)
+        altered['webSkins'][-1]['look'] = look
+        source.write_text(json.dumps(altered))
+        result = subprocess.run([sys.executable, str(ROOT/'tools/ci/gen_style_vocab.py'),
+                                 '--vocab', str(source), '--output-root', str(root)], capture_output=True)
+        assert result.returncode != 0
+        assert all((root/p).read_text() == 'unchanged sentinel\n' for p in g.OUTPUTS)
+for radius in [0,16]:
+    altered = copy.deepcopy(vocab); altered['webSkins'][0]['look']['radius'] = radius
+    g.validate_web_skins(altered)
+for row in vocab['webSkins']:
+    paint = g.skin_look(row['look'])
+    assert set(paint) == {'root','button','cell','disabledText'}
+    assert ('color-scheme' in paint['root']) == (row['look']['scheme'] == 'light')
+    assert paint['cell']['border-radius'] == '0px'
+print('look: closed fields, colours, scheme and exact integer radius; all outputs untouched on refusal')
+
+paint_only = copy.deepcopy(vocab)
+paint_only['webSkins'][1]['look']['text'] = '#123456'
+g.validate_web_skins(paint_only)
+assert fingerprint(paint_only) == original, 'paint is outside wire identity; JS and wasm are paired builds'
