@@ -501,6 +501,7 @@ namespace
 
 #include "ToolboxTextMeasurementPins.hpp"
 #include "ToolboxAttributedSpanPins.hpp"
+#include "ToolboxLinkDrawCharacterization.hpp"
 #include "ToolboxScrollViewPins.hpp"
 #include "ToolboxToolbarPins.hpp"
 
@@ -583,6 +584,11 @@ namespace
 
 int main(int argc, char **argv)
 {
+  if (argc == 2 && std::string(argv[1]) == "link-draw")
+  {
+    LinkDrawCharacterization();
+    return 0;
+  }
   if (argc == 2 && std::string(argv[1]) == "span-links")
   {
     SpanLinks();
