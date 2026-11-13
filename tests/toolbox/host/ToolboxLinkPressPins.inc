@@ -137,11 +137,16 @@ namespace link_press
     LOKA_VERIFY(toolbox_host::mouse.calls == 3);
     LOKA_VERIFY(!f.click(first, other) && !f.click(first, separated) && f.writes == 3);
     LOKA_VERIFY(!f.click(first, point(250, 250)) && f.writes == 3);
+    // A later run with its own target, then the later run that shares x: the
+    // delivered run is the accepted one, not the first run of the text.
+    LOKA_VERIFY(f.click(other, other) && f.writes == 4 && f.result.get() == LinkTarget(String("y")));
+    LOKA_VERIFY(f.click(separated, separated) && f.writes == 5 && f.result.get() == LinkTarget(String("x")));
     f.replace(Linked("a", TextStyle(), LinkTarget(String("x"))) + Linked("b", TextStyle(), LinkTarget(String("x"))));
     const Point a = f.segment(0);
     const Point b = point(a.h + TextWidth("a", 0, 1));
-    LOKA_VERIFY(b.h > a.h && f.click(a, b) && f.writes == 4);
-    std::puts("[pin] P1/P2/P5 forced activation, same/different/separated runs, A2 and off-text passed");
+    LOKA_VERIFY(b.h > a.h && f.click(a, b) && f.writes == 6);
+    std::puts(
+        "[pin] P1/P2/P5 forced activation, same/different/separated runs, later-run delivery, A2 and off-text passed");
   }
   void parkedAndUnknown()
   {
@@ -277,7 +282,28 @@ namespace link_press
       LOKA_VERIFY(!f.click(f.segment(0), point(151)) && f.writes == 0);
       LOKA_VERIFY(toolbox_host::mouse.calls == 1);
     }
-    std::puts("[pin] P4/P5 native and UNIT cover, plain-label pass-through and context identity passed");
+    {
+      // Overlapping linked texts: the second covers the first text's run 0
+      // from its second segment on. DOWN on the exposed part of run 0, release
+      // where the first text's hit would still qualify for the same run but
+      // the topmost row belongs to the second text.
+      Fixture f;
+      const Point down = f.segment(0), covered = f.segment(1);
+      LOKA_VERIFY(covered.h > down.h);
+      f.add(value(), covered.h);
+      f.render();
+      f.controller.pressLedger_.begin();
+      f.controller.pressLedger_.append(PressRow::LINK_HIT, 0);
+      f.controller.pressLedger_.append(PressRow::LINK_HIT, 1);
+      f.controller.pressLedger_.commit();
+      ToolboxLinkHit hit;
+      LOKA_VERIFY(f.context()->prepareLinkHit(covered, hit) == TOOLBOX_HIT_LINK && hit.firstSegment <= 1
+                  && hit.lastSegment >= 1);
+      LOKA_VERIFY(!f.click(down, covered) && f.writes == 0);
+      LOKA_VERIFY(toolbox_host::mouse.calls == 1);
+    }
+    std::puts(
+        "[pin] P4/P5 native and UNIT cover, plain-label pass-through, context identity and overlapping owners passed");
   }
   /** Existing press fixtures install custom hit payloads directly. The Cell
       geometry is fixed; its input body and the link's render are production. */
