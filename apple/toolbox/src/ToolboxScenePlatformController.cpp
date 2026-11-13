@@ -464,6 +464,8 @@ void ToolboxScenePlatformController::destroy()
 
 #include "ToolboxStructurePresent.cpp"
 
+#include "ToolboxHitLedger.inc"
+
 void ToolboxScenePlatformController::retireNodeContext(loka::app::scene::NodeContext *context,
                                                        loka::app::scene::NativeLifetimeHint lifetimeHint)
 {

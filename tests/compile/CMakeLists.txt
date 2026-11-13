@@ -805,3 +805,68 @@ loka_compile_pin(request-text-splice-reply-write
   REFUSES pins/refuses_text_splice_reply_write.cpp
   ACCEPTS pins/accepts_text_splice_reply_write.cpp
 )
+
+# The Toolbox storage contract is checked with the C++98 host QuickDraw types.
+loka_compile_pin(toolbox-release-missing
+  REFUSES pins/refuses_toolbox_release_missing.cpp
+  ACCEPTS pins/accepts_toolbox_press_rows.cpp)
+foreach(_kind refuses accepts)
+  target_include_directories(compilePin_toolbox-release-missing_${_kind} PRIVATE
+    ${PROJECT_SOURCE_DIR}/apple/toolbox/src ${PROJECT_SOURCE_DIR}/tests/toolbox/host)
+endforeach()
+loka_compile_pin(toolbox-release-nonstatic
+  REFUSES pins/refuses_toolbox_release_nonstatic.cpp
+  ACCEPTS pins/accepts_toolbox_press_rows.cpp)
+foreach(_kind refuses accepts)
+  target_include_directories(compilePin_toolbox-release-nonstatic_${_kind} PRIVATE
+    ${PROJECT_SOURCE_DIR}/apple/toolbox/src ${PROJECT_SOURCE_DIR}/tests/toolbox/host)
+endforeach()
+loka_compile_pin(toolbox-release-signature
+  REFUSES pins/refuses_toolbox_release_signature.cpp
+  ACCEPTS pins/accepts_toolbox_press_rows.cpp)
+foreach(_kind refuses accepts)
+  target_include_directories(compilePin_toolbox-release-signature_${_kind} PRIVATE
+    ${PROJECT_SOURCE_DIR}/apple/toolbox/src ${PROJECT_SOURCE_DIR}/tests/toolbox/host)
+endforeach()
+loka_compile_pin(toolbox-store-copy
+  REFUSES pins/refuses_toolbox_store_copy.cpp
+  ACCEPTS pins/accepts_toolbox_press_rows.cpp)
+foreach(_kind refuses accepts)
+  target_include_directories(compilePin_toolbox-store-copy_${_kind} PRIVATE
+    ${PROJECT_SOURCE_DIR}/apple/toolbox/src ${PROJECT_SOURCE_DIR}/tests/toolbox/host)
+endforeach()
+loka_compile_pin(toolbox-store-assign
+  REFUSES pins/refuses_toolbox_store_assign.cpp
+  ACCEPTS pins/accepts_toolbox_press_rows.cpp)
+foreach(_kind refuses accepts)
+  target_include_directories(compilePin_toolbox-store-assign_${_kind} PRIVATE
+    ${PROJECT_SOURCE_DIR}/apple/toolbox/src ${PROJECT_SOURCE_DIR}/tests/toolbox/host)
+endforeach()
+loka_compile_pin(toolbox-ledger-copy
+  REFUSES pins/refuses_toolbox_ledger_copy.cpp
+  ACCEPTS pins/accepts_toolbox_press_rows.cpp)
+foreach(_kind refuses accepts)
+  target_include_directories(compilePin_toolbox-ledger-copy_${_kind} PRIVATE
+    ${PROJECT_SOURCE_DIR}/apple/toolbox/src ${PROJECT_SOURCE_DIR}/tests/toolbox/host)
+endforeach()
+loka_compile_pin(toolbox-ledger-assign
+  REFUSES pins/refuses_toolbox_ledger_assign.cpp
+  ACCEPTS pins/accepts_toolbox_press_rows.cpp)
+foreach(_kind refuses accepts)
+  target_include_directories(compilePin_toolbox-ledger-assign_${_kind} PRIVATE
+    ${PROJECT_SOURCE_DIR}/apple/toolbox/src ${PROJECT_SOURCE_DIR}/tests/toolbox/host)
+endforeach()
+loka_compile_pin(toolbox-chain-copy
+  REFUSES pins/refuses_toolbox_chain_copy.cpp
+  ACCEPTS pins/accepts_toolbox_press_rows.cpp)
+foreach(_kind refuses accepts)
+  target_include_directories(compilePin_toolbox-chain-copy_${_kind} PRIVATE
+    ${PROJECT_SOURCE_DIR}/apple/toolbox/src ${PROJECT_SOURCE_DIR}/tests/toolbox/host)
+endforeach()
+loka_compile_pin(toolbox-chain-assign
+  REFUSES pins/refuses_toolbox_chain_assign.cpp
+  ACCEPTS pins/accepts_toolbox_press_rows.cpp)
+foreach(_kind refuses accepts)
+  target_include_directories(compilePin_toolbox-chain-assign_${_kind} PRIVATE
+    ${PROJECT_SOURCE_DIR}/apple/toolbox/src ${PROJECT_SOURCE_DIR}/tests/toolbox/host)
+endforeach()

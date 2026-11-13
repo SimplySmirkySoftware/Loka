@@ -1229,6 +1229,8 @@ static void DrawGrowIcon(ToolboxWindow::WindowPort *) {}
 #include "ToolboxWindowPaint.cpp"
 
 #endif
+#include "ToolboxHitLedger.inc"
+
 void ToolboxScenePlatformController::retireNodeContext(loka::app::scene::NodeContext *context,
                                                        loka::app::scene::NativeLifetimeHint lifetimeHint)
 {
@@ -1257,7 +1259,8 @@ void ToolboxWindow::requestInvalidateWithReason(ToolboxFullDrawReason reason)
 loka::app::scene::NodeContext *ToolboxScenePlatformController::selectedPress(const Point &point, PressRow &row) const
 {
   ResolvedPress selected;
-  if (!this->pressLedger_.topmostAt(point, *this, selected)) return 0;
+  if (!this->pressLedger_.topmostAt(point, *this, selected))
+    return 0;
   row = selected.row;
   return selected.context;
 }

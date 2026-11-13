@@ -1155,6 +1155,17 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     add_test(NAME testToolboxClipPaint_${_clip_case} COMMAND LokaToolboxClipPaintTests ${_clip_case})
   endforeach()
 
+  add_executable(LokaToolboxPressStoreTests tests/toolbox/host/ToolboxPressRowsMechanism.cpp
+    apple/toolbox/src/ToolboxHitLedger.cpp ${_clip_paint_sources})
+  target_include_directories(LokaToolboxPressStoreTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
+  get_target_property(_press_rows_defines LokaToolboxClipPaintTests COMPILE_DEFINITIONS)
+  target_compile_definitions(LokaToolboxPressStoreTests PRIVATE ${_press_rows_defines})
+  target_compile_options(LokaToolboxPressStoreTests PRIVATE -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxHost.hpp)
+  target_link_libraries(LokaToolboxPressStoreTests PRIVATE LokaCommonTesting)
+  loka_enable_warnings(LokaToolboxPressStoreTests)
+  set_target_properties(LokaToolboxPressStoreTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  add_test(NAME testToolboxPressStoreMechanism COMMAND LokaToolboxPressStoreTests)
+
   add_executable(LokaToolboxPressRowsTests tests/toolbox/host/ToolboxPressRowsCharacterization.cpp
     apple/toolbox/src/ToolboxHitLedger.cpp ${_clip_paint_sources})
   target_include_directories(LokaToolboxPressRowsTests PRIVATE tests/toolbox/host tests apple/toolbox/src)

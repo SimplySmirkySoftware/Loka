@@ -363,8 +363,7 @@ void ToolboxScenePlatformController::recordEditHit(const Rect &rect,
   hit.rect = clipped;
   hit.text = text;
   hit.boundary = boundary;
-  this->hitLedger_.editHits_.push_back(hit);
-  this->pressLedger_.append(PressRow::EDIT_HIT, this->hitLedger_.editHits_.size() - 1);
+  this->hitLedger_.editHits_.record(hit, this->pressLedger_);
   this->bindTextState(text);
 }
 
