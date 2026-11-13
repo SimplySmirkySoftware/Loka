@@ -8,6 +8,7 @@ import argparse
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -58,6 +59,10 @@ def main():
     build()
     baseline = run(driver)
     assert baseline.returncode == 0 and '[skip] browser driver' not in baseline.stdout, baseline.stdout
+    # SIGTERM (timeout, cancellation) must unwind through finally, which restores the source.
+    def terminated(signum, frame):
+        raise SystemExit(128 + signum)
+    signal.signal(signal.SIGTERM, terminated)
     try:
         path.write_text(source.replace(old,new,1))
         build()

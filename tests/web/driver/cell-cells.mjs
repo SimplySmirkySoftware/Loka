@@ -108,7 +108,7 @@ export async function runCellCells(client, navigate) {
   await client.evaluate('fixture.textTest.replaceService(savedService);fixture._fixture_cell_command(1)');
   assert.deepEqual(await client.evaluate("[...document.querySelectorAll('button')].slice(0,2).map(e=>[e.textContent,getComputedStyle(e).textAlign])"),
     [['button','center'],['changed','center']]);
-  console.log('CellAlignment normalized CENTER / Button LEFT render and refusal recovery passed');
+  console.log('CellAlignment normalized CENTER / Button CENTER render and refusal recovery passed');
   await stop();
 
   // Seed 1 board is independently calculated with the production algorithm's fixed 32-bit arithmetic.
