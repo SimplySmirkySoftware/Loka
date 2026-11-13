@@ -387,6 +387,8 @@ public:
   loka::app::CellNode *node_;
   Rect rect_;
   ToolboxCellContext() : node_(0) {}
+  loka::core::State<loka::core::String> *liveTextState() const
+  { return this->node_ && !this->node_->props.ownsText_ ? this->node_->props.text_ : 0; }
   void draw(ToolboxScenePlatformController *)
   {
     LOKA_VERIFY(false);
@@ -476,6 +478,7 @@ public:
   typedef ToolboxHitLedger::CellHit CellHit;
   typedef ToolboxHitLedger::PopupHit PopupHit;
   ToolboxHitLedger hitLedger_;
+  loka::app::scene::NodeContext *selectedPress(const Point &, PressRow &) const;
   const std::vector<ButtonHit> &buttonHits() const
   {
     return this->hitLedger_.buttonHits_;
@@ -592,8 +595,10 @@ public:
                               const loka::app::ScrollBarProps &,
                               loka::app::scene::NodeContext *,
                               loka::app::scene::NativeLifetimeHint);
-  void bindEnabledState(loka::core::State<bool> *) {}
-  void unbindEnabledState(loka::core::State<bool> *) {}
+  std::vector<loka::core::State<bool> *> boundEnabled, unboundEnabled;
+  std::vector<loka::core::State<loka::core::String> *> boundText, unboundText;
+  void bindEnabledState(loka::core::State<bool> *s) { this->boundEnabled.push_back(s); }
+  void unbindEnabledState(loka::core::State<bool> *s) { this->unboundEnabled.push_back(s); }
   bool hasLiveBinding(loka::core::State<bool> *) const;
   void clearControls();
   void retireScrollBarBinding(ScrollBarControlBinding &, loka::app::scene::NativeLifetimeHint);
@@ -785,14 +790,9 @@ public:
   void recordTextHit(const Rect &, short, short, loka::core::State<loka::core::String> *,
                      loka::app::scene::BoundaryNode *, bool, short, ToolboxTextContext *) { ++toolbox_host::textHits; }
 #endif
-  void bindTextState(loka::core::State<loka::core::String> *) {}
-  void unbindTextState(loka::core::State<loka::core::String> *) {}
-  bool hasLiveBinding(loka::core::State<loka::core::String> *s) const
-  {
-    for (std::size_t i = 0; i < editControls_.size(); ++i)
-      if (editControls_[i].text == s) return true;
-    return false;
-  }
+  void bindTextState(loka::core::State<loka::core::String> *s) { this->boundText.push_back(s); }
+  void unbindTextState(loka::core::State<loka::core::String> *s) { this->unboundText.push_back(s); }
+  bool hasLiveBinding(loka::core::State<loka::core::String> *) const;
   void activateEditControl(std::size_t index);
   void reachNativeButton(short id);
   void reachNativeBar(short id);
