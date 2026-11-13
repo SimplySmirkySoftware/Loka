@@ -139,6 +139,7 @@ public:
                        loka::core::State<bool> *enabled,
                        loka::app::scene::BoundaryNode *boundary,
                        ToolboxButtonContext *context);
+  void recordLinkHit(const Rect &, ToolboxAttributedTextContext *);
   void recordCellHit(const Rect &rect,
                      loka::core::EmitterState *emitter,
                      loka::app::scene::BoundaryNode *boundary,
@@ -306,6 +307,7 @@ private:
 
   typedef ToolboxHitLedger::ButtonHit ButtonHit;
   typedef ToolboxHitLedger::CellHit CellHit;
+  typedef ToolboxHitLedger::LinkHit LinkHit;
   typedef ToolboxHitLedger::EditHit EditHit;
   typedef ToolboxHitLedger::TextHit TextHit;
   typedef ToolboxHitLedger::PopupHit PopupHit;

@@ -357,7 +357,7 @@ namespace edit_door
         f.controller.publishFixturePressOrder();
         const Point point = {5, 25};
         ToolboxInputDoor::mouseDown(f.controller, point);
-        expected = "ToolboxPress.cpp:282";
+        expected = "ToolboxPress.cpp:292";
       }
       else
       {
