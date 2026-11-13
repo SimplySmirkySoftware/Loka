@@ -92,6 +92,7 @@ export function hostPage(app, skin) {
 </script></body></html>`;
 }
 
+// Parallel owner: tools/vscode-loka/test/smoke/run.mjs holds a file handshake as well as processes.
 export async function runBrowser(chromium, args, signal, timeoutMs = 30000) {
   signal.throwIfAborted();
   return new Promise((resolve, reject) => {
