@@ -58,8 +58,14 @@ jobs:
           echo "$sha256  $archive" | sha256sum --check --strict
           mkdir -p "$RUNNER_TEMP/loka-vscode"
           tar -xzf "$archive" -C "$RUNNER_TEMP/loka-vscode"
+          # The runner image restricts unprivileged user namespaces, so Chromium's
+          # namespace sandbox cannot start. Give the archive's own setuid sandbox
+          # helper the ownership and mode Chromium requires; the sandbox stays
+          # enabled and no --no-sandbox flag is used.
+          sudo chown root:root "$RUNNER_TEMP/loka-vscode/VSCode-linux-x64/chrome-sandbox"
+          sudo chmod 4755 "$RUNNER_TEMP/loka-vscode/VSCode-linux-x64/chrome-sandbox"
           LOKA_VSCODE="$RUNNER_TEMP/loka-vscode/VSCode-linux-x64/code" LOKA_REQUIRE_VSCODE_SMOKE=1 \
-            bash tests/scripts/VscodeLokaSmokeTest.sh
+            LOKA_SMOKE_VERBOSE=1 bash tests/scripts/VscodeLokaSmokeTest.sh
       # No build can catch a reintroduced side-effect assert: it compiles, and
       # under NDEBUG it just makes a test check less than it claims (#264).
       - run: python3 tests/scripts/TestAssertCheckerTest.py
