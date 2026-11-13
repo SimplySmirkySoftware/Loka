@@ -6,6 +6,11 @@ if(APPLE)
   loka_suppress_arclite_link()
 endif()
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  loka_add_web_app(LokaTutorialWeb LokaTutorialWeb src/WebMain.cpp)
+  return()
+endif()
+
 if(NOT WIN32 AND NOT APPLE AND NOT (CMAKE_SYSTEM_NAME MATCHES "^Retro(68|PPC|Carbon)$"))
   add_custom_target(LokaTutorial ALL
     COMMAND ${CMAKE_COMMAND} -E echo "LokaTutorial has no supported platform target here."
