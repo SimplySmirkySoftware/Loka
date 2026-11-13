@@ -2,6 +2,8 @@
 import ctypes
 import os
 from pathlib import Path
+import shutil
+import tempfile
 import signal
 import sys
 import time
@@ -36,9 +38,51 @@ def exit_code(status, leftovers=False, incomplete=False):
     code = os.waitstatus_to_exitcode(status)
     if code < 0:
         code = 128 - code
-    if incomplete or (leftovers and code in (0, 77)):
+    if (incomplete or leftovers) and code in (0, 77):
         return 1
     return code
+
+
+def create_run_root():
+    """One supervisor-owned tree; reject redirected build parents before allocating it."""
+    repo = Path(__file__).resolve().parents[4]
+    root = repo / 'build'
+    for directory in (root, root / 'vscode-smoke'):
+        directory.mkdir(parents=True, exist_ok=True)
+        if directory.resolve() != directory:
+            raise RuntimeError('Smoke build/run root must not be a symlink: ' + str(directory))
+    return Path(tempfile.mkdtemp(prefix='run-', dir=root / 'vscode-smoke'))
+
+
+def remove_run_root(root):
+    """Cost: once after ECHILD; visit the run tree only, with a 30-second deadline.
+
+    The main process removes synchronously: no cleanup child can outlive the deadline.
+    SIGALRM interrupts blocking filesystem operations as well as the directory walk.
+    """
+    def expired(_signal, _frame):
+        raise TimeoutError('Run directory removal timed out (30 s)')
+    previous = signal.signal(signal.SIGALRM, expired)
+    try:
+        signal.setitimer(signal.ITIMER_REAL, 30)
+        shutil.rmtree(root)
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+def finish(root, status, leftovers=False, *, empty):
+    """Only ECHILD licenses deletion; cleanup cannot turn an existing failure into success."""
+    if root is None:
+        return exit_code(status, leftovers, not empty)
+    try:
+        if not empty:
+            raise RuntimeError('supervisor could not reach ECHILD')
+        remove_run_root(root)
+    except (OSError, RuntimeError) as error:
+        print('[fail] run directory retained: %s: %s' % (root, error), file=sys.stderr)
+        return exit_code(status, leftovers, True)
+    return exit_code(status, leftovers)
 
 
 class PrerequisiteError(RuntimeError):
@@ -115,6 +159,7 @@ def supervise(argv):
     status = None
     leftovers = False
     reported = set()
+    root = None
     try:
         while True:
             now = time.monotonic()
@@ -170,12 +215,17 @@ def supervise(argv):
             if phase == 'probe' and verified and empty:
                 os.close(pipe)
                 pipe = None
-                launcher = os.fork()
+                root = create_run_root()
+                try:
+                    launcher = os.fork()
+                except OSError:
+                    finish(root, 1 << 8, empty=empty)
+                    raise
                 if launcher == 0:
                     for sig in (signal.SIGINT, signal.SIGTERM):
                         signal.signal(sig, signal.SIG_DFL)
                     try:
-                        os.execvp(argv[0], argv)
+                        os.execvpe(argv[0], argv, {**os.environ, 'LOKA_SMOKE_RUN_ROOT': str(root)})
                     except OSError as error:
                         print('[fail] launcher exec: ' + str(error), file=sys.stderr)
                         os._exit(1)
@@ -183,10 +233,10 @@ def supervise(argv):
             elif phase == 'probe-failed' and (empty or now >= deadline):
                 raise PrerequisiteError('subreaper self-check failed')
             elif phase in ('grace', 'collect') and empty:
-                return exit_code(status, leftovers)
+                return finish(root, status, leftovers, empty=empty)
             elif phase == 'collect' and now >= deadline:
                 print('[fail] supervisor could not reach ECHILD', file=sys.stderr)
-                return exit_code(status, leftovers, True)
+                return finish(root, status, leftovers, empty=False)
             time.sleep(.01)
     finally:
         if pipe is not None:
@@ -198,7 +248,7 @@ def main():
         return supervise(sys.argv[1:])
     except PrerequisiteError as error:
         required = any(os.environ.get(k) == '1' for k in
-                       ('LOKA_REQUIRE_VSCODE_SMOKE', 'LOKA_REQUIRE_VSCODE_RUNTIME', 'LOKA_REQUIRE_SMOKE_PROCESS_TESTS'))
+                       ('LOKA_REQUIRE_VSCODE_FLOW', 'LOKA_REQUIRE_VSCODE_SMOKE', 'LOKA_REQUIRE_VSCODE_RUNTIME', 'LOKA_REQUIRE_SMOKE_PROCESS_TESTS'))
         print('[%s] smoke supervisor prerequisite: %s' % ('fail' if required else 'skip', error), file=sys.stderr)
         return 1 if required else 77
     except (OSError, RuntimeError) as error:
