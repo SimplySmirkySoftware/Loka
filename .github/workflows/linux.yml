@@ -48,7 +48,8 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb xauth libxkbfile1 libsecret-1-0
+          sudo apt-get install -y python3 xvfb xauth libxkbfile1 libsecret-1-0
+          python3 -m unittest discover -s tools/vscode-loka/test/smoke -p '*_test.py'
           LOKA_REQUIRE_SMOKE_PROCESS_TESTS=1 node --test tools/vscode-loka/test/smoke/*.test.mjs
           pin=tools/vscode-loka/test/smoke/vscode-pin.json
           version=$(node -p "require('./$pin').version")

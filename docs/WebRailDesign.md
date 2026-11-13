@@ -659,9 +659,13 @@ replaces the panel with HelloWorld, whose buttons react. The same run showed
 that the development host opens empty when the launch passes the debugging
 window's own folder, which is why the launch no longer passes one.
 
-Not runtime-verified: the untrusted-workspace refusal, Build from a VS Code
-started without the emsdk environment, New Game inside the webview, the four
-themes, and webview resource enforcement.
+Runtime-verified on Linux with VS Code 1.145.3 and the development
+extension: the smoke checks Configure, Build, Open Preview and Select Example
+refusals in Restricted Mode. Installed-extension manifest enforcement and Remote
+WSL/Windows hosts remain unverified.
+
+Not runtime-verified: Build from a VS Code started without the emsdk environment,
+New Game inside the webview, the four themes, and webview resource enforcement.
 
 ### Cell projection and MineSweeper preview
 
@@ -892,30 +896,42 @@ prints a skip.
 ## VS Code preview smoke
 
 The optional Linux smoke in `tools/vscode-loka/test/smoke/` loads the development
-extension in a real VS Code with Workspace Trust enabled. R1 checks activation
-and all six registered commands. R2 opens once in Restricted Mode. Separate
-fresh profiles check trust granted through the workspace's Trust button and
-Open Preview with a missing catalog (T1/T3), and, when supplied, a built Web
-tree (T1'/T2). Only Open Preview's handler is exercised.
+extension with Workspace Trust enabled. Launch order is T3, R, then optional T2,
+with a fresh profile and owned empty workspace for each launch.
 
-The status observations have deliberately narrow meanings:
+| Launch | Cells, in order | Observation |
+| --- | --- | --- |
+| T3 | T1, K3, K2, K1, T3 | Grant trust; Build with no catalog starts no task (two-second window); Configure `exit 3` fails; update the folder setting to `exit 0` and Configure succeeds; first Open reports missing catalog. |
+| R | R1, R3, R2, R4, R5 | Activation and six commands; Configure refusal; first Open refusal; Build refusal; Select Example refusal toast with no quick-input element, then successful command settlement after `notifications.clearAll`. No task starts throughout this suite. |
+| T2 | T1', T2 | Grant trust and first Open with the supplied built Web tree. |
 
-- `Loka: Running`: the document called `module.web.start()`, reported status 0,
-  and the extension accepted that document's `started` message. It does not
-  prove rendering, input, skins, continued health, or that the module was built
-  from the current source.
-- `Loka: Trust the workspace to preview`: the untrusted message branch was
-  selected. The text alone does not prove script/resource restrictions or
-  absence of tasks; the fake tests cover those contracts.
-- `Loka: Web catalog missing; run Configure`: reading the effective build
-  directory's catalog returned ENOENT.
+K3 is provisional until K2 passes. R runs only after K1 passes; otherwise it is
+printed as not run because its control is not established. Positive task
+observations subscribe before checking an empty execution list and invoking the
+command. Exactly one start must match name, source, definition type, workspace
+folder, ShellExecution command line and cwd; process events must refer to that
+same execution object. The window includes events before command settlement and
+500 ms after task completion. `processId` is diagnostic only. This is attribution
+within an isolated fixture, not proof of causation. K1 uses the same subscription
+code in a separate launch; it does not prove that R's particular subscription
+instance could fire. The same-launch folder-setting update awaits
+`ConfigurationTarget.WorkspaceFolder` and reads a newly obtained configuration;
+its real-run evidence is pending.
 
-This does not check installed-extension manifest enforcement in untrusted
-workspaces, Configure/Build tasks, pickers, Reload, document replacement,
-Remote WSL/Windows hosts, or the default relative build path. The smoke owns
-an empty workspace with an absolute buildDirectory setting, separate from
-checkout settings. Its only CDP DOM operations are the trust click and the
-status read; it captures no UI images.
+Status observations are narrow. `Loka: Running` means the document called
+`module.web.start()`, reported status 0 and the extension accepted its `started`
+message; it does not prove rendering, continued health or current-source origin.
+The missing-catalog status means ENOENT at the effective build directory. Refusal
+statuses identify the admission branches. R3, R2 and R4 alternate status text so
+R4 cannot pass using R3's old text. R5 uses the toast and absence of quick-input
+elements before and during the command, conditional on the fresh profile and pin;
+it is not a general proof that no picker opened.
+
+This does not check installed-extension manifest enforcement, trusted Build with
+an actual catalog/toolchain, picker interaction, Reload, document replacement,
+Remote WSL/Windows hosts or the default relative build path. The workspace has an
+absolute buildDirectory separate from checkout settings. CDP observes the trust
+button, status, notification toast and quick-input elements; it captures no UI images.
 
 Build the extension immediately before collecting evidence, and keep its
 `out/` and any supplied Web tree unchanged during the run:
@@ -926,6 +942,7 @@ LOKA_VSCODE=/absolute/path/to/VSCode-linux-x64/code \
   LOKA_WEB_BUILD=/absolute/path/to/web-build \
   bash tests/scripts/VscodeLokaSmokeTest.sh
 node --test tools/vscode-loka/test/smoke/*.test.mjs
+python3 -m unittest discover -s tools/vscode-loka/test/smoke -p '*_test.py'
 ```
 
 The entry does not build or download. Use the archive-root executable, not
@@ -933,27 +950,61 @@ The entry does not build or download. Use the archive-root executable, not
 [vscode-pin.json](../tools/vscode-loka/test/smoke/vscode-pin.json). The pin fixes
 VS Code 1.145.3, its commit and the Linux x64 archive SHA-256. Pin upgrades need
 new evidence for `workbench.trust.manage`, `.workspace-trust-editor`'s `Trust`
-button, and the extension's status item ID.
+button, the extension's status item ID, `.notifications-toasts` message elements,
+`.quick-input-widget` and `notifications.clearAll`.
 
-Linux, Node 24+ or 22.18+, Xvfb, xauth, LOKA_VSCODE and built `out/extension.js`
-are prerequisites. Missing prerequisites produce named skips and exit 77;
+Linux, a Node version in `verifiedSignalVersions`, python3, Xvfb, xauth,
+LOKA_VSCODE and built `out/extension.js` are prerequisites. Missing prerequisites produce named skips and exit 77;
 `LOKA_REQUIRE_VSCODE_SMOKE=1` makes them failures. Without LOKA_WEB_BUILD,
 T1'/T2 print a named skip and the remaining successful cells return 0.
 `LOKA_REQUIRE_VSCODE_RUNTIME=1` requires the Web tree and implies required smoke.
 Invalid supplied inputs, pin mismatches, assertion failures and cleanup
 residuals always fail (exit 1). This is not registered with CTest or made a
-build prerequisite. Vehicle tests need no VS Code; process tests name their
-skips when Xvfb/xauth are absent (and use Python's test-only orphan reaper).
+build prerequisite. Vehicle tests need no VS Code. Process tests print named skips
+when their Python/Xvfb/xauth prerequisites are absent or
+`LOKA_SKIP_SMOKE_PROCESS_TESTS=1`; `LOKA_REQUIRE_SMOKE_PROCESS_TESTS=1` makes either
+condition a failure. Python unit tests use fake process operations.
 
-The launcher owns Xvfb, a detached code group, CDP, timers and a unique directory
-under `build/vscode-smoke/`. Cleanup releases the suite, bounds process exit,
-kills the code group if needed, checks `/proc`, terminates Xvfb and checks its
-PID/lock before removing the run directory. The census covers the group and
-escaped processes whose command line contains the run directory. It cannot
-find descendants that escape both. Independent fixture PID watches check only
-the fixture’s own PIDs independently of the census; the escaped fixture still
-names the run directory, and no control escapes both criteria. `/proc` errors fail the census. No sandbox or
-workspace-trust bypass flags are added.
+The suite publishes immutable `step-<n>.json` values by rename, and the launcher
+acknowledges each successful observation with `go-<n>`. `error.json` wins over a
+step. Failure never acknowledges another step; abort means killing the code group.
+Only the final successful go allows graceful exit. The launcher owns one deadline
+per step: first 40 seconds, task stages 45 seconds, other stages 15 seconds;
+UI observation gets 10 seconds and final exit 15 seconds. The suite has task
+budgets, a 20-second trust budget from ready publication, a five-second clearAll
+settlement budget and a separate 180-second race on its returned promise.
+A terminal mark prevents late continuations from issuing operations.
+
+The shell entry starts the production Python supervisor, which enables
+PR_SET_CHILD_SUBREAPER and proves adoption using a forked grandchild's pipe report.
+It only signals unreaped direct children, and only its main loop calls waitpid.
+After the launcher exits, it allows two seconds for voluntary exits, then kills
+and reaps successive direct-child batches for at most five seconds. ECHILD is the
+only empty-tree verdict. Leftovers after grace fail even an otherwise successful
+launcher; failure codes are retained, signal exits normalized, and incomplete
+collection fails. SIGINT/SIGTERM is recorded by handlers and relayed once while
+the launcher remains unreaped, with SIGKILL after 20 seconds from the first request.
+An escaped session cannot evade this ownership. The limit is the supervisor's own
+SIGKILL: descendants then move to the host reaper. It detects leftovers surviving
+the final grace, not transient leftovers between launches. Tests use this same
+supervisor; independent fixture PID/pidfd watches include fault controls for
+missing subreaper, bypassed self-check, missing cleanup kill, successful launches
+with escaped leftovers and a short-lived crash-handler surrogate.
+
+The Node launcher owns Xvfb, code groups, CDP, timers and its unique directory
+under `build/vscode-smoke/`. Every signal passes through `signalOwnChild`, whose
+setImmediate callback synchronously checks the captured ChildProcess exit fields
+before sending. An ended child is never signalled. The exact source-audited Node
+versions are maintained only in `verifiedSignalVersions` in
+[run.mjs](../tools/vscode-loka/test/smoke/run.mjs). Other versions produce a named prerequisite skip of all cells (exit 77), or
+a failure when `LOKA_REQUIRE_VSCODE_SMOKE=1` or `LOKA_REQUIRE_VSCODE_RUNTIME=1`;
+`signalOwnChild` also refuses to signal on an unaudited version. The audit relies on libuv draining
+all reaped-child notifications before the check phase on the owning loop, and
+Node synchronously updating exit fields. It does not cover downstream patches or
+native addons that independently reap children. Fake-child tests check routing,
+not libuv internals. Launcher waits are bounded; cleanup removes its directory.
+A SIGKILL of the launcher can leave the directory and X lock, but the supervisor
+still collects descendants. No sandbox or workspace-trust bypass flags are added.
 
 CI downloads the pinned archive into runner temporary storage and checks its
 SHA-256 before extraction. Download/checksum failures fail the step. Binaries,
@@ -962,34 +1013,39 @@ licence files are preserved. The smoke uses the supplied VS Code distribution
 for development/testing and does not redistribute it.
 
 Runtime-verified on 2026-11-13 on Ubuntu 24.04 (WSL2, x86-64) with the pinned
-VS Code 1.145.3, Node 24.19.0 and an extension built immediately before the run.
-The launch arguments were `--user-data-dir`, `--extensions-dir`,
-`--extensionDevelopmentPath`, `--extensionTestsPath`, `--disable-gpu`,
-`--remote-debugging-port=0` and the workspace; the suite read
-`security.workspace.trust.enabled` as true in every launch.
+VS Code 1.145.3, Node 24.19.0, Python 3.12 and an extension built immediately
+before the runs. The suite read `security.workspace.trust.enabled` as true in
+every launch.
 
-- Without LOKA_WEB_BUILD: R1 R2 and T1 T3 passed, T1'/T2 printed their skip,
-  exit 0. With a Web tree built by the `web` preset: all six cells passed;
-  T2 observed `apps[0]` = LokaHelloWeb. Without LOKA_VSCODE: named skip, exit 77.
-- Extension mutations on the built `out/`, each failing the named cell:
-  `activate` throws (R1), one command registration removed (R1), admission
-  always true (R2: the status read was the catalog message), admission always
-  false (T3), the `started` message ignored (T2).
-- Vehicle mutations: trust click omitted (T1: grant timeout), Open Preview
-  omitted (R2: no tab), launcher withholding `release` (R2: exit timeout),
-  suite ignoring `release` in the real VS Code (exit
-  timeout, forced group kill; afterwards no `code`, crash handler or Xvfb
-  process, no X lock, no run directory).
-- Vehicle tests include trust and exit deadline checks, the independent PID watch, both residual
-  controls, SIGTERM and concurrent display allocation.
+- Without LOKA_WEB_BUILD: `T1 K3 K2 K1 T3` and `R1 R3 R2 R4 R5` passed, T1'/T2
+  printed their skip, exit 0 (about 10 s). With a Web tree built by the `web`
+  preset: T1'/T2 passed as well. K1 changed `configureCommand` inside the
+  launch; the next Configure ran the new command.
+- Extension mutations on the built `out/`, each failing the named step with the
+  expected and last-read text: admission always true (R3), the untrusted Build
+  command doing nothing (R4: status still the Open refusal), Select Example's
+  trust check removed (R5), the `Configured` report removed (K1), the failure
+  report removed (K2), Build's catalog check skipped (K3).
+- A Configure command that ignores hangup and starts a child in another session
+  (`trap '' HUP; (setsid sleep N &); sleep M`), held in the real VS Code until
+  K2's task deadline, and again with SIGTERM sent to the supervisor while it
+  ran: the run failed, the supervisor printed both processes as residual and
+  collected them; afterwards neither sleep, no `code` or Xvfb process, no X
+  lock and no run directory remained (counted by exact command name,
+  independently of the supervisor's report).
+- Vehicle tests: step mechanism, task identity, the single signalling door,
+  supervisor units, and real-process controls for the supervisor (subreaper
+  missing, self-check removed, collection removed, a passing flow that leaves a
+  process, a crash-handler-like child that ends within the grace, a stuck
+  launcher, a killed launcher).
 
-On GitHub's hosted Ubuntu runner the same commit's `linux-headless` job passed
-the vehicle tests and R1 R2 T1 T3 (T1'/T2 skipped by name). There an extracted
-archive exits with SIGTRAP at launch until its `chrome-sandbox` helper is owned
-by root with mode 4755, which the CI step sets; the cause is inferred from that
-fix, the failing run's VS Code output was not captured. A local archive on a
-host that allows unprivileged user namespaces needs no such step.
+On GitHub's hosted Ubuntu runner an extracted archive exits with SIGTRAP at
+launch until its `chrome-sandbox` helper is owned by root with mode 4755, which
+the CI step sets; the cause is inferred from that fix. A local archive on a host
+that allows unprivileged user namespaces needs no such step.
 
-Not runtime-verified here: Remote WSL and Windows hosts, and anything the scope
-paragraph above excludes. On this host the only process that left the code
-group was VS Code's crash handler, whose command line names the run directory.
+The earlier mutations were re-run on this shape and each failed: `activate`
+throws and one command registration removed (the activation check of the first
+launch), admission always false (K3), the `started` message ignored (T2), the
+trust click omitted (T1). Remote WSL/Windows hosts and the exclusions above
+remain unverified.

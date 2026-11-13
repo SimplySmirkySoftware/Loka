@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import {spawn, spawnSync} from 'node:child_process';
 import {constants} from 'node:fs';
-import {access, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile} from 'node:fs/promises';
+import {access, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile} from 'node:fs/promises';
 import {createHash, randomBytes} from 'node:crypto';
 import {dirname, isAbsolute, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -11,24 +11,24 @@ export const repo = resolve(here, '../../../..');
 const extension = resolve(here, '../..');
 export const statuses = Object.freeze({R: 'Loka: Trust the workspace to preview',
   T3: 'Loka: Web catalog missing; run Configure', T2: 'Loka: Running'});
-const cells = {R: 'R1 R2', T3: 'T1 T3', T2: "T1' T2"};
-const allCells = "R1 R2 T1 T3 T1' T2";
+const cells = {R: 'R1 R3 R2 R4 R5', T3: 'T1 K3 K2 K1 T3', T2: "T1' T2"};
+const allCells = "R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2";
 const manifest = JSON.parse(await readFile(join(extension, 'package.json'), 'utf8'));
 const commands = manifest.contributes.commands.map(item => item.command);
 export const pin = JSON.parse(await readFile(join(here, 'vscode-pin.json'), 'utf8'));
 
 /** Pure decision; malformed/missing records never become success. */
-export function judge(cell, result, status, exit) {
+export function judge(cell, result, status, exit, {trusted = cell.kind !== 'R', panel = true} = {}) {
   const errors = [];
-  if (!result || typeof result !== 'object' || Array.isArray(result)) return ['Missing or malformed result.json'];
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return ['Missing or malformed step facts'];
   if (Object.hasOwn(result, 'error')) errors.push('Suite error: ' + result.error);
   if (result.active !== true || !Array.isArray(result.commands)
       || commands.length !== 6 || commands.some(id => !result.commands.includes(id))) errors.push('R1 activation/commands');
   if (result.trustEnabled !== true || result.initialTrusted !== false) errors.push('Initial Workspace Trust');
-  if (result.finalTrusted !== (cell.kind !== 'R') || result.trustGranted !== (cell.kind !== 'R')) errors.push('Trust outcome');
+  if (result.finalTrusted !== trusted || result.trustGranted !== trusted) errors.push('Trust outcome');
   if (!Array.isArray(result.folders) || result.folders.length !== 1 || result.folders[0] !== cell.workspace) errors.push('Workspace folder');
   if (result.buildDirectory !== cell.buildDirectory) errors.push('Effective buildDirectory');
-  if (!Array.isArray(result.tabs) || result.tabs.filter(label => label === 'Loka Preview').length !== 1) errors.push('Preview tab');
+  if (panel && (!Array.isArray(result.tabs) || result.tabs.filter(label => label === 'Loka Preview').length !== 1)) errors.push('Preview tab');
   if (!Object.hasOwn(statuses, cell.kind) || status !== statuses[cell.kind]) errors.push('Status: ' + status);
   if (exit !== 0) errors.push('Exit: ' + exit);
   return errors;
@@ -41,7 +41,9 @@ export function prerequisiteDecision(facts, env = {}) {
   const version = /^(?:v)?(\d+)\.(\d+)\.(\d+)$/.exec(facts.node || '');
   const supported = version && (+version[1] >= 24 || (+version[1] === 22 && +version[2] >= 18));
   const missing = [facts.platform !== 'linux' && 'Linux', !supported && 'Node >=24 or 22.18+',
-    !facts.xvfb && 'Xvfb', !facts.xauth && 'xauth', !env.LOKA_VSCODE && 'LOKA_VSCODE not set',
+    supported && !verifiedSignalVersions.includes(facts.node) &&
+      `Node ${facts.node} is not in the audited list for child-signal ordering`,
+    !facts.python && 'python3', !facts.xvfb && 'Xvfb', !facts.xauth && 'xauth', !env.LOKA_VSCODE && 'LOKA_VSCODE not set',
     !facts.artifact && 'out/extension.js not built'].filter(Boolean);
   if (facts.invalid) return {code: 1, lines: ['[fail] ' + allCells + ': ' + facts.invalid]};
   if (env.LOKA_REQUIRE_VSCODE_RUNTIME === '1' && !env.LOKA_WEB_BUILD) missing.push('LOKA_WEB_BUILD not set');
@@ -54,6 +56,17 @@ async function optionalRead(path) {
   try { return await readFile(path, 'utf8'); }
   catch (error) { if (error.code === 'ENOENT') return undefined; throw error; }
 }
+/** Probe only; stale locks are replaced by Xvfb, never removed by the launcher. */
+export function pidAlive(pid) {
+  try { process.kill(pid, 0); return true; }
+  catch (error) { if (error.code === 'ESRCH') return false; if (error.code === 'EPERM') return true; throw error; }
+}
+async function readXLock(display) { return Number(await optionalRead(`/tmp/.X${display}-lock`)); }
+export async function displayTaken(display, readLock = readXLock, alive = pidAlive) {
+  const pid = await readLock(display);
+  return Number.isInteger(pid) && pid > 0 && alive(pid);
+}
+
 export async function validateInputs(env) {
   let code;
   if (env.LOKA_VSCODE) {
@@ -69,21 +82,24 @@ export async function validateInputs(env) {
   return code;
 }
 
-/** /proc is the ownership census, not a best-effort diagnostic. Only vanished PIDs are ignored. */
-export async function rollCall(group, directory, xpid, fs = {readdir, readFile}) {
-  const residual = [];
-  for (const name of await fs.readdir('/proc')) {
-    if (!/^\d+$/.test(name)) continue;
+/** Source audit: Node 22.18.0 and 24.0.0 (REFUTE6), plus 24.19.0.
+ * Exact releases only: this does not certify every patch or downstream build.
+ * deps/uv/src/unix/{process,core,signal,linux}.c; src/{env,process_wrap}.cc;
+ * lib/internal/child_process.js. wait_children drains notifications before run_check.
+ * Cost: each cleanup request once; the captured spawned child only, no PID search. */
+export const verifiedSignalVersions = Object.freeze(['22.18.0', '24.0.0', '24.19.0']);
+export function signalOwnChild(child, signal, group = false,
+  {version = process.versions.node, send = process.kill} = {}) {
+  return new Promise((resolve, reject) => setImmediate(() => {
     try {
-      const value = await fs.readFile(`/proc/${name}/stat`, 'utf8');
-      const fields = value.slice(value.lastIndexOf(')') + 2).split(' ');
-      const cmd = (await fs.readFile(`/proc/${name}/cmdline`, 'utf8')).replaceAll('\0', ' ');
-      if (Number(name) !== xpid && ((group && Number(fields[2]) === group) || cmd.includes(directory))) {
-        residual.push({pid: Number(name), name: value.slice(value.indexOf('(') + 1, value.lastIndexOf(')')), cmd});
-      }
-    } catch (error) { if (error.code !== 'ENOENT' && error.code !== 'ESRCH') throw error; }
-  }
-  return residual;
+      if (!verifiedSignalVersions.includes(version)) throw new Error('Unverified Node signal ordering: ' + version);
+      if (!Number.isInteger(child.pid) || child.pid <= 0) return resolve(false);
+      if (child.exitCode !== null || child.signalCode !== null) return resolve(false);
+      try { send(group ? -child.pid : child.pid, signal); }
+      catch (error) { if (error.code !== 'ESRCH') throw error; }
+      resolve(true);
+    } catch (error) { reject(error); }
+  }));
 }
 
 function childRecord(child) {
@@ -94,18 +110,13 @@ function childRecord(child) {
   });
   return record;
 }
-function kill(pid, signal) {
-  try { process.kill(pid, signal); } catch (error) { if (error.code !== 'ESRCH') throw error; }
-}
-
 /** Owns the run directory, X server, code group, CDP and every launcher timer.
  * Parallel to tests/web/driver/capture.mjs runBrowser: this owner also holds a file handshake. */
 export class RunOwner {
-  constructor(directory, {graceMs = 15000, censusMs = 5000, killGroup = kill} = {}) {
+  constructor(directory, {signal = signalOwnChild, readLock = readXLock} = {}) {
     this.directory = directory;
-    this.graceMs = graceMs;
-    this.censusMs = censusMs;
-    this.killGroup = killGroup;
+    this.signal = signal;
+    this.readLock = readLock;
     this.timers = new Set();
     this.abort = new AbortController();
   }
@@ -126,8 +137,12 @@ export class RunOwner {
   check() {
     this.abort.signal.throwIfAborted();
     if (this.code?.error) throw this.code.error;
+    if (this.code?.child && (this.code.child.exitCode !== null || this.code.child.signalCode !== null))
+      throw new Error('VS Code exited early');
     if (this.code?.outcome) throw new Error('VS Code exited early: ' + JSON.stringify(this.code.outcome));
     if (this.x?.error) throw this.x.error;
+    if (this.x?.child && (this.x.child.exitCode !== null || this.x.child.signalCode !== null))
+      throw new Error('Xvfb exited early');
     if (this.x?.outcome) throw new Error('Xvfb exited early');
   }
   async wait(read, deadline, label, active = true) {
@@ -145,8 +160,7 @@ export class RunOwner {
     const deadline = Date.now() + 10000;
     const auth = join(this.directory, 'Xauthority');
     for (let display = 99; display < 119 && Date.now() < deadline; display++) {
-      const lock = `/tmp/.X${display}-lock`;
-      if (await optionalRead(lock) !== undefined) continue;
+      if (await displayTaken(display, this.readLock)) continue;
       const result = spawnSync('xauth', ['-f', auth, 'add', ':' + display, '.', randomBytes(16).toString('hex')],
         {timeout: Math.max(1, deadline - Date.now()), stdio: 'pipe'});
       if (result.error || result.status !== 0) throw new Error('xauth failed: ' + (result.error || result.stderr));
@@ -156,7 +170,7 @@ export class RunOwner {
       const acquired = await this.wait(async () => {
         this.abort.signal.throwIfAborted();
         if (this.x.error) throw this.x.error;
-        const owner = Number(await optionalRead(lock));
+        const owner = await this.readLock(display);
         if (owner === this.x.child.pid && !this.x.outcome) return 'owned';
         if (this.x.outcome) {
           if (owner === this.x.child.pid) throw new Error('Xvfb exited leaving its own lock');
@@ -174,64 +188,38 @@ export class RunOwner {
     this.code = childRecord(spawn(executable, args, {env, detached: true, stdio: verbose}));
     return Date.now();
   }
-  async release() {
-    if (!this.cellDirectory) return;
-    await writeFile(join(this.cellDirectory, 'release.tmp'), 'release');
-    await rename(join(this.cellDirectory, 'release.tmp'), join(this.cellDirectory, 'release'));
-  }
   async cleanup() {
+    if (this.cleaning) return this.cleaning;
+    this.cleaning = this.dispose();
+    return this.cleaning;
+  }
+  async dispose() {
     const errors = [];
     const attempt = async action => { try { await action(); } catch (error) { errors.push(error.message); } };
-    await attempt(() => this.release());
-    if (this.code) {
-      await attempt(async () => {
-        if (!this.code.outcome) {
-          try { await this.limit(this.code.closed, this.graceMs, 'Code release'); }
-          catch (error) { errors.push(error.message); }
-        }
-        // Kill even after the leader exits: children can keep its group alive.
-        if (this.code.child.pid) this.killGroup(-this.code.child.pid, 'SIGKILL');
-        await this.limit(this.code.closed, 5000, 'Code close');
-      });
-    }
-    await attempt(async () => {
-      let residual = [];
-      try {
-        await this.wait(async () => {
-          residual = await rollCall(this.code?.child.pid, this.directory, this.x?.child.pid);
-          return residual.length === 0;
-        }, Date.now() + this.censusMs, 'Code roll call', false);
-      } catch (error) { throw new Error(error.message + ': ' + JSON.stringify(residual)); }
+    if (this.code) await attempt(async () => {
+      await this.limit(this.signal(this.code.child, 'SIGKILL', true), 1000, 'Code signal');
+      await this.limit(this.code.closed, 5000, 'Code close');
     });
-    await attempt(async () => {
-      if (!this.x) return;
-      const pid = this.x.child.pid;
-      if (pid && !this.x.outcome) {
-        kill(pid, 'SIGTERM');
-        try { await this.limit(this.x.closed, 5000, 'Xvfb close'); }
-        catch (error) {
-          errors.push(error.message);
-          kill(pid, 'SIGKILL');
-          await this.limit(this.x.closed, 5000, 'Xvfb killed close');
-        }
+    if (this.x) await attempt(async () => {
+      await this.limit(this.signal(this.x.child, 'SIGTERM'), 1000, 'Xvfb signal');
+      try { await this.limit(this.x.closed, 5000, 'Xvfb close'); }
+      catch (error) {
+        errors.push(error.message);
+        await this.limit(this.signal(this.x.child, 'SIGKILL'), 1000, 'Xvfb escalation');
+        await this.limit(this.x.closed, 5000, 'Xvfb killed close');
       }
-    });
-    await attempt(async () => {
-      if (!this.x?.child.pid) return;
-      const pid = this.x.child.pid;
-      const live = await optionalRead(`/proc/${pid}/stat`);
-      const lock = Number(await optionalRead(`/tmp/.X${this.x.display}-lock`));
-      if (live !== undefined || lock === pid) throw new Error(`X roll call residual pid=${pid} display=${this.x.display}`);
+      if (await this.readLock(this.x.display) === this.x.child.pid)
+        throw new Error('Xvfb exited leaving its own lock');
     });
     await attempt(async () => this.cdp?.close());
-    await attempt(() => rm(this.directory, {recursive: true, force: true}));
+    await attempt(() => this.limit(rm(this.directory, {recursive: true, force: true}), 5000, 'Run directory removal'));
     for (const timer of this.timers) clearTimeout(timer);
     this.timers.clear();
     if (errors.length) throw new Error('Cleanup failed: ' + errors.join('; '));
   }
 }
 
-// Only these two expressions inspect workbench DOM; pin upgrades must recheck them.
+// Workbench DOM expressions, including toastExpression below, are pin-dependent.
 export const trustExpression = `(() => { const button = [...document.querySelectorAll('.workspace-trust-editor .monaco-button')].find(b => b.innerText.trim() === 'Trust'); if (!button) return false; button.click(); return true; })()`;
 export const statusExpression = `document.getElementById('simplysmirkysoftware.loka-preview')?.innerText.trim() ?? ''`;
 
@@ -296,30 +284,96 @@ async function connectCDP(owner, directory, deadline) {
   };
 }
 
-/** Injected file/CDP ports exercise the actual order and deadlines without VS Code. */
+/** One table owns order and next-step budgets. Facts remain suite-owned. */
+export const steps = Object.freeze({
+  T3: [['T1', 'ready'], ['T1', 'trusted'], ['K3', 'observed'], ['K2', 'observed', 45000],
+    ['K1', 'observed', 45000], ['T3', 'observed']],
+  R: [['R1', 'observed'], ['R3', 'observed'], ['R2', 'observed'], ['R4', 'observed'],
+    ['R5', 'toast'], ['R5', 'cleared']],
+  T2: [["T1'", 'ready'], ["T1'", 'trusted'], ['T2', 'observed']]
+});
+export const stepStatuses = Object.freeze({R3: 'Loka: Trust the workspace to build',
+  R2: statuses.R, R4: 'Loka: Trust the workspace to build', K3: statuses.T3,
+  K2: 'Loka: Build failed: 3', K1: 'Loka: Configured', T3: statuses.T3, T2: statuses.T2});
+export const refusalText = 'Trust the workspace to select an example';
+export const toastExpression = `(() => ({text: [...document.querySelectorAll('.notifications-toasts .notification-list-item')].map(e => e.textContent).join('\\n'), toast: [...document.querySelectorAll('.notifications-toasts .notification-list-item')].some(e => e.textContent.includes(${JSON.stringify(refusalText)})), picker: !!document.querySelector('.quick-input-widget')}))()`;
+
+/** Cost: once per launch; one immutable step and one ack per table row, bounded CDP polls. */
 export async function handshake(owner, cell, files, connect = connectCDP) {
-  const deadline = cell.started + 40000;
-  if (cell.kind !== 'R') await owner.wait(() => files.read('ready'), deadline, 'ready');
-  const cdp = await connect(owner, owner.cellDirectory, deadline);
-  if (cell.kind !== 'R') await owner.wait(() => cdp.evaluate(trustExpression), Date.now() + 10000, 'Trust button');
-  const raw = await owner.wait(() => files.read('result.json'), deadline, 'result.json');
-  let result;
-  try { result = JSON.parse(raw); } catch { throw new Error('Malformed result.json'); }
-  const invalid = judge(cell, result, statuses[cell.kind], 0);
-  if (invalid.length) throw new Error(invalid.join('; '));
-  let seen;
-  const status = await owner.wait(async () => {
-    const value = seen = await cdp.evaluate(statusExpression);
-    return value === statuses[cell.kind] && value;
-  }, Date.now() + 10000, 'status').catch(error => {
-    throw new Error(`${error.message}; expected ${JSON.stringify(statuses[cell.kind])}, last read ${JSON.stringify(seen)}`);
-  });
-  console.log(`${cell.kind}: status=${JSON.stringify(status)} trust.enabled=${result.trustEnabled}`);
-  owner.check();
-  await files.release();
-  const exit = await owner.limit(owner.code.closed, 15000, 'VS Code exit');
-  const errors = judge(cell, result, status, exit.code);
-  if (errors.length) throw new Error(errors.join('; '));
+  let deadline = cell.started + 40000;
+  let cdp;
+  let context = cell.kind + '/startup';
+  const plan = steps[cell.kind];
+  const errorCheck = async () => {
+    const error = await files.read('error.json');
+    if (error !== undefined) throw new Error('Suite error: ' + error);
+  };
+  try {
+    for (let n = 0; n < plan.length; n++) {
+      const [name, phase] = plan[n];
+      context = `${name}/${phase}`;
+      const raw = await owner.wait(async () => {
+        await errorCheck();
+        const value = await files.read(`step-${n}.json`);
+        await errorCheck();
+        return value;
+      }, deadline, `step-${n}`);
+      let step;
+      try { step = JSON.parse(raw); } catch { throw new Error('Malformed step JSON'); }
+      if (step.cell !== name || step.phase !== phase || !step.facts) throw new Error('Unexpected step identity');
+      const facts = step.facts;
+      // All original activation, trust, folder, setting and panel oracles remain.
+      const invalid = judge(cell, facts, statuses[cell.kind], 0, {
+        trusted: phase !== 'ready' && cell.kind !== 'R', panel: ['R2', 'T3', 'T2'].includes(name)
+      });
+      if (invalid.length) throw new Error(invalid.join('; '));
+      if (['K1', 'K2'].includes(name) && (facts.starts !== 1 || facts.exit !== (name === 'K1' ? 0 : 3)))
+        throw new Error('Task outcome');
+      if ((cell.kind === 'R' || name === 'K3') && (facts.starts !== 0 || facts.executions !== 0))
+        throw new Error('Unexpected task start');
+      const observationDeadline = Date.now() + 10000;
+      if (!cdp) cdp = await connect(owner, owner.cellDirectory, observationDeadline);
+      if (phase === 'ready') await owner.wait(() => cdp.evaluate(trustExpression), observationDeadline, 'Trust button');
+      if (stepStatuses[name]) {
+        let last = '';
+        try {
+          await owner.wait(async () => {
+            last = await cdp.evaluate(statusExpression);
+            return last === stepStatuses[name];
+          }, observationDeadline, 'status');
+        } catch (error) {
+          throw new Error(`${error.message}; expected ${JSON.stringify(stepStatuses[name])}, last read ${JSON.stringify(last)}`);
+        }
+      }
+      if (name === 'R4' || name === 'R5') {
+        let last = '';
+        try {
+          await owner.wait(async () => {
+            const ui = await cdp.evaluate(toastExpression);
+            last = ui?.text ?? '';
+            return ui && !ui.picker && ui.toast === (phase === 'toast');
+          }, observationDeadline, 'toast/picker');
+        } catch (error) {
+          throw new Error(`${error.message}; expected ${JSON.stringify(refusalText)} ${phase === 'toast' ? 'present' : 'absent'} and picker absent, last read ${JSON.stringify(last)}`);
+        }
+      }
+      await owner.limit(errorCheck(), 1000, 'Suite error read');
+      owner.check();
+      await owner.limit(files.go(n), 1000, 'Step acknowledgement');
+      deadline = Date.now() + (plan[n + 1]?.[2] ?? 15000);
+      if (name === 'K2') console.log('[pass] K3 (control K2 established)');
+      console.log(`${name}/${phase}: observed`);
+    }
+    context = cell.kind + '/exit';
+    const exit = await owner.limit(owner.code.closed, 15000, 'VS Code exit');
+    await owner.limit(errorCheck(), 1000, 'Final suite error read');
+    owner.abort.signal.throwIfAborted();
+    if (exit.code !== 0 || exit.signal) throw new Error('Exit: ' + JSON.stringify(exit));
+  } catch (error) {
+    error = new Error(`${context}: ${error.message}`);
+    owner.abort.abort(error); // Terminal failure; cleanup never acknowledges a step.
+    throw error;
+  }
 }
 
 async function moduleEvidence(build) {
@@ -331,11 +385,22 @@ async function moduleEvidence(build) {
   console.log(`T2: tree=${build} apps[0]=${JSON.stringify({id: app.id, target: app.target})} wasm.sha256=${createHash('sha256').update(wasm).digest('hex').slice(0, 12)}`);
 }
 
+/** Cost: main once; at most three launches, each only after its predecessor succeeds. */
+export async function launchCells(runtime, launch, report = console.log) {
+  try { await launch('T3'); }
+  catch (error) {
+    report('[not run] R1 R3 R2 R4 R5: control K1 not established by a successful T3 launch');
+    throw error;
+  }
+  await launch('R');
+  if (runtime) await launch('T2');
+}
+
 export async function main(env = process.env) {
   let executable, invalid;
   try { executable = await validateInputs(env); } catch (error) { invalid = error.message; }
   const decision = prerequisiteDecision({platform: process.platform, node: process.versions.node,
-    xvfb: spawnSync('which', ['Xvfb']).status === 0, xauth: spawnSync('which', ['xauth']).status === 0,
+    python: spawnSync('which', ['python3']).status === 0, xvfb: spawnSync('which', ['Xvfb']).status === 0, xauth: spawnSync('which', ['xauth']).status === 0,
     artifact: await optionalRead(join(extension, 'out/extension.js')) !== undefined, invalid}, env);
   decision.lines.forEach(line => console.log(line));
   if (decision.code) return decision.code;
@@ -352,7 +417,7 @@ export async function main(env = process.env) {
   const failures = [];
   try {
     const display = await owner.startX();
-    for (const kind of ['R', 'T3', ...(env.LOKA_WEB_BUILD ? ['T2'] : [])]) {
+    await launchCells(!!env.LOKA_WEB_BUILD, async kind => {
       try {
         owner.abort.signal.throwIfAborted();
         if (kind === 'T2') await moduleEvidence(env.LOKA_WEB_BUILD);
@@ -361,7 +426,7 @@ export async function main(env = process.env) {
         const buildDirectory = kind === 'T2' ? env.LOKA_WEB_BUILD : join(directory, 'missing-build');
         await mkdir(join(workspace, '.vscode'), {recursive: true});
         await mkdir(join(directory, 'user')); await mkdir(join(directory, 'ext'));
-        await writeFile(join(workspace, '.vscode/settings.json'), JSON.stringify({'loka.preview.buildDirectory': buildDirectory}));
+        await writeFile(join(workspace, '.vscode/settings.json'), JSON.stringify({'loka.preview.buildDirectory': buildDirectory, 'loka.preview.configureCommand': 'exit 3'}));
         owner.cellDirectory = directory;
         const args = [`--user-data-dir=${directory}/user`, `--extensions-dir=${directory}/ext`,
           `--extensionDevelopmentPath=${extension}`, `--extensionTestsPath=${here}/suite.cjs`,
@@ -371,23 +436,24 @@ export async function main(env = process.env) {
         delete childEnv.WAYLAND_DISPLAY;
         const started = owner.startCode(executable, args, childEnv);
         await handshake(owner, {kind, workspace, buildDirectory, started}, {
-          read: name => optionalRead(join(directory, name)), release: () => owner.release()
+          read: name => optionalRead(join(directory, name)),
+          go: n => writeFile(join(directory, `go-${n}`), '', {flag: 'wx'})
         });
-        // Keep the completed group until its census succeeds, before replacing its record.
-        await owner.wait(async () => (await rollCall(owner.code.child.pid, owner.directory, owner.x.child.pid)).length === 0,
-          Date.now() + 5000, 'Cell roll call', false);
         console.log('[pass] ' + cells[kind]);
       } catch (error) { throw new Error(cells[kind] + ': ' + error.message); }
-    }
-  } catch (error) { failures.push(error.message); }
+    });
+  } catch (error) {
+    failures.push(error.message);
+  }
   finally {
     try { await owner.cleanup(); } catch (error) { failures.push(error.message); }
     process.off('SIGINT', onINT); process.off('SIGTERM', onTERM);
   }
-  if (owner.abort.signal.aborted) failures.push(owner.abort.signal.reason.message);
+  if (owner.abort.signal.aborted && !failures.length) failures.push(owner.abort.signal.reason.message);
   if (failures.length) throw new Error(failures.join('; '));
   return 0;
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().then(code => { process.exitCode = code; }, error => { console.error('[fail] vscode smoke: ' + error.message); process.exitCode = 1; });
+  // Bounded cleanup can leave live handles: exit hands them to the supervisor.
+  main().then(code => process.exit(code), error => { console.error('[fail] vscode smoke: ' + error.message); process.exit(1); });
 }
