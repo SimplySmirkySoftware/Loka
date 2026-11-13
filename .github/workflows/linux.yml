@@ -49,7 +49,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb xauth libxkbfile1 libsecret-1-0
-          node --test tools/vscode-loka/test/smoke/*.test.mjs
+          LOKA_REQUIRE_SMOKE_PROCESS_TESTS=1 node --test tools/vscode-loka/test/smoke/*.test.mjs
           pin=tools/vscode-loka/test/smoke/vscode-pin.json
           version=$(node -p "require('./$pin').version")
           sha256=$(node -p "require('./$pin').sha256")

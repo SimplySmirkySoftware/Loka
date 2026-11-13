@@ -950,8 +950,9 @@ under `build/vscode-smoke/`. Cleanup releases the suite, bounds process exit,
 kills the code group if needed, checks `/proc`, terminates Xvfb and checks its
 PID/lock before removing the run directory. The census covers the group and
 escaped processes whose command line contains the run directory. It cannot
-find descendants that escape both; independent fixture PID watches cover that
-limitation in the vehicle tests. `/proc` errors fail the census. No sandbox or
+find descendants that escape both. Independent fixture PID watches check only
+the fixture’s own PIDs independently of the census; the escaped fixture still
+names the run directory, and no control escapes both criteria. `/proc` errors fail the census. No sandbox or
 workspace-trust bypass flags are added.
 
 CI downloads the pinned archive into runner temporary storage and checks its
@@ -975,10 +976,11 @@ The launch arguments were `--user-data-dir`, `--extensions-dir`,
   always true (R2: the status read was the catalog message), admission always
   false (T3), the `started` message ignored (T2).
 - Vehicle mutations: trust click omitted (T1: grant timeout), Open Preview
-  omitted (R2: no tab), suite ignoring `release` in the real VS Code (exit
+  omitted (R2: no tab), launcher withholding `release` (R2: exit timeout),
+  suite ignoring `release` in the real VS Code (exit
   timeout, forced group kill; afterwards no `code`, crash handler or Xvfb
   process, no X lock, no run directory).
-- Vehicle tests: 34 passed, including the independent PID watch, both residual
+- Vehicle tests include trust and exit deadline checks, the independent PID watch, both residual
   controls, SIGTERM and concurrent display allocation.
 
 Not runtime-verified here: Remote WSL and Windows hosts, and anything the scope

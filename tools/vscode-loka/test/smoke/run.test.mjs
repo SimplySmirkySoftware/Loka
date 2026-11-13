@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {setImmediate} from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import {mkdir, mkdtemp, readFile, rm, writeFile, symlink} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -87,9 +88,10 @@ function fixture(kind, options = {}) {
   Date.now = () => now;
   const owner = {
     cellDirectory: '/owned',
-    code: {closed: Promise.resolve({code: options.exit ?? 0})},
+    code: {closed: options.pendingExit ? new Promise(() => {}) : Promise.resolve({code: options.exit ?? 0})},
+    timers: new Set(),
     check() { if (options.early) throw new Error('VS Code exited early'); },
-    async limit(promise) { return promise; },
+    limit: options.pendingExit ? RunOwner.prototype.limit : async promise => promise,
     async wait(read, deadline, label) {
       calls.push([label, now, deadline]);
       for (;;) {
@@ -149,7 +151,22 @@ for (const [name, options, message] of [
   await assert.rejects(f.run(), message);
   assert.equal(f.released(), options.exit === 9);
 });
-test('status selector addresses exactly the pinned item', () => {
+test('handshake: pending exit fails at 15 seconds after release', async t => {
+  t.mock.timers.enable({apis: ['setTimeout']});
+  const f = fixture('R', {pendingExit: true});
+  let failure;
+  const running = f.run().catch(error => { failure = error; });
+  await setImmediate();
+  assert.equal(f.released(), true);
+  t.mock.timers.tick(14999);
+  await setImmediate();
+  assert.equal(failure, undefined);
+  t.mock.timers.tick(1);
+  await setImmediate();
+  assert.match(failure?.message ?? '', /VS Code exit timed out/);
+  await running;
+});
+test('status selector string contract names exactly the pinned item', () => {
   assert.equal(statusExpression, "document.getElementById('simplysmirkysoftware.loka-preview')?.innerText.trim() ?? ''");
 });
 test('roll call reports group and escaped run marker, excludes own X; read errors fail closed', async () => {
