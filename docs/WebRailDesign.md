@@ -888,3 +888,108 @@ padding and an unmoved two-column threshold; MineSweeper's Button-to-board gap
 with clicks and New Game still working. Two modules with different skins stay
 independent while both are alive. Without an installed Chromium the driver
 prints a skip.
+
+## VS Code preview smoke
+
+The optional Linux smoke in `tools/vscode-loka/test/smoke/` loads the development
+extension in a real VS Code with Workspace Trust enabled. R1 checks activation
+and all six registered commands. R2 opens once in Restricted Mode. Separate
+fresh profiles check trust granted through the workspace's Trust button and
+Open Preview with a missing catalog (T1/T3), and, when supplied, a built Web
+tree (T1'/T2). Only Open Preview's handler is exercised.
+
+The status observations have deliberately narrow meanings:
+
+- `Loka: Running`: the document called `module.web.start()`, reported status 0,
+  and the extension accepted that document's `started` message. It does not
+  prove rendering, input, skins, continued health, or that the module was built
+  from the current source.
+- `Loka: Trust the workspace to preview`: the untrusted message branch was
+  selected. The text alone does not prove script/resource restrictions or
+  absence of tasks; the fake tests cover those contracts.
+- `Loka: Web catalog missing; run Configure`: reading the effective build
+  directory's catalog returned ENOENT.
+
+This does not check installed-extension manifest enforcement in untrusted
+workspaces, Configure/Build tasks, pickers, Reload, document replacement,
+Remote WSL/Windows hosts, or the default relative build path. The smoke owns
+an empty workspace with an absolute buildDirectory setting, separate from
+checkout settings. Its only CDP DOM operations are the trust click and the
+status read; it captures no UI images.
+
+Build the extension immediately before collecting evidence, and keep its
+`out/` and any supplied Web tree unchanged during the run:
+
+```sh
+(cd tools/vscode-loka && npm run build)
+LOKA_VSCODE=/absolute/path/to/VSCode-linux-x64/code \
+  LOKA_WEB_BUILD=/absolute/path/to/web-build \
+  bash tests/scripts/VscodeLokaSmokeTest.sh
+node --test tools/vscode-loka/test/smoke/*.test.mjs
+```
+
+The entry does not build or download. Use the archive-root executable, not
+`bin/code`. It resolves symlinks and checks `resources/app/product.json` against
+[vscode-pin.json](../tools/vscode-loka/test/smoke/vscode-pin.json). The pin fixes
+VS Code 1.145.3, its commit and the Linux x64 archive SHA-256. Pin upgrades need
+new evidence for `workbench.trust.manage`, `.workspace-trust-editor`'s `Trust`
+button, and the extension's status item ID.
+
+Linux, Node 24+ or 22.18+, Xvfb, xauth, LOKA_VSCODE and built `out/extension.js`
+are prerequisites. Missing prerequisites produce named skips and exit 77;
+`LOKA_REQUIRE_VSCODE_SMOKE=1` makes them failures. Without LOKA_WEB_BUILD,
+T1'/T2 print a named skip and the remaining successful cells return 0.
+`LOKA_REQUIRE_VSCODE_RUNTIME=1` requires the Web tree and implies required smoke.
+Invalid supplied inputs, pin mismatches, assertion failures and cleanup
+residuals always fail (exit 1). This is not registered with CTest or made a
+build prerequisite. Vehicle tests need no VS Code; process tests name their
+skips when Xvfb/xauth are absent (and use Python's test-only orphan reaper).
+
+The launcher owns Xvfb, a detached code group, CDP, timers and a unique directory
+under `build/vscode-smoke/`. Cleanup releases the suite, bounds process exit,
+kills the code group if needed, checks `/proc`, terminates Xvfb and checks its
+PID/lock before removing the run directory. The census covers the group and
+escaped processes whose command line contains the run directory. It cannot
+find descendants that escape both. Independent fixture PID watches check only
+the fixture’s own PIDs independently of the census; the escaped fixture still
+names the run directory, and no control escapes both criteria. `/proc` errors fail the census. No sandbox or
+workspace-trust bypass flags are added.
+
+CI downloads the pinned archive into runner temporary storage and checks its
+SHA-256 before extraction. Download/checksum failures fail the step. Binaries,
+profiles and UI captures are not published, cached or committed; extracted
+licence files are preserved. The smoke uses the supplied VS Code distribution
+for development/testing and does not redistribute it.
+
+Runtime-verified on 2026-11-13 on Ubuntu 24.04 (WSL2, x86-64) with the pinned
+VS Code 1.145.3, Node 24.19.0 and an extension built immediately before the run.
+The launch arguments were `--user-data-dir`, `--extensions-dir`,
+`--extensionDevelopmentPath`, `--extensionTestsPath`, `--disable-gpu`,
+`--remote-debugging-port=0` and the workspace; the suite read
+`security.workspace.trust.enabled` as true in every launch.
+
+- Without LOKA_WEB_BUILD: R1 R2 and T1 T3 passed, T1'/T2 printed their skip,
+  exit 0. With a Web tree built by the `web` preset: all six cells passed;
+  T2 observed `apps[0]` = LokaHelloWeb. Without LOKA_VSCODE: named skip, exit 77.
+- Extension mutations on the built `out/`, each failing the named cell:
+  `activate` throws (R1), one command registration removed (R1), admission
+  always true (R2: the status read was the catalog message), admission always
+  false (T3), the `started` message ignored (T2).
+- Vehicle mutations: trust click omitted (T1: grant timeout), Open Preview
+  omitted (R2: no tab), launcher withholding `release` (R2: exit timeout),
+  suite ignoring `release` in the real VS Code (exit
+  timeout, forced group kill; afterwards no `code`, crash handler or Xvfb
+  process, no X lock, no run directory).
+- Vehicle tests include trust and exit deadline checks, the independent PID watch, both residual
+  controls, SIGTERM and concurrent display allocation.
+
+On GitHub's hosted Ubuntu runner the same commit's `linux-headless` job passed
+the vehicle tests and R1 R2 T1 T3 (T1'/T2 skipped by name). There an extracted
+archive exits with SIGTRAP at launch until its `chrome-sandbox` helper is owned
+by root with mode 4755, which the CI step sets; the cause is inferred from that
+fix, the failing run's VS Code output was not captured. A local archive on a
+host that allows unprivileged user namespaces needs no such step.
+
+Not runtime-verified here: Remote WSL and Windows hosts, and anything the scope
+paragraph above excludes. On this host the only process that left the code
+group was VS Code's crash handler, whose command line names the run directory.
