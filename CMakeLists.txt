@@ -1003,7 +1003,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     add_test(NAME testToolboxEditRefusal_${_edit_refusal} COMMAND LokaToolboxFocusTests edit-refusal-${_edit_refusal})
   endforeach()
   add_test(NAME LokaToolboxFocusTests COMMAND LokaToolboxFocusTests)
-  foreach(_edit_case full-edges translation overflow resize clip-only pool visible-readers
+  foreach(_edit_case no-window full-edges translation overflow resize clip-only pool visible-readers
                      door-click door-key door-delete door-tab door-idle door-deactivate
                      door-activate door-sync door-rollback door-fast door-navigate editor-value)
     add_test(NAME testToolboxEdit_${_edit_case} COMMAND LokaToolboxFocusTests edit-${_edit_case})
@@ -1151,7 +1151,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxClipPaintTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxClipPaintTests)
   set_target_properties(LokaToolboxClipPaintTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_clip_case multi-two multi-four shrink-none shrink-clip shrink-refused shrink-frame box card unflagged nested overflow dirty scrolled viewport unit ribbon hits region push none-context none-placement)
+  foreach(_clip_case edit-key-overlap edit-click-overlap empty-control multi-two multi-four shrink-none shrink-clip shrink-refused shrink-frame box card unflagged nested overflow dirty scrolled viewport unit ribbon hits region push none-context none-placement)
     add_test(NAME testToolboxClipPaint_${_clip_case} COMMAND LokaToolboxClipPaintTests ${_clip_case})
   endforeach()
 

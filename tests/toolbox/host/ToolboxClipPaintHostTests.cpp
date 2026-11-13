@@ -429,6 +429,104 @@ namespace
       return controller->projectLayoutState(state) ? this->Node::layout(platform, state) : 0;
     }
   };
+  void editOverlap(bool click)
+  {
+    Fixture f;
+    LOKA_VERIFY(f.controller.projectionParentScopes_.resetRoot(f.window.window(), Frame(0, 0, 300, 300)));
+    MutableState<String> value(String::Literal("a"));
+    NodeState<String> text(&value, 0);
+    BoxNode clip(ClipBox().size(40, 24).props);
+    BoxNode *wide = new BoxNode(Box().width(120).props);
+    PlacedEdit *field = new PlacedEdit(text);
+    ToolboxEditTextContext *context = new ToolboxEditTextContext(field, &f.controller);
+    field->setContext(context);
+    wide->addChild(field);
+    clip.addChild(wide);
+    f.layout(clip);
+    RenderNode(&clip, &f.controller);
+    LOKA_VERIFY(f.controller.editControls_.size() == 1);
+    const ToolboxNativePlacement applied = f.controller.editControls_[0].placement;
+    Rect visible;
+    LOKA_VERIFY(applied.queryVisible(visible));
+    LOKA_VERIFY(visible.right + 20 < applied.full().right);
+
+    // Real ZStack layout creates two drawn unit rows. One crosses only hidden
+    // text; the other crosses visible text without containing the whole field.
+    ZStackNode hidden((ZStackProps())), shown((ZStackProps()));
+    Ink *hiddenInk = new Ink(), *shownInk = new Ink();
+    hidden.addChild(new Ink());
+    hidden.addChild(hiddenInk);
+    shown.addChild(new Ink());
+    shown.addChild(shownInk);
+    LayoutState state = f.seat();
+    state.x = visible.right + 5;
+    state.y = visible.top;
+    state.width = 10;
+    LayoutNode(&hidden, state, &f.controller, 0);
+    state = f.seat();
+    state.x = visible.left + 5;
+    state.y = visible.top;
+    state.width = 10;
+    LayoutNode(&shown, state, &f.controller, 0);
+    RenderNode(&hidden, &f.controller);
+    RenderNode(&shown, &f.controller);
+    LOKA_VERIFY(hiddenInk->draws == 1 && shownInk->draws == 1);
+    LOKA_VERIFY(f.controller.unitLedger_.mark() == 2);
+    const Rect hiddenOverlap = intersection(applied.full(), f.controller.unitLedger_.at(0).rect);
+    const Rect shownOverlap = intersection(visible, f.controller.unitLedger_.at(1).rect);
+    LOKA_VERIFY(!EmptyRect(&hiddenOverlap) && !EmptyRect(&shownOverlap));
+    const Rect hiddenVisible = intersection(visible, f.controller.unitLedger_.at(0).rect);
+    LOKA_VERIFY(EmptyRect(&hiddenVisible));
+    f.controller.activateEditControl(0);
+    f.controller.publishFixturePressOrder();
+    toolbox_host::invalidatedRects.clear();
+    if (click)
+    {
+      const Point point = {visible.top, visible.left};
+      LOKA_VERIFY(ToolboxInputDoor::mouseDown(f.controller, point));
+    }
+    else
+    {
+      LOKA_VERIFY(ToolboxInputDoor::keyDown(f.controller, 'x'));
+      LOKA_VERIFY((**f.controller.editControls_[0].te).teLength == 2);
+    }
+    // A key repairs once. A click also deactivates/reactivates the focused row,
+    // so all three repairs must still touch only the visible control unit.
+    LOKA_VERIFY(toolbox_host::invalidatedRects.size() == (click ? 3u : 1u));
+    for (std::size_t i = 0; i < toolbox_host::invalidatedRects.size(); ++i)
+      equal(toolbox_host::invalidatedRects[i], shownOverlap);
+    f.controller.clearControls();
+    f.controller.releaseNodeContexts(&clip);
+    f.controller.releaseNodeContexts(&hidden);
+    f.controller.releaseNodeContexts(&shown);
+  }
+
+  void emptyControl()
+  {
+    Fixture f;
+    BoxNode clip(ClipBox().size(40, 24).props);
+    PlacedButton *button = new PlacedButton();
+    ToolboxButtonContext *context = new ToolboxButtonContext(button, &f.controller);
+    button->setContext(context);
+    clip.addChild(button);
+    f.layout(clip);
+    const Rect outside = {100, 100, 120, 180};
+    context->updateRect(outside);
+    // Rendering supplies the actual ClipBox projection to the ensure door.
+    // Refusal remains unconsumed only if NewControl was never called.
+    toolbox_host::refuseControls = 1;
+    RenderNode(&clip, &f.controller);
+    LOKA_VERIFY(toolbox_host::refuseControls == 1);
+    toolbox_host::refuseControls = 0;
+    LOKA_VERIFY(f.controller.buttonControls_.size() == 0);
+    LOKA_VERIFY(f.window.port.native.controls.empty());
+    RenderNode(&clip, &f.controller);
+    LOKA_VERIFY(f.controller.buttonControls_.size() == 0);
+    LOKA_VERIFY(f.window.port.native.controls.empty());
+    f.controller.clearControls();
+    f.controller.releaseNodeContexts(&clip);
+  }
+
   void editPaintEvidence()
   {
     Fixture f;
@@ -848,7 +946,11 @@ int main(int argc, char **argv)
     siblingPreflightPin();
     outerPreflightPins();
   }
-  if (!std::strcmp(mode, "edit-paint-evidence"))
+  if (!std::strcmp(mode, "edit-key-overlap") || !std::strcmp(mode, "edit-click-overlap"))
+    editOverlap(!std::strcmp(mode, "edit-click-overlap"));
+  else if (!std::strcmp(mode, "empty-control"))
+    emptyControl();
+  else if (!std::strcmp(mode, "edit-paint-evidence"))
     editPaintEvidence();
   else if (!std::strcmp(mode, "multi-two") || !std::strcmp(mode, "multi-four"))
     multipleTitles(!std::strcmp(mode, "multi-two") ? 2 : 4);
