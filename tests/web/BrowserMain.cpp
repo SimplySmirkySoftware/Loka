@@ -84,7 +84,18 @@ extern "C"
   /** Cost: driver observation once; one fixture-owned identity counter. */
   EMSCRIPTEN_KEEPALIVE int fixture_cell_hits(int index)
   {
+    if (index == -1)
+      return webtest::cellFixture()->buttonHits;
     return index >= 0 && index < 64 ? webtest::cellFixture()->hits[index].count : -1;
+  }
+  /** Cost: driver focus observation; one owned route lookup and its controller native-focus query. */
+  EMSCRIPTEN_KEEPALIVE int fixture_leaf_focused(uint32_t token)
+  {
+    WebResource *row = session ? session->routes().find(token) : 0;
+    if (!row || !row->leaf())
+      return 0;
+    loka::app::scene::NodeContext *focused = 0;
+    return row->leaf()->controller().readNativeFocus(focused) && focused == row->leaf();
   }
   /** Cost: driver command once; updates one fixture state or requests its Scene layout. */
   EMSCRIPTEN_KEEPALIVE void fixture_cell_command(int command)
@@ -95,6 +106,10 @@ extern "C"
         webtest::cellFixture()->reset();
       if (command == 1)
         webtest::cellFixture()->scene()->requestLayoutAfterRun();
+      if (command == 3 || command == 4)
+        webtest::cellFixture()->enabled.set(command == 4);
+      if (command == 5 || command == 6)
+        webtest::cellFixture()->shown.set(command == 6);
       if (command == 2)
         webtest::cellFixture()->text.set(loka::core::String::Literal("changed"));
     }

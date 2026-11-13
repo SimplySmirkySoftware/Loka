@@ -156,6 +156,36 @@ for (const [name, index] of [[undefined,0],['web',0],['win32',1],['macos',2],['c
 }
 console.log('skins: names, fallback and pull-time option passed');
 
+// Pull stores only module state: even reading document is forbidden here.
+const savedDocument=context.document;
+context.document=new Proxy({}, {get(){throw Error('skin pull touched document')}});
+for(const [name,index] of [['macos',2],['classic',3],['web',0]]) {
+  context.Module.lokaSkin=name;
+  assert.equal(imports.web_skin(),index);
+  assert.equal(context.WebDOM.skin,index);
+}
+context.document=savedDocument;
+assert.deepEqual(Array.from(imports.web_skin__deps),['$WebDOM']);
+// Discriminating paint values; no browser defaults can mask a missing write.
+context.Module.lokaSkin='macos';imports.web_skin();
+const own=new Map(), sibling=new Map([['--loka-text','unrelated']]);
+const element={style:{setProperty:(k,v)=>own.set(k,v),removeProperty:k=>own.delete(k)}};
+context.WebDOM.resources.set(80,{element,kind:4});
+context.WebDOM.resources.set(81,{element:{style:sibling},kind:2});
+for(let repeat=0;repeat<2;++repeat) {
+  imports.web_set_enabled(80,0);
+  assert.equal(element.disabled,true);
+  assert.equal(own.get('--loka-text'),'#a9a9a9');
+}
+for(let repeat=0;repeat<2;++repeat) {
+  imports.web_set_enabled(80,1);
+  assert.equal(element.disabled,false);
+  assert.equal(own.has('--loka-text'),false);
+}
+assert.deepEqual([...sibling],[['--loka-text','unrelated']]);
+imports.web_set_enabled(999,0);
+console.log('skin pull has no document access; disabled variable is own-element and idempotent');
+
 // Build real mapping-skewed schemas using the generator; admission must refuse
 // before canvas/service or resource creation, even though the text fields agree.
 for (const mutation of ['reorder','rename']) {
@@ -178,3 +208,48 @@ print(g.generate_web(v))
   assert.equal(context.WebDOM.resources.size,0);
 }
 console.log('skins: generated reorder/rename skew refused before resources');
+
+// Restore canonical vocabulary after the skew-admission controls.
+vm.runInContext(vocab,context);
+vm.runInContext(readFileSync(new URL('text.js',dir),'utf8'),context);
+context.document.body={appendChild(){}};
+context.ResizeObserver=class {observe(){} disconnect(){}};
+context.WebDOM.contentBox=()=>[220,240];
+context.document.createElement=tag=>{
+  const properties=new Map();
+  const style={setProperty:(k,v)=>properties.set(k,v),removeProperty:k=>properties.delete(k),
+    getPropertyValue:k=>properties.get(k)??''};
+  Object.defineProperty(style,'cssText',{set(){properties.clear()}});
+  return {tag,style,properties,dataset:{},appendChild(){},addEventListener(){},removeEventListener(){},remove(){}};
+};
+for(const [skin,index] of [['web',0],['win32',1],['macos',2],['classic',3]]) {
+  context.Module.lokaSkin=skin;imports.web_skin();
+  const look=context.LokaWebStyle.skinLook[index];
+  for(const [kind,paint] of [[0,look.root],[2,look.button],[4,look.cell]]) {
+    const token=100+kind;
+    assert.equal(imports.web_create(kind,token,100,100,104),1);
+    const row=context.WebDOM.row(token);
+    assert.equal(row.element.tag,kind===0?'div':'button');
+    for(const [key,value] of Object.entries(paint)) assert.equal(row.element.properties.get(key),value);
+    if(kind===0) assert.equal(row.element.properties.has('color-scheme'),skin!=='web');
+    else {
+      for(const enabled of [0,0,1,1]) {
+        imports.web_set_enabled(token,enabled);
+        assert.equal(row.element.style.getPropertyValue('--loka-text'),enabled?'':look.disabledText);
+        for(const [key,value] of Object.entries(paint)) assert.equal(row.element.properties.get(key),value);
+      }
+    }
+  }
+}
+console.log('all skins: root/Button/Cell creation paints after cssText; repeated enabled projection preserves paint');
+context.WebDOM.text={environment:()=>({applyToElement(){}})};
+context.HEAP32.set([2,9,1,12,0,0,0,0,0],1);
+for(const [color,css] of [[0,'var(--loka-text)'],[1,'var(--loka-text)'],[2,'var(--loka-secondary)'],[3,'black']]) {
+  context.HEAP32[1+expected.fields.color]=color;
+  assert.equal(imports.web_set_text_style(104,4,9),true);
+  assert.equal(context.WebDOM.row(104).element.style.color,css);
+}
+// Changing the factory option after pull cannot repaint later-created roots.
+context.Module.lokaSkin='macos';imports.web_skin();context.Module.lokaSkin='classic';
+assert.equal(imports.web_create(0,200,0,100,104),1);
+assert.equal(context.WebDOM.row(200).element.style.getPropertyValue('background'),'#ececec');

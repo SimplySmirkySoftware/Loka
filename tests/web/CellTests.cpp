@@ -67,7 +67,7 @@ namespace
     LOKA_VERIFY(cells.size() == 3);
     const Token button = ButtonToken(rig.session);
     LOKA_VERIFY(button != 0 && webtest::resources.size() == 5);
-    LOKA_VERIFY(webtest::resources[cells[0]].kind == BUTTON);
+    LOKA_VERIFY(webtest::resources[cells[0]].kind == CELL);
     LOKA_VERIFY(webtest::resources[cells[0]].text == "a b");
     LOKA_VERIFY(webtest::resources[cells[1]].text == "owned");
     LOKA_VERIFY(webtest::resources[cells[0]].enabled && !webtest::resources[button].enabled);

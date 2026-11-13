@@ -2,9 +2,10 @@
  * Buffers are consumed synchronously; callbacks retain session/token identities. */
 addToLibrary({
   /** Cost: bootstrap once after admissions; resolves the current module option, no resource rows. */
-  web_skin: () => LokaWebStyle.resolveSkin(Module['lokaSkin']),
+  web_skin__deps: ['$WebDOM'],
+  web_skin: () => WebDOM.skin = LokaWebStyle.resolveSkin(Module['lokaSkin']),
   $WebDOM: {
-    text: null,
+    text: null, skin: 0,
     resources: new Map(), tasks: new Map(), next: 1,
     row(token) { return WebDOM.resources.get(token >>> 0); },
     parent(token) { const row = WebDOM.row(token); return row && (row.kind === 3 ? row.content : row.element); },
@@ -41,7 +42,7 @@ addToLibrary({
     token >>>= 0; parent >>>= 0;
     let element, row;
     try {
-      element = document.createElement(kind === 2 ? 'button' : kind === 1 ? 'span' : 'div');
+      element = document.createElement((kind === 2 || kind === 4) ? 'button' : kind === 1 ? 'span' : 'div');
       row = {element, kind, listener:null, observer:null};
       element.dataset.lokaToken = String(token);
       element.style.cssText = 'box-sizing:border-box;position:absolute;white-space:pre;visibility:hidden;';
@@ -75,16 +76,20 @@ addToLibrary({
           row.listener = () => Module['_web_scroll'](token, Math.round(element.scrollLeft), Math.round(element.scrollTop));
           element.addEventListener('scroll', row.listener, {passive:true});
         }
-        if (kind === 2) {
+        if (kind === 2 || kind === 4) {
           element.type = 'button';
           const g=LokaWebStyle.webButtonGeometry;
           Object.assign(element.style,{appearance:'none',boxSizing:'border-box',
-            padding:g.insetY+'px '+g.insetX+'px',border:g.border+'px solid',
+            padding:g.insetY+'px '+g.insetX+'px',borderWidth:g.border+'px',borderStyle:'solid',
             margin:'0',minWidth:'0',minHeight:'0',whiteSpace:'pre',overflow:'hidden'});
           row.listener = () => Module['web'].click(token);
           element.addEventListener('click', row.listener);
         }
       }
+      // Cost: creation once; at most four properties on this owned element, no resource walk.
+      const look=LokaWebStyle.skinLook[WebDOM.skin];
+      const paint=kind===0 ? look.root : kind===2 ? look.button : kind===4 ? look.cell : {};
+      for (const property of Object.keys(paint)) element.style.setProperty(property,paint[property]);
       WebDOM.hidden(row, true);
       element.style.visibility = 'visible';
       WebDOM.resources.set(token, row);
@@ -198,15 +203,21 @@ addToLibrary({
     const s=row.element.style;
     s.textDecoration=d.underline===1 ? 'underline':'none';
     const colors=LokaWebStyle.colors;
-    const palette={ [colors.UNSET]:'CanvasText', [colors.PRIMARY]:'CanvasText',
-      [colors.SECONDARY]:'GrayText', [colors.BLACK]:'black', [colors.WHITE]:'white',
+    const palette={ [colors.UNSET]:'var(--loka-text)', [colors.PRIMARY]:'var(--loka-text)',
+      [colors.SECONDARY]:'var(--loka-secondary)', [colors.BLACK]:'black', [colors.WHITE]:'white',
       [colors.RED]:'red', [colors.GREEN]:'green', [colors.BLUE]:'blue',
       [colors.CYAN]:'cyan', [colors.MAGENTA]:'magenta', [colors.YELLOW]:'yellow' };
     s.color=palette[d.color];
     return true;
   },
   web_set_enabled__deps:['$WebDOM'],
-  web_set_enabled(token,value) { const row=WebDOM.row(token); if(row) row.element.disabled=!value; },
+  /** Cost: each Button/Cell render; one owned element, no resource walk or remembered flag. */
+  web_set_enabled(token,value) {
+    const row=WebDOM.row(token); if(!row) return;
+    row.element.disabled=!value;
+    if(value) row.element.style.removeProperty('--loka-text');
+    else row.element.style.setProperty('--loka-text',LokaWebStyle.skinLook[WebDOM.skin].disabledText);
+  },
   web_set_hidden__deps:['$WebDOM'],
   web_set_hidden(token,value) { const row=WebDOM.row(token); if(!row) return 0; WebDOM.hidden(row,value); return 1; },
   web_revoke__deps:['$WebDOM'],

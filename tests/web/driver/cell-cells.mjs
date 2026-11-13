@@ -49,7 +49,7 @@ export async function runCellCells(client, navigate) {
   assert.equal(new Set(geometry.rows.map(r=>r.y)).size,8);
   assert(geometry.root.w>0 && geometry.root.h>0);
   assert(geometry.rows.every(r=>r.w>0 && r.h>0 && r.align==='center'));
-  assert.equal(geometry.buttonAlign,'left');
+  assert.equal(geometry.buttonAlign,'center');
   for(let index=0;index<64;++index) {
     await client.evaluate('fixture._fixture_cell_command(0)');
     await inspect();
@@ -100,15 +100,15 @@ export async function runCellCells(client, navigate) {
   await navigate('index.html');
   await client.evaluate('fixture._fixture_configure(-200,0);web.start()');
   assert.deepEqual(await client.evaluate("[...document.querySelectorAll('button')].map(e=>[e.textContent,getComputedStyle(e).textAlign])"),
-    [['button','left'],['a b','center'],['owned','center'],['null','center']]);
+    [['button','center'],['a b','center'],['owned','center'],['null','center']]);
   await client.evaluate(`window.savedService=fixture.textTest.service();
     fixture.textTest.replaceService(Object.create(savedService,{metrics:{value:()=>null}}));
     fixture._fixture_cell_command(2)`);
   assert.equal(await client.evaluate("document.querySelectorAll('button')[1].textContent"),'a b');
   await client.evaluate('fixture.textTest.replaceService(savedService);fixture._fixture_cell_command(1)');
   assert.deepEqual(await client.evaluate("[...document.querySelectorAll('button')].slice(0,2).map(e=>[e.textContent,getComputedStyle(e).textAlign])"),
-    [['button','left'],['changed','center']]);
-  console.log('CellAlignment normalized CENTER / Button LEFT render and refusal recovery passed');
+    [['button','center'],['changed','center']]);
+  console.log('CellAlignment normalized CENTER / Button CENTER render and refusal recovery passed');
   await stop();
 
   // Seed 1 board is independently calculated with the production algorithm's fixed 32-bit arithmetic.

@@ -103,6 +103,11 @@ namespace webtest
       case 6:
         c.declare(ScrollView(this->viewport) << first);
         break;
+      case 8:
+        c.declare(Show(*this->shown.state())
+                  << (VStack().gap(0) << (Text("primary") + Primary) << (Text("secondary") + Secondary)
+                                      << Button("button", &this->button).enabled(this->enabled.state()) << first));
+        break;
       case 7:
         c.declare(VStack().gap(0) << first << Cell("owned").onClick(&this->cells[1]));
         break;

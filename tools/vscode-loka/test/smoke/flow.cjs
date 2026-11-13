@@ -15,7 +15,9 @@ function fixture(catalog) {
 function skins(vocab) {
   const rows = vocab.webSkins;
   if (!Array.isArray(rows) || new Set(rows.map(r => r.name)).size !== rows.length
-      || rows.some(r => !Number.isFinite(r.spacing?.[2]))) throw new Error('Invalid webSkins spacing');
+      || rows.some(r => !Number.isFinite(r.spacing?.[2]) || typeof r.look?.ground !== 'string'
+        || typeof r.look?.face !== 'string' || !Number.isInteger(r.look?.radius)))
+    throw new Error('Invalid webSkins spacing or paint');
   const web = rows.find(r => r.name === 'web'), mac = rows.find(r => r.name === 'macos');
   if (!web || !mac || web.spacing[2] === mac.spacing[2]) throw new Error('web and macos margins must differ');
   return rows;

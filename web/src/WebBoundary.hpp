@@ -12,6 +12,7 @@ namespace loka
       TEXT,
       BUTTON,
       SCROLL,
+      CELL,
       KIND_COUNT
     };
     enum ScrollCommit

@@ -109,7 +109,7 @@ WebResource *WebElement::revoke(WebInputRoutes &routes)
 
 WebElementContext *WebResource::leaf() const
 {
-  return this->kind == loka::web::TEXT || this->kind == loka::web::BUTTON
+  return this->kind == loka::web::TEXT || this->kind == loka::web::BUTTON || this->kind == loka::web::CELL
              ? static_cast<WebElementContext *>(this->receiver)
              : 0;
 }
