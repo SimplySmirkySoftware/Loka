@@ -105,10 +105,13 @@ namespace
   {
     HWND link, cover;
     unsigned downs, ups, coverUps;
+    /** Any button DOWN this thread retrieved, whatever window it targets. */
+    unsigned threadDowns;
     MouseRetrievals(HWND c, HWND v)
         : link(c),
           cover(v),
           downs(0),
+          threadDowns(0),
           ups(0),
           coverUps(0)
     {
@@ -120,6 +123,8 @@ namespace
     if (code == HC_ACTION && retrievals)
     {
       HWND target = reinterpret_cast<MOUSEHOOKSTRUCT *>(param)->hwnd;
+      if (message == WM_LBUTTONDOWN || message == WM_NCLBUTTONDOWN)
+        ++retrievals->threadDowns;
       if (target == retrievals->link && message == WM_LBUTTONDOWN)
         ++retrievals->downs;
       if (target == retrievals->link && message == WM_LBUTTONUP)
@@ -193,11 +198,13 @@ namespace
   /** Whether the first injected DOWN reaches this thread is a desktop grant
       (input desktop, foreground, integrity level), not Loka behavior: Loka
       cannot route a DOWN the desktop never delivers. False releases the button
-      and sends the pin to its [skip] branch. Every later wait stays a verdict. */
-  bool desktopDelivered(const char *pin, const unsigned &downs, HWND root)
+      and sends the pin to its [skip] branch only when no DOWN reached this
+      thread at all; a DOWN retrieved for another window is a routing verdict,
+      left to the caller's wait. Every later wait stays a verdict. */
+  bool desktopDelivered(const char *pin, const unsigned &threadDowns, HWND root)
   {
     const DWORD start = GetTickCount();
-    while (downs < 1 && GetTickCount() - start < 5000)
+    while (threadDowns < 1 && GetTickCount() - start < 5000)
     {
       MSG message;
       while (PeekMessageW(&message, 0, 0, 0, PM_REMOVE))
@@ -207,7 +214,7 @@ namespace
       }
       Sleep(1);
     }
-    if (downs >= 1)
+    if (threadDowns >= 1)
       return true;
     injectButton(MOUSEEVENTF_LEFTUP);
     std::printf("[skip] %s: the desktop did not deliver the injected DOWN to this thread within 5 s "
@@ -277,7 +284,7 @@ void testWin32LinkPressCover()
   MouseHook hook(counts);
   aim(f);
   injectButton(MOUSEEVENTF_LEFTDOWN);
-  if (!desktopDelivered("testWin32LinkPressCover", counts.downs, f.windows.root))
+  if (!desktopDelivered("testWin32LinkPressCover", counts.threadDowns, f.windows.root))
     return;
   awaitMouse(counts.downs, 1, f.hwnd());
   RECT rect;
@@ -321,7 +328,7 @@ void testWin32LinkPressPassThroughLabel()
   MouseRetrievals counts(f.hwnd(), label);
   MouseHook hook(counts);
   injectButton(MOUSEEVENTF_LEFTDOWN);
-  if (!desktopDelivered("testWin32LinkPressPassThroughLabel", counts.downs, f.windows.root))
+  if (!desktopDelivered("testWin32LinkPressPassThroughLabel", counts.threadDowns, f.windows.root))
   {
     LOKA_VERIFY(DestroyWindow(label));
     return;
@@ -631,7 +638,7 @@ void testWin32LinkPressPartialExposure()
   MouseRetrievals counts(f.hwnd(), f.windows.other);
   MouseHook mouse(counts);
   injectButton(MOUSEEVENTF_LEFTDOWN);
-  if (!desktopDelivered("testWin32LinkPressPartialExposure", counts.downs, f.windows.root))
+  if (!desktopDelivered("testWin32LinkPressPartialExposure", counts.threadDowns, f.windows.root))
     return;
   awaitMouse(counts.downs, 1, f.hwnd());
   LOKA_VERIFY(paints.complete == complete);
