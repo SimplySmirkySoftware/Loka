@@ -2509,6 +2509,8 @@ void testWin32ScrollViewRebasedClipHeightlessBottom()
                                     wc.hInstance,
                                     NULL);
       LOKA_VERIFY(parent);
+      // The class-family contract: the helper class is registered and created W-family.
+      LOKA_VERIFY(IsWindowUnicode(parent));
       {
         Win32ScenePlatformController controller(root, scale);
         RegisterWin32BuiltInSupport(controller);
