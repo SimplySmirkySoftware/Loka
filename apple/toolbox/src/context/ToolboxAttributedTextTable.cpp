@@ -381,6 +381,117 @@ bool ToolboxAttributedTextTable::fitLine(const TextLineRecord &line,
   return true;
 }
 
+/** Stack-local nested walk. The consumer owns ink scopes; this walk owns all
+    line, fragment and batch geometry, including entry into empty cut fragments. */
+class ToolboxAttributedTextTable::FragmentWalker
+{
+public:
+  FragmentWalker(const ToolboxAttributedTextTable &table, const ToolboxTextMeasureScope &measure)
+      : table_(table),
+        measure_(measure)
+  {
+  }
+
+  class Line
+  {
+  public:
+    Line(FragmentWalker &walk, const TextLineRecord &line, const FittedLine &fitted, int x, int top)
+        : walk_(walk),
+          line_(line),
+          fitted_(fitted),
+          cursor_(x + fitted.offset),
+          top_(top),
+          fragmentIndex_(0)
+    {
+    }
+    short baseline() const
+    {
+      return Coordinate(this->top_ + this->line_.metrics.ascent);
+    }
+    int nextTop() const
+    {
+      return Coordinate(this->top_ + this->line_.metrics.ascent + this->line_.metrics.descent
+                        + this->line_.metrics.leading);
+    }
+    bool containsY(Point point) const
+    {
+      return point.v >= this->top_
+             && static_cast<int>(point.v) - this->top_ < this->line_.metrics.ascent + this->line_.metrics.descent;
+    }
+    bool nextFragment(const TextFragment *&out)
+    {
+      if (this->fitted_.ellipsis == ELLIPSIS_LINE_OMITTED || this->fragmentIndex_ >= this->line_.fragmentCount)
+        return false;
+      if (this->fragmentIndex_
+          && this->walk_.table_.lines_->fragment(this->line_.firstFragment + this->fragmentIndex_ - 1).end
+                 > this->fitted_.paintedEnd)
+        return false;
+      out = &this->walk_.table_.lines_->fragment(this->line_.firstFragment + this->fragmentIndex_++);
+      return true;
+    }
+    class Fragment
+    {
+    public:
+      Fragment(Line &line, const TextFragment &fragment)
+          : line_(line),
+            fragment_(fragment),
+            end_(fragment.end < line.fitted_.paintedEnd ? fragment.end : line.fitted_.paintedEnd),
+            start_(fragment.start)
+      {
+        this->line_.walk_.measure_.select(this->line_.walk_.table_.fonts_[fragment.span]);
+      }
+      bool pending() const
+      {
+        return this->start_ < this->end_;
+      }
+      struct Batch
+      {
+        std::size_t start, next;
+        int x, width;
+      };
+      bool next(Batch &out)
+      {
+        const ToolboxAttributedTextTable &table = this->line_.walk_.table_;
+        const std::size_t next = table.rangeEnd(this->start_, this->end_, this->fragment_.span);
+        int width = this->fragment_.width;
+        if (next == this->start_)
+          return false;
+        const WidthSource source(table, this->line_.walk_.measure_);
+        if ((this->start_ != this->fragment_.start || next != this->fragment_.end)
+            && !source.width(this->start_, next, this->fragment_.span, width))
+          return false;
+        const Batch batch = {this->start_, next, this->line_.cursor_, width};
+        out = batch;
+        this->line_.cursor_ = this->line_.cursor_ > INT_MAX - width ? INT_MAX : this->line_.cursor_ + width;
+        this->start_ = next;
+        return true;
+      }
+
+    private:
+      Line &line_;
+      const TextFragment &fragment_;
+      const std::size_t end_;
+      std::size_t start_;
+    };
+    int cursor() const
+    {
+      return this->cursor_;
+    }
+
+  private:
+    FragmentWalker &walk_;
+    const TextLineRecord &line_;
+    const FittedLine &fitted_;
+    int cursor_;
+    const int top_;
+    std::size_t fragmentIndex_;
+  };
+
+private:
+  const ToolboxAttributedTextTable &table_;
+  const ToolboxTextMeasureScope &measure_;
+};
+
 bool ToolboxAttributedTextTable::draw(short x,
                                       short top,
                                       const ToolboxScenePlatformController &controller,
@@ -394,7 +505,7 @@ bool ToolboxAttributedTextTable::draw(short x,
   if (!this->valid())
     return false;
   ToolboxTextMeasureScope measure(controller, this->fonts_.size() ? &this->fonts_[0] : 0, this->fonts_.size());
-  const WidthSource source(*this, measure);
+  FragmentWalker walk(*this, measure);
   int y = top;
   for (std::size_t i = 0; i < this->lines_->lineCount(); ++i)
   {
@@ -402,42 +513,80 @@ bool ToolboxAttributedTextTable::draw(short x,
     FittedLine fitted;
     if (!this->fitLine(line, availableWidth, block, measure, fitted))
       return false;
-    int cursor = x + fitted.offset;
-    for (std::size_t f = 0; fitted.ellipsis != ELLIPSIS_LINE_OMITTED && f < line.fragmentCount; ++f)
+    FragmentWalker::Line row(walk, line, fitted, x, y);
+    const TextFragment *nextFragment = 0;
+    while (row.nextFragment(nextFragment))
     {
-      const TextFragment &fragment = this->lines_->fragment(line.firstFragment + f);
-      const std::size_t end = fragment.end < fitted.paintedEnd ? fragment.end : fitted.paintedEnd;
-      measure.select(this->fonts_[fragment.span]);
+      const TextFragment &fragment = *nextFragment;
+      FragmentWalker::Line::Fragment fragments(row, fragment);
       loka::toolbox::ToolboxTextInkScope ink(
           loka::toolbox::ToolboxTextInk(this->spans_[fragment.span].style.color_, SURFACE_GROUND_WINDOW));
-      std::size_t start = fragment.start;
-      while (start < end)
+      while (fragments.pending())
       {
-        // Twin: Win32AttributedTextTable::draw batches 8192 UTF-16 units;
-        // this byte path bounds both the native count and measured advance.
-        const std::size_t next = this->rangeEnd(start, end, fragment.span);
-        int width = fragment.width;
-        if (next == start)
+        FragmentWalker::Line::Fragment::Batch batch;
+        if (!fragments.next(batch))
           return false;
-        if ((start != fragment.start || next != fragment.end) && !source.width(start, next, fragment.span, width))
-          return false;
-        MoveTo(Coordinate(cursor), Coordinate(y + line.metrics.ascent));
-        DrawText(&this->bytes_[start], 0, static_cast<short>(next - start));
-        cursor = cursor > INT_MAX - width ? INT_MAX : cursor + width;
-        start = next;
+        MoveTo(Coordinate(batch.x), row.baseline());
+        DrawText(&this->bytes_[batch.start], 0, static_cast<short>(batch.next - batch.start));
       }
-      if (end != fragment.end)
-        break;
     }
     if (fitted.ellipsis == ELLIPSIS_DRAWN)
     {
       measure.select(this->fonts_[fitted.dotsSpan]);
-      MoveTo(Coordinate(cursor), Coordinate(y + line.metrics.ascent));
+      MoveTo(Coordinate(row.cursor()), row.baseline());
       loka::toolbox::ToolboxTextInkScope ink(
           loka::toolbox::ToolboxTextInk(this->spans_[fitted.dotsSpan].style.color_, SURFACE_GROUND_WINDOW));
       DrawText("...", 0, 3);
     }
-    y = Coordinate(y + line.metrics.ascent + line.metrics.descent + line.metrics.leading);
+    y = row.nextTop();
   }
   return true;
+}
+
+ToolboxHitAnswer ToolboxAttributedTextTable::hitAt(const Rect &seat,
+                                                   const ToolboxScenePlatformController &controller,
+                                                   const BlockStyle &block,
+                                                   Point local,
+                                                   ToolboxLinkHit &out) const
+{
+  if (!this->valid())
+    return TOOLBOX_HIT_REFUSED;
+  if (!PtInRect(local, &seat))
+    return TOOLBOX_HIT_NONE;
+  ToolboxTextMeasureScope measure(controller, this->fonts_.size() ? &this->fonts_[0] : 0, this->fonts_.size());
+  FragmentWalker walk(*this, measure);
+  int y = seat.top;
+  for (std::size_t i = 0; i < this->lines_->lineCount(); ++i)
+  {
+    const TextLineRecord &line = this->lines_->line(i);
+    FittedLine fitted;
+    if (!this->fitLine(line, static_cast<short>(seat.right - seat.left), block, measure, fitted))
+      return TOOLBOX_HIT_REFUSED;
+    FragmentWalker::Line row(walk, line, fitted, seat.left, y);
+    const TextFragment *nextFragment = 0;
+    while (row.nextFragment(nextFragment))
+    {
+      const TextFragment &fragment = *nextFragment;
+      FragmentWalker::Line::Fragment fragments(row, fragment);
+      while (fragments.pending())
+      {
+        FragmentWalker::Line::Fragment::Batch batch;
+        if (!fragments.next(batch))
+          return TOOLBOX_HIT_REFUSED;
+        if (row.containsY(local) && local.h >= batch.x && static_cast<int>(local.h) - batch.x < batch.width)
+        {
+          const TextSegmentRange &range = this->spans_[fragment.span].source;
+          if (this->snapshot_.segment(range.first()).link.isNone())
+            return TOOLBOX_HIT_NONE;
+          const ToolboxLinkHit hit = {range.first(), range.last(), seat};
+          out = hit;
+          return TOOLBOX_HIT_LINK;
+        }
+      }
+    }
+    y = row.nextTop();
+    if (local.v < y)
+      return TOOLBOX_HIT_NONE;
+  }
+  return TOOLBOX_HIT_NONE;
 }

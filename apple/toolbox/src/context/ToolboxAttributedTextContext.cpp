@@ -241,3 +241,45 @@ void ToolboxAttributedTextContext::operator delete(void *storage) throw()
 {
   loka::core::LokaFreeRaw(storage, loka::core::LokaAllocationSite("ToolboxAttributedText", "Context"));
 }
+
+namespace
+{
+  bool SameRect(const Rect &a, const Rect &b)
+  {
+    return a.left == b.left && a.top == b.top && a.right == b.right && a.bottom == b.bottom;
+  }
+} // namespace
+
+bool ToolboxAttributedTextContext::containsPoint(Point local) const
+{
+  return PtInRect(local, &this->rect_);
+}
+ToolboxHitAnswer ToolboxAttributedTextContext::prepareLinkHit(Point local, ToolboxLinkHit &out) const
+{
+  if (!this->controller() || !this->node_ || !this->table_.valid())
+    return TOOLBOX_HIT_REFUSED;
+  return this->table_.hitAt(this->rect_, *this->controller(), this->node_->props.blockStyle_, local, out);
+}
+bool ToolboxAttributedTextContext::queryEligibleRun(const ToolboxLinkHit &hit,
+                                                    loka::app::AttributedString::LinkRun &out) const
+{
+  if (!loka::app::scene::IsAttachedCurrentContext(this) || !this->node_ || !this->node_->props.text_
+      || !this->placementPresent() || !this->table_.valid() || !this->presented_.isKnown()
+      || this->presented_.scope() != ToolboxPaintScope())
+    return false;
+  const loka::app::AttributedString &current = this->node_->props.text_->get();
+  if (!this->presented_.value().hasSameSegmentValues(this->table_.value())
+      || !this->table_.value().hasSameSegmentValues(current))
+    return false;
+  if (!SameRect(hit.seat, this->rect_))
+    return false;
+  loka::app::AttributedString::LinkRun run;
+  if (!current.queryLinkRun(hit.firstSegment, run) || run.last < hit.lastSegment)
+    return false;
+  out = run;
+  return true;
+}
+bool ToolboxAttributedTextContext::writeActivatedLink(const loka::app::AttributedString::LinkRun &run)
+{
+  return this->node_ && this->node_->writeActivatedLink(run.first);
+}

@@ -15,7 +15,9 @@ namespace loka
   }
 } // namespace loka
 
-/** Completed client-coordinate hit, published only after native cleanup. */
+/** Completed client-coordinate hit, published only after native cleanup.
+    Deliberate twin of ToolboxLinkHit/ToolboxHitAnswer in
+    apple/toolbox/src/context/ToolboxAttributedTextTable.hpp. */
 struct LinkHit
 {
   std::size_t firstSegment, lastSegment;

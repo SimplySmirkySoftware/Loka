@@ -52,6 +52,11 @@ public:
 protected:
   /** Once per successful leaf layout visit; O(1), reads only this context's geometry. */
   void comparePlacement(const ToolboxLeafGeometry &previous, const ToolboxLeafGeometry &next);
+  /** Read the placement owner's existing validity; no independent hit state. */
+  bool placementPresent() const
+  {
+    return this->validity_.present();
+  }
   void completePlacement()
   {
     this->validity_.complete();
