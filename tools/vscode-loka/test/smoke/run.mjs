@@ -296,7 +296,8 @@ export const stepStatuses = Object.freeze({R3: 'Loka: Trust the workspace to bui
   R2: statuses.R, R4: 'Loka: Trust the workspace to build', K3: statuses.T3,
   K2: 'Loka: Build failed: 3', K1: 'Loka: Configured', T3: statuses.T3, T2: statuses.T2});
 export const refusalText = 'Trust the workspace to select an example';
-export const toastExpression = `(() => ({text: [...document.querySelectorAll('.notifications-toasts .notification-list-item')].map(e => e.textContent).join('\\n'), toast: [...document.querySelectorAll('.notifications-toasts .notification-list-item')].some(e => e.textContent.includes(${JSON.stringify(refusalText)})), picker: !!document.querySelector('.quick-input-widget')}))()`;
+// The page only reports what it shows; the comparison with refusalText happens in the launcher, so no value is spliced into evaluated code.
+export const toastExpression = `(() => ({text: [...document.querySelectorAll('.notifications-toasts .notification-list-item')].map(e => e.textContent).join('\\n'), picker: !!document.querySelector('.quick-input-widget')}))()`;
 
 /** Cost: once per launch; one immutable step and one ack per table row, bounded CDP polls. */
 export async function handshake(owner, cell, files, connect = connectCDP) {
@@ -354,7 +355,7 @@ export async function handshake(owner, cell, files, connect = connectCDP) {
             await errorCheck();
             const ui = await cdp.evaluate(toastExpression);
             last = ui?.text ?? '';
-            return ui && !ui.picker && ui.toast === (phase === 'toast');
+            return ui && !ui.picker && ui.text.includes(refusalText) === (phase === 'toast');
           }, observationDeadline, 'toast/picker');
         } catch (error) {
           await errorCheck();

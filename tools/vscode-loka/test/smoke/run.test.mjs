@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
 import {judge, statuses, prerequisiteDecision, validateInputs, pin, RunOwner, handshake,
-  statusExpression, trustExpression, steps, stepStatuses, toastExpression, launchCells, repo, displayTaken} from './run.mjs';
+  statusExpression, trustExpression, steps, stepStatuses, toastExpression, launchCells, repo, displayTaken, refusalText} from './run.mjs';
 
 const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
 const cell = kind => ({kind, workspace: '/owned/ws', buildDirectory: '/owned/build', started: 0});
@@ -124,7 +124,7 @@ function fixture(kind, options = {}) {
     observed = expression === (options.errorUI ?? statusExpression);
     if (options.cdpError) throw new Error('CDP failed');
     if (expression === trustExpression) return !options.noTrust;
-    if (expression === toastExpression) return {text: 'last notification', picker: options.picker ?? false, toast: options.noToast ? false : steps[kind][index][1] === 'toast'};
+    if (expression === toastExpression) return {text: !options.noToast && steps[kind][index][1] === 'toast' ? refusalText : 'last notification', picker: options.picker ?? false};
     assert.equal(expression, statusExpression);
     return options.noStatus || options.noStatusAt === steps[kind][index][0] ? 'not ready' : stepStatuses[steps[kind][index][0]];
   }});
