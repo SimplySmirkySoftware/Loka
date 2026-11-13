@@ -5,7 +5,7 @@ import {mkdir, mkdtemp, readFile, rm, writeFile, symlink} from 'node:fs/promises
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
-import {judge, statuses, prerequisiteDecision, validateInputs, pin, RunOwner, handshake,
+import {judge, statuses, prerequisiteDecision, validateInputs, pin, RunOwner, handshake, main,
   statusExpression, trustExpression, steps, stepStatuses, toastExpression, launchCells, repo, displayTaken, refusalText} from './run.mjs';
 
 const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
@@ -33,7 +33,7 @@ for (const kind of Object.keys(statuses)) {
   });
 }
 
-const facts = {platform: 'linux', node: '24.19.0', python: true, xvfb: true, xauth: true, artifact: true};
+const facts = {platform: 'linux', node: '24.19.0', python: true, xvfb: true, xauth: true, artifact: true, emcmake: true, cmake: true};
 const env = {LOKA_VSCODE: '/code', LOKA_WEB_BUILD: '/build'};
 for (const [name, change, settings] of [
   ['Linux', {platform: 'darwin'}, {}], ['Node missing', {node: ''}, {}],
@@ -42,7 +42,7 @@ for (const [name, change, settings] of [
   ['python3', {python: false}, {}], ['Xvfb', {xvfb: false}, {}], ['xauth', {xauth: false}, {}],
   ['code absent', {}, {LOKA_VSCODE: ''}], ['out absent', {artifact: false}, {}]
 ]) test('prerequisite optional/required: ' + name, () => {
-  for (const require of ['', 'LOKA_REQUIRE_VSCODE_SMOKE', 'LOKA_REQUIRE_VSCODE_RUNTIME']) {
+  for (const require of ['', 'LOKA_REQUIRE_VSCODE_SMOKE', 'LOKA_REQUIRE_VSCODE_RUNTIME', 'LOKA_REQUIRE_VSCODE_FLOW']) {
     const decision = prerequisiteDecision({...facts, ...change}, {...env, ...settings, [require]: '1'});
     assert.equal(decision.code, require ? 1 : 77);
     assert.match(decision.lines.join('\n'), /R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2/);
@@ -52,10 +52,10 @@ test('runtime prerequisite and invalid input precedence', () => {
   for (const node of ['22.18.0', '24.0.0', '24.19.0']) {
     assert.equal(prerequisiteDecision({...facts, node}, env).code, 0);
   }
-  for (const required of ['', 'LOKA_REQUIRE_VSCODE_SMOKE', 'LOKA_REQUIRE_VSCODE_RUNTIME']) {
+  for (const required of ['', 'LOKA_REQUIRE_VSCODE_SMOKE', 'LOKA_REQUIRE_VSCODE_RUNTIME', 'LOKA_REQUIRE_VSCODE_FLOW']) {
     const decision = prerequisiteDecision(facts, {...env, LOKA_WEB_BUILD: '', [required]: '1'});
     assert.equal(decision.code, required.endsWith('RUNTIME') ? 1 : 0);
-    assert.match(decision.lines.join('\n'), /T1' T2: LOKA_WEB_BUILD not set/);
+    assert.match(decision.lines.join('\n'), /T1' T2.*: LOKA_WEB_BUILD not set/);
   }
   assert.equal(prerequisiteDecision({...facts, xvfb: false, invalid: 'bad pin'}, {}).code, 1);
 });
@@ -184,7 +184,7 @@ test('steps: exit deadline is 15 seconds after final go', async t => {
 test('status selector string contract names exactly the pinned item', () => {
   assert.equal(statusExpression, "document.getElementById('simplysmirkysoftware.loka-preview')?.innerText.trim() ?? ''");
 });
-test('owner spawn failure still removes its directory', async () => {
+test('owner spawn failure never removes the supervisor directory', async () => {
   const root = join(repo, 'build/vscode-smoke'); await mkdir(root, {recursive: true});
   const directory = await mkdtemp(join(root, 'test-spawn-'));
   const owner = new RunOwner(directory, {signal: async () => false});
@@ -192,7 +192,8 @@ test('owner spawn failure still removes its directory', async () => {
   await owner.code.closed;
   assert.throws(() => owner.check(), /ENOENT/);
   await owner.cleanup();
-  await assert.rejects(readFile(directory), /ENOENT/);
+  await writeFile(join(directory, 'retained'), 'supervisor owns this');
+  await rm(directory, {recursive: true, force: true});
   assert.equal(owner.timers.size, 0);
 });
 test('shell Node bootstrap optional and required branches', async () => {
@@ -200,7 +201,7 @@ test('shell Node bootstrap optional and required branches', async () => {
   try {
     for (const version of [null, 'v22.17.0', 'v23.0.0', 'broken', 'v24.0.0']) {
       if (version) await writeFile(join(directory, 'node'), '#!/bin/bash\necho ' + version + '\n', {mode: 0o700});
-      for (const required of ['', 'LOKA_REQUIRE_VSCODE_SMOKE', 'LOKA_REQUIRE_VSCODE_RUNTIME']) {
+      for (const required of ['', 'LOKA_REQUIRE_VSCODE_SMOKE', 'LOKA_REQUIRE_VSCODE_RUNTIME', 'LOKA_REQUIRE_VSCODE_FLOW']) {
         const run = spawnSync('/bin/bash', [join(repo, 'tests/scripts/VscodeLokaSmokeTest.sh')],
           {env: {PATH: directory, [required]: '1'}, encoding: 'utf8'});
         assert.equal(run.status, required ? 1 : 77, run.stdout + run.stderr);
@@ -252,7 +253,7 @@ test('unaudited Node prerequisite gives the exact reason', () => {
     const decision = prerequisiteDecision({...facts, node: '25.0.0'},
       {...env, LOKA_REQUIRE_VSCODE_SMOKE: required ? '1' : '0'});
     assert.equal(decision.code, required ? 1 : 77);
-    assert.equal(decision.lines[0], `[${required ? 'fail' : 'skip'}] R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2: Node 25.0.0 is not in the audited list for child-signal ordering`);
+    assert.equal(decision.lines[0], `[${required ? 'fail' : 'skip'}] R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2 F1 F2 F3 F4 F5 F6 F7: Node 25.0.0 is not in the audited list for child-signal ordering`);
   }
 });
 test('display selection skips live locks and admits stale or absent locks', async () => {
@@ -274,7 +275,8 @@ test('cleanup checks the owned X lock after close, allowing absent or retaken lo
     owner.x = {display: 99, child: {pid: 314}, closed: Promise.resolve().then(() => { closed = true; })};
     if (lockPid === 314) await assert.rejects(owner.cleanup(), /Xvfb exited leaving its own lock/);
     else await owner.cleanup();
-    await assert.rejects(readFile(directory), /ENOENT/);
+    await writeFile(join(directory, 'still-owned-by-supervisor'), 'yes');
+    await rm(directory, {recursive: true, force: true});
   }
 });
 test('wait failures carry cell, phase, expected text and last read text', async () => {
@@ -283,4 +285,37 @@ test('wait failures carry cell, phase, expected text and last read text', async 
   await assert.rejects(fixture('R', {noToast: true}).run(),
     /R5\/toast: toast\/picker timed out; expected "Trust the workspace to select an example" present and picker absent, last read "last notification"/);
   await assert.rejects(fixture('T3', {missing: true}).run(), /T1\/ready: step-0 timed out/);
+});
+
+test('launcher requires directory hand-off before any prerequisite skip', async () => {
+  await assert.rejects(main({}), /LOKA_SMOKE_RUN_ROOT hand-off required/);
+});
+for (const missing of [['emcmake'], ['cmake'], ['emcmake', 'cmake']]) test('F prerequisite: ' + missing, () => {
+  for (const required of [false, true]) {
+    const decision = prerequisiteDecision({...facts, ...Object.fromEntries(missing.map(k => [k, false]))},
+      {...env, LOKA_REQUIRE_VSCODE_FLOW: required ? '1' : '0'});
+    assert.equal(decision.code, required ? 1 : 0);
+    assert.equal(decision.flow, false);
+    assert.equal(decision.lines.at(-1), `[${required ? 'fail' : 'skip'}] F1 F2 F3 F4 F5 F6 F7: ${missing.map(k => k + ' not found').join(', ')}`);
+  }
+});
+test('flow launch follows T3 R T2 and does not need runtime build input', async () => {
+  for (const runtime of [false, true]) {
+    const order = [];
+    await launchCells(runtime, async kind => order.push(kind), () => {}, true);
+    assert.deepEqual(order, runtime ? ['T3', 'R', 'T2', 'F'] : ['T3', 'R', 'F']);
+    assert.equal(prerequisiteDecision(facts, {...env, LOKA_WEB_BUILD: '', LOKA_REQUIRE_VSCODE_FLOW: '1'}).code, 0);
+  }
+});
+
+test('F failure reports later cells as not run and never acknowledges the failed step', async () => {
+  const logs = [], original = console.log;
+  console.log = line => logs.push(line);
+  const owner = {abort: new AbortController(), async wait() { throw new Error('step-0 timed out'); }};
+  try {
+    await assert.rejects(handshake(owner, {...cell('F'), skins: [{name: 'web'}, {name: 'macos'}]},
+      {go() { assert.fail('failed step acknowledged'); }}), /F1\/ready: step-0 timed out/);
+    assert.equal(logs.length, 6);
+    assert.ok(logs.every((line, i) => line.startsWith(`[not run] F${i + 2}: an earlier cell failed`)));
+  } finally { console.log = original; }
 });

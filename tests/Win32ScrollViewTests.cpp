@@ -2460,6 +2460,105 @@ void testWin32ScrollViewRebasedClipSeat()
   }
 }
 
+void testWin32ScrollViewRebasedClipHeightlessBottom()
+{
+  using namespace loka::app;
+  typedef loka::dsl::testing::Win32ScenePlatformTestAccess Access;
+  WNDCLASSW wc;
+  ZeroMemory(&wc, sizeof(wc));
+  wc.lpfnWndProc = DefWindowProcW;
+  wc.hInstance = GetModuleHandleW(NULL);
+  wc.lpszClassName = L"LOKA_TEST_SCROLL_CLIP_HEIGHTLESS";
+  LOKA_VERIFY(RegisterClassW(&wc) || GetLastError() == ERROR_CLASS_ALREADY_EXISTS);
+  const unsigned dpis[] = {96, 144};
+  const int contentYs[] = {51, SHRT_MAX - 25, SHRT_MAX - 20};
+  for (unsigned d = 0; d != sizeof(dpis) / sizeof(dpis[0]); ++d)
+  {
+    int witnesses = 0;
+    for (unsigned c = 0; c != sizeof(contentYs) / sizeof(contentYs[0]); ++c)
+    {
+      const int y = contentYs[c];
+      const int contentHeight = 14;
+      const ScrollViewContentInsets insets = ScrollViewContentInsets::of(3, 5);
+      const int extent = contentHeight + insets.extentExtra();
+      // Match the single rebased frame in layoutUnderRebasedClips.
+      const int seatY = y - 13;
+      if (y + extent == seatY + extent)
+      {
+        std::printf("[skip] heightless bottom discrimination: equal content and seat bottoms\n");
+        continue;
+      }
+      const bool refused = y + extent > SHRT_MAX;
+      LOKA_VERIFY(seatY + extent <= SHRT_MAX);
+      LOKA_VERIFY(y + contentHeight <= SHRT_MAX);
+      std::printf("[rebased clip heightless] dpi=%u y=%d refused=%d\n", dpis[d], y, refused);
+      HWND root = createHostWindow();
+      LOKA_VERIFY(root);
+      const loka::win32::Win32DisplayScale scale(dpis[d], RailMetrics());
+      const RECT r = scale.projectFrame(loka::core::Frame(11, 13, 300, 240)).r;
+      HWND parent = CreateWindowExW(0,
+                                    wc.lpszClassName,
+                                    L"",
+                                    WS_CHILD,
+                                    r.left,
+                                    r.top,
+                                    r.right - r.left,
+                                    r.bottom - r.top,
+                                    root,
+                                    NULL,
+                                    wc.hInstance,
+                                    NULL);
+      LOKA_VERIFY(parent);
+      // The class-family contract: the helper class is registered and created W-family.
+      LOKA_VERIFY(IsWindowUnicode(parent));
+      {
+        Win32ScenePlatformController controller(root, scale);
+        RegisterWin32BuiltInSupport(controller);
+        ViewportFact clippedFact(9), rootFact(9);
+        ScrollViewNode clipped(ScrollViewProps(clippedFact.state()).contentInsets(insets));
+        ScrollViewNode twin(ScrollViewProps(rootFact.state()).contentInsets(insets));
+        clipped.addChild(new BoxNode(Box().width(20).height(contentHeight).props));
+        twin.addChild(new BoxNode(Box().width(20).height(contentHeight).props));
+        const Win32ScenePlatformController::LayoutState content(41, y, 101, 0, Win32SceneLayout::kGap);
+        // Both twins traverse at the content position, not the native seat.
+        for (int visit = 0; visit != 2; ++visit)
+        {
+          const loka::core::Frame before = clippedFact.state().get();
+          const int changes = clippedFact.changeCount();
+          Win32ScrollViewContext *retained = static_cast<Win32ScrollViewContext *>(clipped.getContext());
+          const int rootBottom = Access::layoutNode(controller, &twin, content);
+          const int clipBottom = layoutUnderRebasedClips(controller, clipped, content, &parent, 1);
+          LOKA_VERIFY(Access::projectionParentScopes(controller).activeDepth() == 0);
+          LOKA_VERIFY(clipped.getContext() && twin.getContext());
+          Win32ScrollViewContext *actual = static_cast<Win32ScrollViewContext *>(clipped.getContext());
+          if (visit != 0)
+            LOKA_VERIFY(actual == retained);
+          LOKA_VERIFY(GetParent(actual->hwnd()) == parent);
+          LOKA_VERIFY(clipBottom == rootBottom);
+          if (refused)
+          {
+            LOKA_VERIFY(clipBottom == y);
+            // The early extent guard must refuse before publishing, even though
+            // the final bottom guard would still return y if that guard regressed.
+            LOKA_VERIFY(clippedFact.state().get() == before);
+            const int afterChanges = clippedFact.changeCount();
+            LOKA_VERIFY(afterChanges == changes);
+          }
+          else
+          {
+            LOKA_VERIFY(clipBottom == y + extent);
+            LOKA_VERIFY(clipBottom != seatY + extent);
+            ++witnesses;
+          }
+        }
+      }
+      // Drain contexts before destroying their native parents, as in the seat pin.
+      LOKA_VERIFY(DestroyWindow(root));
+    }
+    LOKA_VERIFY(witnesses > 0);
+  }
+}
+
 namespace
 {
   // Same capture/bitmap-selection door as Win32RectSurfaceRedrawTests.
