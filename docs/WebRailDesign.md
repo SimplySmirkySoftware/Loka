@@ -983,6 +983,13 @@ The launch arguments were `--user-data-dir`, `--extensions-dir`,
 - Vehicle tests include trust and exit deadline checks, the independent PID watch, both residual
   controls, SIGTERM and concurrent display allocation.
 
+On GitHub's hosted Ubuntu runner the same commit's `linux-headless` job passed
+the vehicle tests and R1 R2 T1 T3 (T1'/T2 skipped by name). There an extracted
+archive exits with SIGTRAP at launch until its `chrome-sandbox` helper is owned
+by root with mode 4755, which the CI step sets; the cause is inferred from that
+fix, the failing run's VS Code output was not captured. A local archive on a
+host that allows unprivileged user namespaces needs no such step.
+
 Not runtime-verified here: Remote WSL and Windows hosts, and anything the scope
 paragraph above excludes. On this host the only process that left the code
 group was VS Code's crash handler, whose command line names the run directory.
