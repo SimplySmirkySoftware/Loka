@@ -1100,9 +1100,11 @@ every launch.
 
 - Flow launch F (emsdk 7.0.0 in the environment), same day and rig, all at the
   final tree of that change: F1–F7 passed; the whole smoke with every cell
-  required took about 31 s with a warm Emscripten cache (a cold cache was not
-  timed). The run directory peaked near 67 MB (three VS Code profiles and the
-  Web build tree) and was gone afterwards; no file under the Emscripten SDK
+  required took 31 to 35 s with a warm Emscripten cache, and 105 s with an
+  empty private one (`EM_CACHE` pointed at a new directory, which grew to
+  49 MB; the shared cache was not touched). The run directory peaked near 67 MB (three VS Code profiles and the
+  Web build tree) and was gone afterwards; from the last pass line to exit
+  (final collection and directory removal) took 0.06 s; no file under the Emscripten SDK
   changed during the run and no Emscripten temporary directory was left.
 - Mutations for F, each failing the named cell: the skin not saved, and the
   skin not passed to the module factory (both F4: HelloWorld's marker stayed at
