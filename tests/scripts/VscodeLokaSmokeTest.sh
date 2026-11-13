@@ -4,7 +4,7 @@ script_dir="${BASH_SOURCE[0]%/*}"
 cd "$script_dir/../../tools/vscode-loka"
 missing() {
   local label=skip code=77
-  if [[ ${LOKA_REQUIRE_VSCODE_SMOKE:-0} == 1 || ${LOKA_REQUIRE_VSCODE_RUNTIME:-0} == 1 ]]; then
+  if [[ ${LOKA_REQUIRE_VSCODE_FLOW:-0} == 1 || ${LOKA_REQUIRE_VSCODE_SMOKE:-0} == 1 || ${LOKA_REQUIRE_VSCODE_RUNTIME:-0} == 1 ]]; then
     label=fail code=1
   fi
   echo "[$label] R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2: ${1} not found"

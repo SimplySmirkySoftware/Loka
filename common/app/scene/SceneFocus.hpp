@@ -112,7 +112,7 @@ namespace loka
       };
 
       // Membership twin: SceneTextDocuments; focus additionally owns a publication edge.
-      /** Scene-owned focus membership. Teardown reads only kernel hooks and edges. */
+      /** Scene-owned focus membership. Retirement doors are teardown-only and read only kernel hooks and edges. */
       class SceneFocus
       {
       public:
@@ -148,6 +148,8 @@ namespace loka
           assert(!publishedSurvived && "Scene teardown must disconnect published focus");
 #endif
         }
+
+      private:
         void disconnectAll()
         {
           while (this->head_)
@@ -159,6 +161,8 @@ namespace loka
           }
           this->published_.cut();
         }
+
+      public:
         /** Covers take, native write, readback and publication as one completion. */
         bool isPublishing() const
         {
@@ -221,6 +225,7 @@ namespace loka
         SceneFocus *registryPrevious_;
         SceneFocus *registryNext_;
 #endif
+        friend class Scene;
         friend class FocusRow;
         friend class BoundaryNode;
         friend class ::loka::app::detail::FocusPublisher;

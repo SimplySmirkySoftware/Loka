@@ -11,7 +11,7 @@ async function publish(path, value) {
   await writeFile(path + '.tmp', JSON.stringify(value));
   await rename(path + '.tmp', path);
 }
-const [mode, directory = process.env.LOKA_TEST_DIRECTORY, watch = process.env.LOKA_TEST_WATCH,
+const [mode, directory = process.env.LOKA_SMOKE_RUN_ROOT, watch = process.env.LOKA_TEST_WATCH,
   variant = process.env.LOKA_TEST_VARIANT, leader] = process.argv.slice(2);
 if (['code', 'child', 'grandchild'].includes(mode)) {
   appendFileSync(watch, JSON.stringify({role: mode, pid: process.pid}) + '\n');
@@ -32,7 +32,7 @@ if (['code', 'child', 'grandchild'].includes(mode)) {
 } else if (mode === 'displays') {
   const owners = [];
   try {
-    for (let i = 0; i < 2; i++) owners.push(new RunOwner(await mkdtemp('/tmp/loka-display-test-')));
+    for (let i = 0; i < 2; i++) owners.push(new RunOwner(await mkdtemp(join(process.env.LOKA_SMOKE_RUN_ROOT, 'display-'))));
     const displays = await Promise.all(owners.map(owner => owner.startX()));
     assert.notEqual(displays[0].DISPLAY, displays[1].DISPLAY);
     for (const owner of owners)
@@ -47,7 +47,7 @@ if (['code', 'child', 'grandchild'].includes(mode)) {
   process.on('SIGTERM', cancel);
   const errors = [];
   try {
-    await mkdir(directory);
+    await mkdir(directory, {recursive: true});
     owner.cellDirectory = directory;
     await owner.startX();
     owner.startCode(process.execPath, [self, 'code', directory, watch, variant], process.env);
@@ -55,7 +55,7 @@ if (['code', 'child', 'grandchild'].includes(mode)) {
       try { return (await readFile(watch, 'utf8')).trim().split('\n').length === 3; }
       catch (error) { if (error.code === 'ENOENT') return false; throw error; }
     }, Date.now() + 5000, 'fake descendants ready');
-    await publish(join(directory, '../ready.json'), {pid: process.pid,
+    await publish(join(process.env.LOKA_TEST_DIRECTORY, '../ready.json'), {pid: process.pid, directory,
       xpid: owner.x.child.pid, display: owner.x.display});
     await owner.wait(() => false, Date.now() + (['signal', 'launcher-kill'].includes(variant) ? 10000 : 100), 'fake step');
   } catch (error) { errors.push(error.message); }
@@ -63,6 +63,6 @@ if (['code', 'child', 'grandchild'].includes(mode)) {
     try { await owner.cleanup(); } catch (error) { errors.push(error.message); }
     process.off('SIGTERM', cancel);
     process.exitCode = 1;
-    await publish(join(directory, '../outcome.json'), {errors});
+    await publish(join(process.env.LOKA_TEST_DIRECTORY, '../outcome.json'), {errors});
   }
 }

@@ -1,18 +1,21 @@
 #!/usr/bin/env node
 import {spawn, spawnSync} from 'node:child_process';
 import {constants} from 'node:fs';
-import {access, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile} from 'node:fs/promises';
+import {access, mkdir, readFile, realpath, stat, writeFile} from 'node:fs/promises';
 import {createHash, randomBytes} from 'node:crypto';
 import {dirname, isAbsolute, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+
+import flow from './flow.cjs';
+import {pickerExpression, pickerMatches, readWebview, webviewMatches, webviewDiagnostic, observe} from './observe.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const repo = resolve(here, '../../../..');
 const extension = resolve(here, '../..');
 export const statuses = Object.freeze({R: 'Loka: Trust the workspace to preview',
-  T3: 'Loka: Web catalog missing; run Configure', T2: 'Loka: Running'});
-const cells = {R: 'R1 R3 R2 R4 R5', T3: 'T1 K3 K2 K1 T3', T2: "T1' T2"};
-const allCells = "R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2";
+  T3: 'Loka: Web catalog missing; run Configure', T2: 'Loka: Running', F: 'Loka: Running'});
+const cells = {F: 'F1 F2 F3 F4 F5 F6 F7', R: 'R1 R3 R2 R4 R5', T3: 'T1 K3 K2 K1 T3', T2: "T1' T2"};
+const allCells = "R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2 F1 F2 F3 F4 F5 F6 F7";
 const manifest = JSON.parse(await readFile(join(extension, 'package.json'), 'utf8'));
 const commands = manifest.contributes.commands.map(item => item.command);
 export const pin = JSON.parse(await readFile(join(here, 'vscode-pin.json'), 'utf8'));
@@ -37,7 +40,7 @@ export function judge(cell, result, status, exit, {trusted = cell.kind !== 'R', 
 /** Child output is hidden unless LOKA_SMOKE_VERBOSE=1; a failing run is rerun with it to see VS Code's log. */
 const verbose = process.env.LOKA_SMOKE_VERBOSE === '1' ? 'inherit' : 'ignore';
 export function prerequisiteDecision(facts, env = {}) {
-  const required = env.LOKA_REQUIRE_VSCODE_SMOKE === '1' || env.LOKA_REQUIRE_VSCODE_RUNTIME === '1';
+  const required = env.LOKA_REQUIRE_VSCODE_FLOW === '1' || env.LOKA_REQUIRE_VSCODE_SMOKE === '1' || env.LOKA_REQUIRE_VSCODE_RUNTIME === '1';
   const version = /^(?:v)?(\d+)\.(\d+)\.(\d+)$/.exec(facts.node || '');
   const supported = version && (+version[1] >= 24 || (+version[1] === 22 && +version[2] >= 18));
   const missing = [facts.platform !== 'linux' && 'Linux', !supported && 'Node >=24 or 22.18+',
@@ -49,7 +52,11 @@ export function prerequisiteDecision(facts, env = {}) {
   if (env.LOKA_REQUIRE_VSCODE_RUNTIME === '1' && !env.LOKA_WEB_BUILD) missing.push('LOKA_WEB_BUILD not set');
   if (missing.length) return {code: required ? 1 : 77,
     lines: [`[${required ? 'fail' : 'skip'}] ${allCells}: ${missing.join(', ')}`]};
-  return {code: 0, lines: env.LOKA_WEB_BUILD ? [] : ["[skip] T1' T2: LOKA_WEB_BUILD not set"]};
+  const flowMissing = ['emcmake', 'cmake'].filter(name => !facts[name]);
+  const flowRequired = env.LOKA_REQUIRE_VSCODE_FLOW === '1';
+  return {code: flowMissing.length && flowRequired ? 1 : 0, flow: !flowMissing.length,
+    lines: [...(env.LOKA_WEB_BUILD ? [] : ["[skip] T1' T2: LOKA_WEB_BUILD not set"]),
+      ...(flowMissing.length ? [`[${flowRequired ? 'fail' : 'skip'}] ${cells.F}: ${flowMissing.map(name => name + ' not found').join(', ')}`] : [])]};
 }
 
 async function optionalRead(path) {
@@ -110,7 +117,7 @@ function childRecord(child) {
   });
   return record;
 }
-/** Owns the run directory, X server, code group, CDP and every launcher timer.
+/** Borrows the supervisor run directory; owns the X server, code group, CDP and every launcher timer.
  * Parallel to tests/web/driver/capture.mjs runBrowser: this owner also holds a file handshake. */
 export class RunOwner {
   constructor(directory, {signal = signalOwnChild, readLock = readXLock} = {}) {
@@ -212,7 +219,6 @@ export class RunOwner {
         throw new Error('Xvfb exited leaving its own lock');
     });
     await attempt(async () => this.cdp?.close());
-    await attempt(() => this.limit(rm(this.directory, {recursive: true, force: true}), 5000, 'Run directory removal'));
     for (const timer of this.timers) clearTimeout(timer);
     this.timers.clear();
     if (errors.length) throw new Error('Cleanup failed: ' + errors.join('; '));
@@ -232,30 +238,43 @@ async function connectCDP(owner, directory, deadline) {
     if (!Number.isInteger(value) || value < 1 || value > 65535) throw new Error('Invalid DevToolsActivePort');
     return value;
   }, deadline, 'DevToolsActivePort');
-  // The port file appears before the workbench page target does; poll until exactly one page exists.
   const page = await owner.wait(async () => {
-    const request = new AbortController();
-    try {
-      const targets = await owner.limit((async () => {
-        const response = await fetch(`http://127.0.0.1:${port}/json`,
-          {signal: AbortSignal.any([owner.abort.signal, request.signal])});
-        if (!response.ok) throw new Error('CDP target HTTP ' + response.status);
-        return response.json();
-      })(), 2000, 'CDP targets');
-      const pages = targets.filter(target => target.type === 'page' && target.url.startsWith('vscode-file:'));
-      if (pages.length > 1) throw new Error('Expected one workbench CDP page');
-      return pages[0] || false;
-    } finally { request.abort(); }
+    const pages = (await cdpTargets(owner, port)).filter(target => target.type === 'page' && target.url.startsWith('vscode-file:'));
+    if (pages.length > 1) throw new Error('Expected one workbench CDP page');
+    return pages[0] || false;
   }, deadline, 'workbench CDP page');
-  const socket = new WebSocket(page.webSocketDebuggerUrl);
-  // Attach the owner before awaiting open, so failed connections also close.
-  owner.cdp = {close: () => socket.close()};
-  await owner.limit(new Promise((resolve, reject) => {
+  owner.cdp?.close();
+  owner.cdp = cdpConnection(owner, page);
+  owner.cdp.webview = () => readWebview(owner, () => cdpTargets(owner, port), target => cdpConnection(owner, target));
+  await owner.cdp.open();
+  return owner.cdp;
+}
+
+/** Cost: each workbench/webview poll; one target-list request, bounded to two seconds. */
+async function cdpTargets(owner, port) {
+  const request = new AbortController();
+  try {
+    return await owner.limit((async () => {
+      const response = await fetch(`http://127.0.0.1:${port}/json`,
+        {signal: AbortSignal.any([owner.abort.signal, request.signal])});
+      if (!response.ok) throw new Error('CDP target HTTP ' + response.status);
+      return response.json();
+    })(), 2000, 'CDP targets');
+  } finally { request.abort(); }
+}
+/** Cost: one connection per workbench launch or webview poll; one pending evaluation at a time. */
+function cdpConnection(owner, target) {
+  const socket = new WebSocket(target.webSocketDebuggerUrl);
+  const opened = new Promise((resolve, reject) => {
     socket.addEventListener('open', resolve, {once: true});
     socket.addEventListener('error', () => reject(new Error('CDP connection error')), {once: true});
-  }), deadline - Date.now(), 'CDP connection');
+    socket.addEventListener('close', () => reject(new Error('CDP closed before open')), {once: true});
+  });
+  opened.catch(() => {});
   let sequence = 0;
   return {
+    open: () => owner.limit(opened, 2000, 'CDP connection'),
+    close: () => socket.close(),
     async evaluate(expression) {
       const id = ++sequence;
       let message, closed;
@@ -299,12 +318,63 @@ export const refusalText = 'Trust the workspace to select an example';
 // The page only reports what it shows; the comparison with refusalText happens in the launcher, so no value is spliced into evaluated code.
 export const toastExpression = `(() => ({text: [...document.querySelectorAll('.notifications-toasts .notification-list-item')].map(e => e.textContent).join('\\n'), picker: !!document.querySelector('.quick-input-widget')}))()`;
 
+/** Cost: one F step; bounded DOM observations, catalog read once after Configure. */
+export async function observeFlow(owner, cell, cdp, name, phase, facts, apps, deadline,
+  web = () => cdp.webview(), check = async () => {}) {
+  const checked = async read => { await check(); const value = await read(); await check(); return value; };
+  const picker = async expected => {
+    const read = () => checked(() => cdp.evaluate(pickerExpression));
+    if (phase === 'entry' || phase.endsWith('closed-before')) {
+      const last = await read();
+      if (!pickerMatches(last, expected))
+        throw new Error(`picker entry refused; expected ${JSON.stringify(expected)}, last read ${JSON.stringify(last)}`);
+      return;
+    }
+    await observe(owner, read, value => pickerMatches(value, expected), expected, deadline, 'picker');
+  };
+  if (phase === 'entry') {
+    if (facts.executions !== 0) throw new Error('Expected no running tasks; last read ' + facts.executions);
+    await picker({closed: true});
+    if (name === 'F3' && facts.tabs.includes('Loka Preview')) throw new Error('Expected no Preview tab before first Open');
+    if (name === 'F5' && await optionalRead(join(cell.buildDirectory, apps[1].js)) !== undefined)
+      throw new Error('Expected unbuilt second example; JavaScript already exists');
+  }
+  if (phase.includes('closed-')) await picker({closed: true});
+  if (phase.endsWith('open') || phase.includes('next-')) {
+    const requested = name === 'F4' ? (phase.startsWith('reopen-') ? 'macos' : 'web')
+      : (phase.startsWith('reopen-') ? 'web' : 'macos');
+    const labels = name === 'F5' ? apps.map(a => `${a.name}, ${a.target}`)
+      : cell.skins.map(r => r.name + (r.name === requested ? ', Requested' : ''));
+    const focus = phase.includes('next-') ? Number(phase.split('next-')[1]) : 0;
+    if (focus >= labels.length) throw new Error('Picker would wrap');
+    await picker({labels, focus});
+  }
+  if (phase !== 'observed') return apps;
+  if (['F1', 'F2', 'F6'].includes(name) && (facts.starts !== 1 || facts.exit !== 0))
+    throw new Error('Expected exactly one task, exit 0; last read ' + JSON.stringify(facts));
+  if (name === 'F1' || name === 'F2') {
+    const status = name === 'F1' ? 'Loka: Configured' : 'Loka: Built ' + apps[0].target;
+    await observe(owner, () => checked(() => cdp.evaluate(statusExpression)), value => value === status, status, deadline, 'status');
+    if (name === 'F1') return flow.fixture(JSON.parse(await readFile(join(cell.buildDirectory, 'loka-web-apps.json'), 'utf8')));
+  } else {
+    if (facts.tabs.filter(t => t === 'Loka Preview').length !== 1) throw new Error('Expected exactly one Preview tab');
+    const skin = name === 'F4' || name === 'F6' ? 'macos' : 'web';
+    const expected = name === 'F5' ? {kind: 'message', status: 'Loka: ' + flow.message, text: flow.message}
+      : {kind: 'module', status: 'Loka: Running', id: apps[name === 'F6' || name === 'F7' ? 1 : 0].id,
+        offset: cell.skins.find(r => r.name === skin).spacing[2]};
+    await observe(owner, () => checked(async () => ({status: await cdp.evaluate(statusExpression), body: await web()})),
+      value => webviewMatches(value.body, value.status, expected), expected, deadline, 'webview', webviewDiagnostic);
+  }
+  return apps;
+}
+
 /** Cost: once per launch; one immutable step and one ack per table row, bounded CDP polls. */
 export async function handshake(owner, cell, files, connect = connectCDP) {
   let deadline = cell.started + 40000;
   let cdp;
   let context = cell.kind + '/startup';
-  const plan = steps[cell.kind];
+  const plan = cell.kind === 'F' ? flow.plan(cell.skins) : steps[cell.kind];
+  let apps;
   const errorCheck = async () => {
     const error = await files.read('error.json');
     if (error !== undefined) throw new Error('Suite error: ' + error);
@@ -335,6 +405,7 @@ export async function handshake(owner, cell, files, connect = connectCDP) {
       const observationDeadline = Date.now() + 10000;
       if (!cdp) cdp = await connect(owner, owner.cellDirectory, observationDeadline);
       if (phase === 'ready') await owner.wait(() => cdp.evaluate(trustExpression), observationDeadline, 'Trust button');
+      if (cell.kind === 'F') apps = await observeFlow(owner, cell, cdp, name, phase, facts, apps, observationDeadline, undefined, errorCheck);
       if (stepStatuses[name]) {
         let last = '';
         try {
@@ -375,6 +446,10 @@ export async function handshake(owner, cell, files, connect = connectCDP) {
     owner.abort.signal.throwIfAborted();
     if (exit.code !== 0 || exit.signal) throw new Error('Exit: ' + JSON.stringify(exit));
   } catch (error) {
+    if (cell.kind === 'F') {
+      const failed = context === 'F/exit' ? 7 : Number(context.match(/^F(\d)/)?.[1] || 0);
+      for (let i = failed + 1; i <= 7; i++) console.log(`[not run] F${i}: an earlier cell failed (${context})`);
+    }
     error = new Error(`${context}: ${error.message}`);
     owner.abort.abort(error); // Terminal failure; cleanup never acknowledges a step.
     throw error;
@@ -390,32 +465,37 @@ async function moduleEvidence(build) {
   console.log(`T2: tree=${build} apps[0]=${JSON.stringify({id: app.id, target: app.target})} wasm.sha256=${createHash('sha256').update(wasm).digest('hex').slice(0, 12)}`);
 }
 
-/** Cost: main once; at most three launches, each only after its predecessor succeeds. */
-export async function launchCells(runtime, launch, report = console.log) {
+/** Cost: main once; at most four launches, each only after its predecessor succeeds. */
+export async function launchCells(runtime, launch, report = console.log, flowEnabled = false) {
   try { await launch('T3'); }
   catch (error) {
     report('[not run] R1 R3 R2 R4 R5: control K1 not established by a successful T3 launch');
+    if (flowEnabled) report('[not run] ' + cells.F + ': an earlier launch failed');
     throw error;
   }
-  await launch('R');
-  if (runtime) await launch('T2');
+  try {
+    await launch('R');
+    if (runtime) await launch('T2');
+  } catch (error) {
+    if (flowEnabled) report('[not run] ' + cells.F + ': an earlier launch failed');
+    throw error;
+  }
+  if (flowEnabled) await launch('F');
 }
 
+function shellQuote(value) { return "'" + value.replaceAll("'", "'\\''") + "'"; }
+
 export async function main(env = process.env) {
+  if (!env.LOKA_SMOKE_RUN_ROOT) throw new Error('LOKA_SMOKE_RUN_ROOT hand-off required');
   let executable, invalid;
   try { executable = await validateInputs(env); } catch (error) { invalid = error.message; }
   const decision = prerequisiteDecision({platform: process.platform, node: process.versions.node,
     python: spawnSync('which', ['python3']).status === 0, xvfb: spawnSync('which', ['Xvfb']).status === 0, xauth: spawnSync('which', ['xauth']).status === 0,
+    emcmake: spawnSync('which', ['emcmake']).status === 0, cmake: spawnSync('which', ['cmake']).status === 0,
     artifact: await optionalRead(join(extension, 'out/extension.js')) !== undefined, invalid}, env);
   decision.lines.forEach(line => console.log(line));
   if (decision.code) return decision.code;
-  const buildRoot = join(repo, 'build');
-  await mkdir(buildRoot, {recursive: true});
-  if (await realpath(buildRoot) !== buildRoot) throw new Error('Build root must not be a symlink');
-  const root = join(buildRoot, 'vscode-smoke');
-  await mkdir(root, {recursive: true});
-  if (await realpath(root) !== root) throw new Error('Smoke run root must not be a symlink');
-  const owner = new RunOwner(await mkdtemp(join(root, `run-${process.pid}-`)));
+  const owner = new RunOwner(env.LOKA_SMOKE_RUN_ROOT);
   const cancel = signal => owner.abort.abort(new Error('Interrupted: ' + signal));
   const onINT = () => cancel('SIGINT'), onTERM = () => cancel('SIGTERM');
   process.on('SIGINT', onINT); process.on('SIGTERM', onTERM);
@@ -428,10 +508,13 @@ export async function main(env = process.env) {
         if (kind === 'T2') await moduleEvidence(env.LOKA_WEB_BUILD);
         const directory = join(owner.directory, kind);
         const workspace = join(directory, 'ws');
-        const buildDirectory = kind === 'T2' ? env.LOKA_WEB_BUILD : join(directory, 'missing-build');
+        const buildDirectory = kind === 'T2' ? env.LOKA_WEB_BUILD : join(directory, kind === 'F' ? 'web-build' : 'missing-build');
+        const configureCommand = kind === 'F' ? `emcmake cmake -S ${shellQuote(repo)} --preset web -B ${shellQuote(buildDirectory)}` : 'exit 3';
+        const skins = kind === 'F' ? flow.skins(JSON.parse(await readFile(join(repo, 'tools/style-vocab.json'), 'utf8'))) : undefined;
         await mkdir(join(workspace, '.vscode'), {recursive: true});
         await mkdir(join(directory, 'user')); await mkdir(join(directory, 'ext'));
-        await writeFile(join(workspace, '.vscode/settings.json'), JSON.stringify({'loka.preview.buildDirectory': buildDirectory, 'loka.preview.configureCommand': 'exit 3'}));
+        await writeFile(join(workspace, '.vscode/settings.json'), JSON.stringify({'loka.preview.buildDirectory': buildDirectory, 'loka.preview.configureCommand': configureCommand}));
+        if (skins) await writeFile(join(directory, 'flow.json'), JSON.stringify({webSkins: skins}));
         owner.cellDirectory = directory;
         const args = [`--user-data-dir=${directory}/user`, `--extensions-dir=${directory}/ext`,
           `--extensionDevelopmentPath=${extension}`, `--extensionTestsPath=${here}/suite.cjs`,
@@ -440,13 +523,13 @@ export async function main(env = process.env) {
         const childEnv = {...env, ...display, LOKA_SMOKE_CELL: directory, LOKA_SMOKE_KIND: kind};
         delete childEnv.WAYLAND_DISPLAY;
         const started = owner.startCode(executable, args, childEnv);
-        await handshake(owner, {kind, workspace, buildDirectory, started}, {
+        await handshake(owner, {kind, workspace, buildDirectory, started, skins}, {
           read: name => optionalRead(join(directory, name)),
           go: n => writeFile(join(directory, `go-${n}`), '', {flag: 'wx'})
         });
         console.log('[pass] ' + cells[kind]);
       } catch (error) { throw new Error(cells[kind] + ': ' + error.message); }
-    });
+    }, console.log, decision.flow);
   } catch (error) {
     failures.push(error.message);
   }

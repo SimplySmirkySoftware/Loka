@@ -17,7 +17,8 @@ namespace loka
     {
       class TextDocumentRegistration;
       class IPlatformController;
-      /** Membership twin of SceneFocus; documents publish independently, not through one focus edge. */
+      /** Membership twin of SceneFocus; documents publish independently, not through one focus edge.
+       * Retirement doors are teardown-only; traversal stays with trusted framework callers. */
       class SceneTextDocuments : private MemberList<TextDocumentRegistration>
       {
       public:
@@ -28,14 +29,11 @@ namespace loka
           virtual ~Visitor() {}
           virtual void visit(TextDocumentRegistration &row) = 0;
         };
-        /** Visits in membership order; a visit may withdraw its current row. */
-        void visit(Visitor &visitor);
         SceneTextDocuments()
             : phase_(IDLE)
         {
         }
         ~SceneTextDocuments();
-        void disconnectAll();
         void createStores(IPlatformController &controller);
         bool isPublishing() const
         {
@@ -43,6 +41,9 @@ namespace loka
         }
 
       private:
+        /** Visits in membership order; a visit may withdraw its current row. */
+        void visit(Visitor &visitor);
+        void disconnectAll();
         SceneTextDocuments(const SceneTextDocuments &);
         SceneTextDocuments &operator=(const SceneTextDocuments &);
         void join(TextDocumentRegistration &row);
@@ -74,6 +75,7 @@ namespace loka
         class StoreCreator;
         Phase phase_;
         friend struct ::loka::app::testing::TextDocumentAccess;
+        friend class Scene;
         friend class TextDocumentRegistration;
         friend class ::loka::app::detail::TextDocumentPublisher;
       };
