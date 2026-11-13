@@ -124,11 +124,8 @@ ToolboxPresentExecuted ToolboxScenePlatformController::render(ToolboxFullDrawPre
     return TOOLBOX_PRESENT_ERASED;
   }
   this->unitLedger_.clear();
-  hitLedger_.buttonHits_.clear();
-  hitLedger_.cellHits_.clear();
-  hitLedger_.editHits_.clear();
-  hitLedger_.textHits_.clear();
-  hitLedger_.popupHits_.clear();
+  this->hitLedger_.clearPressRows();
+  this->hitLedger_.textHits_.clear();
   PROFILE_SECTION("layout");
 #ifdef TEST_BUILD
   if (presenter)

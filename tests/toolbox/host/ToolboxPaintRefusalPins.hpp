@@ -214,7 +214,7 @@ namespace
         c.rootNode_ = 0;
         c.paintSuppressClipRgn_ = saved;
         refusalSite(c.debugStats_.lastPresentObservation.firstRefusal(),
-                    button ? "ToolboxRender.cpp:214" : "ToolboxRender.cpp:224");
+                    button ? "ToolboxRender.cpp:211" : "ToolboxRender.cpp:221");
         return;
       }
       c.paintSuppressClipRgn_ = 0;

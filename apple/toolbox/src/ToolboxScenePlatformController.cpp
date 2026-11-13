@@ -464,6 +464,8 @@ void ToolboxScenePlatformController::destroy()
 
 #include "ToolboxStructurePresent.cpp"
 
+#include "ToolboxHitLedger.inc"
+
 void ToolboxScenePlatformController::retireNodeContext(loka::app::scene::NodeContext *context,
                                                        loka::app::scene::NativeLifetimeHint lifetimeHint)
 {
@@ -542,38 +544,7 @@ void ToolboxScenePlatformController::unbindEnabledState(loka::core::State<bool> 
   this->enabledStateBindingPath_.unbind(enabled);
 }
 
-bool ToolboxScenePlatformController::hasLiveBinding(loka::core::State<loka::core::String> *text) const
-{
-  for (size_t i = 0; i < editControls_.size(); ++i)
-  {
-    if (editControls_[i].text == text)
-    {
-      return true;
-    }
-  }
-  for (size_t i = 0; i < hitLedger_.cellHits_.size(); ++i)
-  {
-    if (hitLedger_.cellHits_[i].context->liveTextState() == text)
-    {
-      return true;
-    }
-  }
-  for (size_t i = 0; i < hitLedger_.editHits_.size(); ++i)
-  {
-    if (hitLedger_.editHits_[i].text == text)
-    {
-      return true;
-    }
-  }
-  for (size_t i = 0; i < hitLedger_.textHits_.size(); ++i)
-  {
-    if (hitLedger_.textHits_[i].context->liveTextState() == text)
-    {
-      return true;
-    }
-  }
-  return false;
-}
+#include "ToolboxTextBindingLiveness.inc"
 
 void ToolboxScenePlatformController::handleTextChanged(loka::core::State<loka::core::String> *text)
 {
