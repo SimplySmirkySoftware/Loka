@@ -331,6 +331,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     ${PROJECT_SOURCE_DIR}/tests/platform/null/context/NullButtonContext.cpp
     ${PROJECT_SOURCE_DIR}/tests/platform/null/context/NullEditTextContext.cpp
     ${PROJECT_SOURCE_DIR}/tests/platform/null/context/NullTextEditorContext.cpp
+    ${PROJECT_SOURCE_DIR}/tests/platform/null/context/NullTextDocumentViewContext.cpp
     ${PROJECT_SOURCE_DIR}/tests/platform/null/context/NullScrollBarContext.cpp
     ${PROJECT_SOURCE_DIR}/tests/platform/null/context/NullTextMetrics.cpp
     ${PROJECT_SOURCE_DIR}/tests/platform/null/context/NullAttributedTextContext.cpp
@@ -386,6 +387,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
       ${PROJECT_SOURCE_DIR}/tests/platform/null/context/NullButtonContext.cpp
       ${PROJECT_SOURCE_DIR}/tests/platform/null/context/NullEditTextContext.cpp
       ${PROJECT_SOURCE_DIR}/tests/platform/null/context/NullTextEditorContext.cpp
+      ${PROJECT_SOURCE_DIR}/tests/platform/null/context/NullTextDocumentViewContext.cpp
       ${PROJECT_SOURCE_DIR}/tests/platform/null/context/NullScrollBarContext.cpp
       ${PROJECT_SOURCE_DIR}/tests/platform/null/context/NullTextMetrics.cpp
       ${PROJECT_SOURCE_DIR}/tests/platform/null/context/NullAttributedTextContext.cpp
@@ -488,6 +490,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     tests/platform/null/context/NullButtonContext.cpp
     tests/platform/null/context/NullEditTextContext.cpp
     tests/platform/null/context/NullTextEditorContext.cpp
+    tests/platform/null/context/NullTextDocumentViewContext.cpp
     tests/platform/null/context/NullScrollBarContext.cpp
     tests/platform/null/context/NullTextMetrics.cpp
     tests/platform/null/context/NullAttributedTextContext.cpp

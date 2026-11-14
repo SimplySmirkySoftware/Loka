@@ -1083,3 +1083,58 @@ namespace loka
   } // namespace app
 } // namespace loka
 #endif
+
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace app
+  {
+    namespace testing
+    {
+      namespace
+      {
+        unsigned textViewAttachFailures = 0, textViewPreparationFailures = 0;
+        unsigned textViewCallbackCount = 0;
+        void (*textViewCallback)(void *) = 0;
+        void *textViewCallbackData = 0;
+      } // namespace
+      void failTextViewAttaches(unsigned count)
+      {
+        textViewAttachFailures = count;
+      }
+      bool consumeTextViewAttachFailure()
+      {
+        if (!textViewAttachFailures)
+          return false;
+        --textViewAttachFailures;
+        return true;
+      }
+      void failTextViewPreparations(unsigned count)
+      {
+        textViewPreparationFailures = count;
+      }
+      bool consumeTextViewPreparationFailure()
+      {
+        if (!textViewPreparationFailures)
+          return false;
+        --textViewPreparationFailures;
+        return true;
+      }
+      void onTextViewCall(void (*callback)(void *), void *data, unsigned count)
+      {
+        textViewCallback = callback;
+        textViewCallbackData = data;
+        textViewCallbackCount = count;
+      }
+      void invokeTextViewCall()
+      {
+        if (!textViewCallbackCount)
+          return;
+        --textViewCallbackCount;
+        if (textViewCallback)
+          textViewCallback(textViewCallbackData);
+      }
+    } // namespace testing
+  } // namespace app
+} // namespace loka
+#endif

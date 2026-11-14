@@ -231,7 +231,7 @@ The obligations are:
     over it. After commit, the next completion drops it if the revision advanced,
     or applies it if the revision still matches. There is no timeout.
   - Queries refuse while a native change is unreconciled.
-- **Replacing and releasing a store** (replacement and view detach are later steps)
+- **Replacing and releasing a store**
   - Open builds the new store completely before swapping it in.
   - Detaching a view allocates nothing.
   - Reclaim happens at the owning clock's boundary and fires nothing.
@@ -334,8 +334,9 @@ through its owner and leaves the old row untouched. As clarified after the page 
 freeze, BORN's unchanged, unmarked reading must carry the full native-coordinate
 range `[0, new native end]`. The publisher uses that range directly, without a
 second traversal; ordinary change-note aggregation ignores unchanged readings.
-Null has no native views to transfer. Later rail store-row changes must run the
-shared birth conformance helper in `tests/support/TextStoreConformance.hpp`.
+Null transfers the view claim and its simulated native place during successful
+store birth. Production rail store-row changes must run the shared birth
+conformance helper in `tests/support/TextStoreConformance.hpp`.
 
 `replaceReply()` exposes a read-only State. Its requested and applied receipts
 retain only stage, placement, and logical length: neither body bytes nor source.
@@ -412,3 +413,60 @@ receipts keep no bytes. Direct observers cannot post during publication. Deferre
 observers may post for the next completion, with no automatic wake-up. Automatic
 Enter/indent behavior needs a separate input-command entrance (Q3b-E); batching
 and sealed-Blob overloads are also outside this page.
+
+### Attaching a view (page 4)
+
+`TextDocumentEditor` borrows a root-owned document and an optional ancestor-owned
+`NodeState<TextViewAttachment>` result. The store row owns the editable body;
+the view context supplies its place. Detach returns the body to the store's
+parking place without allocation. Body, selection, undo, and pending marks stay
+with the store. Parked stores continue to accept app requests; read-only view
+presentation restricts user input, not replacement, splice, or caret requests.
+This supersedes the earlier handle-exchange description: detach does not move
+marks into a separate view-detach ledger. The native observation table above
+remains historical probe evidence pending each rail's qualification.
+
+The kernel admits a view in this order: Scene/controller identity, store
+availability, then occupancy. An occupant whose logical node is no longer
+attached is detached before the incoming view attaches, regardless of delivery
+order. An attached occupant causes a typed refusal. Refused contexts render an
+empty, read-only placeholder; refresh and presentation never retry attachment.
+A later lifecycle attachment may retry. Native calls run under individual
+controller borrows and cannot reenter the kernel; native notifications only
+mark. IME commitment is a preceding input operation, not detach work.
+
+A context-owned claim derives ATTACHED from its paired store link. Context end
+and store retirement both detach synchronously before severing that link;
+deferred native reclamation fires nothing. Replacement prepares completely
+before moving the native place and transferring the claim to the fresh store.
+The old row then retires without detaching the transferred view. Cosmetic
+resource preparation can fall back to defaults, but behavior such as read-only
+and wrapping must be honored or attachment must refuse.
+
+The existing document publisher walks its Scene's claims after document facts,
+inside the same publication phase and borrow. Only ATTACHED and
+DETACHED_RETAINED nodes publish. The node writes the borrowed result without
+reading it; equal values suppress observers through `NodeState::set`. Results
+are completion snapshots, not a transition log: initial projection does not
+publish, and an attach/detach/attach interval may produce no result change.
+`commitTextInput` refresh also publishes these snapshots. Structural changes
+requested by observers wait until publication ends; document writes posted
+from those observers are refused by the existing publication admission gate.
+
+Document and result-box identity cannot change in an existing editor node.
+Compatibility refusal has path-dependent consequences:
+
+| Path | Incompatible identity |
+|---|---|
+| Ordinary child retain/reconcile, including an editor nested inside a parked container | Materialize a new child and retire the old node. A parked replacement has no attached view until return. |
+| Returning to a parked branch | Discard an incompatible parked candidate and build anew. If construction refuses, the outgoing active branch stays. |
+| Applying props while the editor itself is the parked branch root | Refuse; retain the existing node, claim, store, and body. |
+| Keyed replacement | Replace the generation regardless of compatibility. |
+| Direct Lazy item | Not supported: the editor is not a `ComponentNodeWithProps`. Editors inside Lazy components remain outside this page's scope. |
+
+The branch-root versus nested-child distinction follows the page 4 v1.2 ruling;
+Boundary reconciliation is unchanged. Presentation and focus-binding changes
+remain compatible and update the retained context. The kernel and Null pins
+are in `tests/TextDocumentViewTests.cpp`. Win32, macOS, and Toolbox keep the
+refusing/default view doors; their native implementations and runtime evidence
+belong to the respective rail pages.

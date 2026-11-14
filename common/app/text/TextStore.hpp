@@ -48,6 +48,10 @@ namespace loka
     {
       struct TextStoreTestAccess;
     }
+    namespace detail
+    {
+      class TextDocumentViewAccess;
+    }
     namespace scene
     {
       enum TextStoreBirth
@@ -59,6 +63,7 @@ namespace loka
         TEXT_STORE_REFUSED_UNSUPPORTED
       };
       class IPlatformController;
+      class TextViewClaim;
       class TextStoreRow;
       class TextStoreLedger;
       /** Store-specific name for the callback-free paired borrow. */
@@ -139,6 +144,9 @@ namespace loka
 
       protected:
         TextStoreRow(TextStoreLedger &owner, IPlatformController &controller);
+        /** Rail birth commit only: move the view after all fallible preparation succeeds.
+            Once per replacement, O(1), touches only old and fresh rows. */
+        static void transferView(TextStoreRow &old, TextStoreRow &fresh);
 
       private:
         TextStoreRow(const TextStoreRow &);
@@ -146,6 +154,9 @@ namespace loka
         TextStoreLedger &owner_;
         IPlatformController &controller_;
         TextStoreLink link_;
+        TwinLink<TextStoreRow, TextViewClaim> view_;
+        friend class TextViewClaim;
+        friend class ::loka::app::detail::TextDocumentViewAccess;
         TextStoreRow *previous_, *next_;
         enum Phase
         {
@@ -203,6 +214,7 @@ namespace loka
           : owner_(owner),
             controller_(controller),
             link_(this),
+            view_(this),
             previous_(0),
             next_(owner.live_),
             phase_(LIVE)
@@ -213,19 +225,8 @@ namespace loka
       }
       inline TextStoreRow::~TextStoreRow()
       {
+        assert(!this->view_.remote());
         this->owner_.unlink(*this);
-      }
-      inline void TextStoreRow::retire()
-      {
-        if (this->phase_ == RETIRED)
-          return;
-        this->link_.cut();
-        this->owner_.unlink(*this);
-        this->phase_ = RETIRED;
-        this->next_ = this->owner_.retired_;
-        if (this->next_)
-          this->next_->previous_ = this;
-        this->owner_.retired_ = this;
       }
     } // namespace scene
   } // namespace app

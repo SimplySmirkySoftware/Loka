@@ -905,3 +905,38 @@ foreach(_kind refuses accepts)
   target_include_directories(compilePin_toolbox-chain-assign_${_kind} PRIVATE
     ${PROJECT_SOURCE_DIR}/apple/toolbox/src ${PROJECT_SOURCE_DIR}/tests/toolbox/host)
 endforeach()
+
+loka_compile_pin(text-view-claim-link
+  REFUSES pins/refuses_text-view-claim-link.cpp
+  ACCEPTS pins/accepts_text-view-claim-link.cpp
+)
+
+loka_compile_pin(text-view-claim-unlink
+  REFUSES pins/refuses_text-view-claim-unlink.cpp
+  ACCEPTS pins/accepts_text-view-claim-unlink.cpp
+)
+
+loka_compile_pin(text-view-claim-refuse
+  REFUSES pins/refuses_text-view-claim-refuse.cpp
+  ACCEPTS pins/accepts_text-view-claim-refuse.cpp
+)
+
+loka_compile_pin(text-view-access-attach
+  REFUSES pins/refuses_text-view-access-attach.cpp
+  ACCEPTS pins/accepts_text-view-access-attach.cpp
+)
+
+loka_compile_pin(text-view-access-detach
+  REFUSES pins/refuses_text-view-access-detach.cpp
+  ACCEPTS pins/accepts_text-view-access-detach.cpp
+)
+
+loka_compile_pin(text-view-access-present
+  REFUSES pins/refuses_text-view-access-present.cpp
+  ACCEPTS pins/accepts_text-view-access-present.cpp
+)
+
+loka_compile_pin(text-view-store-transfer
+  REFUSES pins/refuses_text-view-store-transfer.cpp
+  ACCEPTS pins/accepts_text-view-store-transfer.cpp
+)

@@ -1,0 +1,22 @@
+#ifndef LOKA_TESTS_TEXT_DOCUMENT_VIEW_TESTS_HPP
+#define LOKA_TESTS_TEXT_DOCUMENT_VIEW_TESTS_HPP
+void testTextViewParkedRootRefuses();
+void testTextViewParkedNestedReplacement();
+void testTextViewCompletionSnapshot();
+void testTextViewOccupiedAndDeliveryOrder();
+void testTextViewForeignAndUnavailable();
+void testTextViewUnsupportedAndPresentation();
+void testTextViewRetirementAndContextEnd();
+void testTextViewRetiredPublication();
+void testTextViewReplacementAndReadOnlyRequests();
+void testTextViewBorrowAndPublication();
+void testTextViewFocusRebind();
+void testTextViewInstallAndCommitRefresh();
+void testTextViewOrdinaryIdentityReplacement();
+void testTextViewKeyedReplacement();
+void testTextViewAdoptionAndTeardown();
+void testTextViewFocusObserverDetach();
+void testTextViewReentryIdentityAndRefusal();
+void testTextViewDetachPreservesNativeFacts();
+void testTextViewInitialObserverAndOtherClaim();
+#endif
