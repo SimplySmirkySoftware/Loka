@@ -117,6 +117,7 @@ void HideControl(ControlRef c)
 }
 short TestControl(ControlRef control, Point point)
 {
+  ++toolbox_host::testControls;
   return control && control->visible && control->hilite != 255 && PtInRect(point, &control->rect)
              ? control->tracking.press
              : 0;

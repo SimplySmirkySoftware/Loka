@@ -14,8 +14,9 @@ class ToolboxPopupMenuContext;
 class ToolboxCellContext;
 class ToolboxTextContext;
 class ToolboxEditTextContext;
+class ToolboxAttributedTextContext;
 
-/** Owns the five hit registries projected by the Toolbox controller. */
+/** Owns the hit registries projected by the Toolbox controller. */
 class ToolboxHitLedger
 {
 public:
@@ -61,6 +62,13 @@ public:
     }
   };
 
+  struct LinkHit
+  {
+    Rect rect;
+    ToolboxAttributedTextContext *context;
+    static void release(const LinkHit &, ToolboxReleasedStates &) {}
+  };
+
   struct TextHit
   {
     ToolboxTextContext *context;
@@ -94,6 +102,7 @@ private:
   ToolboxPressRows<CellHit, PressRow::CELL_HIT> cellHits_;
   ToolboxPressRows<PopupHit, PressRow::POPUP_HIT> popupHits_;
   ToolboxPressRows<EditHit, PressRow::EDIT_HIT> editHits_;
+  ToolboxPressRows<LinkHit, PressRow::LINK_HIT> linkHits_;
   std::vector<TextHit> textHits_;
 };
 
