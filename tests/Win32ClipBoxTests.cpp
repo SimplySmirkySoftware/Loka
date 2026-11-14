@@ -848,6 +848,12 @@ namespace
     ReleaseDC(root, dc);
     return result;
   }
+  void setFocusCues(HWND root, bool shown)
+  {
+    const WPARAM change = MAKEWPARAM(shown ? UIS_CLEAR : UIS_SET, UISF_HIDEFOCUS);
+    SendMessageW(root, WM_CHANGEUISTATE, change, 0);
+    SendMessageW(root, WM_UPDATEUISTATE, change, 0);
+  }
 } // namespace
 
 void testWin32ClipBoxTabOrderAndFlatTwin()
@@ -892,30 +898,49 @@ void testWin32ClipBoxTabOrderAndFlatTwin()
 
 void testWin32ClipBoxFocusCueAndEditTextEdge()
 {
-  // Share setup and sampling with the flat Button sensitivity control.
-  for (int variant = 0; variant < 3; ++variant)
+  // Variants share setup and sampling: 0 clipped Button, 1 clipped EDIT,
+  // 2 flat Button (sensitivity control), 3 Button inside a second clip box
+  // that crosses the first box's edge (one more native nesting step).
+  for (int variant = 0; variant < 4; ++variant)
   {
     const bool edit = variant == 1;
     const bool clipped = variant != 2;
+    const bool nested = variant == 3;
     Fixture f;
     BoxNode *clip = box(90, 70, clipped);
     BoxNode *wide = box(180, 50, false, 1);
+    BoxNode *inner = nested ? box(176, 0) : 0;
     Node *control = edit ? static_cast<Node *>(new EditTextNode((EditTextProps())))
                          : static_cast<Node *>(new ButtonNode(ButtonProps().text(" ")));
     f.tree = clip;
     clip->addChild(wide);
-    wide->addChild(control);
+    if (inner)
+    {
+      wide->addChild(inner);
+      inner->addChild(control);
+    }
+    else
+      wide->addChild(control);
     f.at();
     const HWND hwnd = native(control);
-    LOKA_VERIFY(GetParent(hwnd) == (clipped ? context(clip)->hwnd() : f.root()));
+    // The declared box frame, not the clip window's rect: a clip window placed
+    // wider than its box must turn the outside check red.
+    const RECT edge = f.controller.displayScale().projectFrame(Frame(21, 31, 90, 70)).r;
+    if (nested)
+    {
+      LOKA_VERIFY(GetParent(hwnd) == context(inner)->hwnd());
+      LOKA_VERIFY(GetParent(context(inner)->hwnd()) == context(clip)->hwnd());
+      // The inner clip window itself crosses the edge; only the outer one cuts.
+      LOKA_VERIFY(rectInRoot(context(inner)->hwnd(), f.root()).right > edge.right + 3);
+    }
+    else
+      LOKA_VERIFY(GetParent(hwnd) == (clipped ? context(clip)->hwnd() : f.root()));
     const RECT bounds = rectInRoot(hwnd, f.root());
-    const RECT edge = clipped ? rectInRoot(context(clip)->hwnd(), f.root())
-                              : f.controller.displayScale().projectFrame(Frame(21, 31, 90, 70)).r;
     LOKA_VERIFY(bounds.left < edge.right && bounds.right > edge.right + 3);
     LOKA_VERIFY(bounds.top >= edge.top && bounds.bottom <= edge.bottom);
     const RECT outside = {edge.right + 1, bounds.top, edge.right + 4, bounds.bottom};
-    // Blank Button: inset changes show its focused look (cue or themed
-    // focus border) changed, without label ink contributing to the sample.
+    // Blank Button: inset changes come from its focused look, without label
+    // ink contributing to the sample.
     const RECT inside = {bounds.left + 2, bounds.top + 2, bounds.left + 8, bounds.bottom - 2};
     LOKA_VERIFY(inside.right < edge.right);
     ShowWindow(f.root(), SW_SHOW);
@@ -925,12 +950,11 @@ void testWin32ClipBoxFocusCueAndEditTextEdge()
     flushClipPaint(f);
     const std::vector<COLORREF> ground = pixels(f.root(), outside);
     ShowWindow(hwnd, SW_SHOW);
-    SendMessageW(f.root(), WM_CHANGEUISTATE, MAKEWPARAM(UIS_CLEAR, UISF_HIDEFOCUS), 0);
-    SendMessageW(f.root(), WM_UPDATEUISTATE, MAKEWPARAM(UIS_CLEAR, UISF_HIDEFOCUS), 0);
+    // Cues hidden first, so a themed focus border appears before the cue does.
+    setFocusCues(f.root(), false);
     flushClipPaint(f);
-    const std::vector<COLORREF> outsideBeforeFocus = pixels(f.root(), outside);
     if (clipped)
-      LOKA_VERIFY(outsideBeforeFocus == ground);
+      LOKA_VERIFY(pixels(f.root(), outside) == ground);
     const std::vector<COLORREF> before = pixels(f.root(), inside);
     if (edit)
     {
@@ -946,33 +970,29 @@ void testWin32ClipBoxFocusCueAndEditTextEdge()
         SelectObject(dc, previous);
       ReleaseDC(hwnd, dc);
       LOKA_VERIFY(extent.cx > edge.right - bounds.left);
+      flushClipPaint(f);
+      LOKA_VERIFY(pixels(f.root(), outside) == ground);
+      LOKA_VERIFY(pixels(f.root(), inside) != before);
+      continue;
     }
-    else
-      SetFocus(hwnd);
+    SetFocus(hwnd);
     flushClipPaint(f);
-    // Clipped controls must preserve ground even without a visible focused look.
-    // The flat twin must show that these outside columns can detect focus ink.
-    const std::vector<COLORREF> outsideAfterFocus = pixels(f.root(), outside);
+    const std::vector<COLORREF> outsideFocused = pixels(f.root(), outside);
+    const std::vector<COLORREF> insideFocused = pixels(f.root(), inside);
     if (clipped)
-      LOKA_VERIFY(outsideAfterFocus == ground);
-    const bool inkChanged = pixels(f.root(), inside) != before;
-    if (!clipped)
-    {
-      if (GetFocus() != hwnd || outsideAfterFocus == outsideBeforeFocus)
-        std::printf(
-            "[skip] clip box focus cue: flat twin showed no outside change; outside check sensitivity not shown\n");
-      else
-        LOKA_VERIFY(outsideAfterFocus != outsideBeforeFocus);
-    }
-    else if (edit)
-      LOKA_VERIFY(inkChanged);
-    else if (GetFocus() != hwnd)
+      LOKA_VERIFY(outsideFocused == ground);
+    // Only the cue depends on UISF_HIDEFOCUS; a themed focus border does not.
+    setFocusCues(f.root(), true);
+    flushClipPaint(f);
+    const std::vector<COLORREF> outsideCue = pixels(f.root(), outside);
+    if (clipped)
+      LOKA_VERIFY(outsideCue == ground);
+    if (GetFocus() != hwnd)
       std::printf("[skip] clip box focus cue: SetFocus did not retain Button focus; outside edge checked\n");
-    else if (!inkChanged)
-      std::printf("[skip] clip box focus cue: no visible change in Button focused look at inset after clearing "
-                  "UISF_HIDEFOCUS; outside edge checked\n");
-    else
-      LOKA_VERIFY(inkChanged);
+    else if (pixels(f.root(), inside) == insideFocused)
+      std::printf("[skip] clip box focus cue: no cue drawn after clearing UISF_HIDEFOCUS; outside edge checked\n");
+    else if (!clipped)
+      LOKA_VERIFY(outsideCue != outsideFocused);
   }
 }
 
