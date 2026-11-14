@@ -1488,7 +1488,12 @@ across rails.
 On Win32, pressing and releasing over the same link run activates it: the
 app's `activatedLink` box receives the target. Links have no hover or pressed
 look. A modal or another window taking the mouse cancels a pending press.
-Link activation on the other rails follows in separate work.
+
+Toolbox delivers on release on the same link run. The release point is the
+cursor when the app processes the click (queued clicks may land elsewhere).
+A linked text owns clicks on its whole visible area; plain labels above it
+pass through, while native controls and shields refuse. There is no pressed
+look. Link activation on the remaining rails follows in separate work.
 
 On Win32, plain `Text` with wrap=NONE, CLIP truncation, and CENTER/RIGHT alignment
 can wrap overflowing words inside its one-line-high native control; ellipsis uses

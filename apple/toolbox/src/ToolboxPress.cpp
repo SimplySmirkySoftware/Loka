@@ -1,4 +1,6 @@
 #include "ToolboxEditDoor.hpp"
+#include "context/ToolboxAttributedTextContext.hpp"
+#include <Events.h>
 #include "ToolboxNativeDoorScope.hpp"
 
 /** Event-local completed selection. Nothing here survives the input operation. */
@@ -133,6 +135,14 @@ bool ToolboxScenePlatformController::resolvePress(const PressRow &row, const Poi
       return false;
     value.context = hit.context;
     value.enabled = !hit.context->enabled_ || hit.context->enabled_->get();
+    break;
+  }
+  case PressRow::LINK_HIT:
+  {
+    const LinkHit &hit = this->hitLedger_.linkHits_[row.index];
+    if (!hit.context || !PtInRect(point, &hit.rect) || !hit.context->containsPoint(point))
+      return false;
+    value.context = hit.context;
     break;
   }
   case PressRow::UNIT:
@@ -311,6 +321,31 @@ bool ToolboxScenePlatformController::dispatchPress(const ResolvedPress &press,
     ToolboxButtonContext *context = static_cast<ToolboxButtonContext *>(press.context);
     this->pressOnEmptySpace();
     return context->handleMouseDown(point, this);
+  }
+  case PressRow::LINK_HIT:
+  {
+    ToolboxAttributedTextContext *context = static_cast<ToolboxAttributedTextContext *>(press.context);
+    this->pressOnEmptySpace();
+    ToolboxLinkHit down;
+    loka::app::AttributedString::LinkRun run;
+    if (context->prepareLinkHit(point, down) != TOOLBOX_HIT_LINK || !context->queryEligibleRun(down, run))
+      return false;
+    while (WaitMouseUp())
+    {
+    }
+    Point up;
+    GetMouse(&up);
+    ResolvedPress again;
+    if (!this->pressLedger_.topmostAt(up, *this, again) || again.row.kind != PressRow::LINK_HIT
+        || again.context != context || this->pressOwnerFact(again) != PRESS_OWNER_ATTACHED)
+      return false;
+    ToolboxLinkHit hit;
+    if (context->prepareLinkHit(up, hit) != TOOLBOX_HIT_LINK)
+      return false;
+    loka::app::AttributedString::LinkRun now;
+    if (!context->queryEligibleRun(hit, now) || now.first != run.first || now.last != run.last)
+      return false;
+    return context->writeActivatedLink(run);
   }
   case PressRow::UNIT:
   case PressRow::PRESS_ROW_KIND_COUNT:
