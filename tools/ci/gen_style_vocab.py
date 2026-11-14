@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 
@@ -211,6 +212,32 @@ def generate_runtime(vocab):
             "module.exports = {sizes:[%s],family:%s};\n") % (sizes, family)
 
 
+LOOK_COLORS = {"Canvas", "CanvasText", "GrayText", "ButtonFace", "ButtonText", "ButtonBorder"}
+LOOK_COLOR_FIELDS = {"ground", "text", "secondary", "face", "border", "disabledText", "cellFace", "cellBorder"}
+
+
+def validate_look(look):
+    if not isinstance(look, dict) or set(look) != LOOK_COLOR_FIELDS | {"scheme", "radius"}:
+        raise ValueError("skin look must have exactly the ten paint fields")
+    if look["scheme"] not in ("light", "auto"):
+        raise ValueError("skin scheme must be light or auto")
+    if type(look["radius"]) is not int or not 0 <= look["radius"] <= 16:
+        raise ValueError("skin radius must be an integer in 0..16")
+    for field in LOOK_COLOR_FIELDS:
+        value = look[field]
+        if not isinstance(value, str) or not (value in LOOK_COLORS or re.fullmatch(r"#[0-9a-f]{6}", value)):
+            raise ValueError("skin colour must be lowercase hex or a listed system colour")
+
+
+def skin_look(look):
+    root = {"color-scheme": "light"} if look["scheme"] == "light" else {}
+    root.update({"background": look["ground"], "--loka-text": look["text"], "--loka-secondary": look["secondary"]})
+    return {"root": root,
+            "button": {"background": look["face"], "border-color": look["border"], "border-radius": str(look["radius"]) + "px"},
+            "cell": {"background": look["cellFace"], "border-color": look["cellBorder"], "border-radius": "0px"},
+            "disabledText": look["disabledText"]}
+
+
 def validate_web_skins(vocab):
     rows = vocab.get("webSkins")
     if not isinstance(rows, list) or not rows or len(rows) > 2147483647:
@@ -220,6 +247,7 @@ def validate_web_skins(vocab):
         if not isinstance(row, dict) or not isinstance(row.get("name"), str) or row["name"] in names:
             raise ValueError("webSkins names must be unique strings")
         names.add(row["name"])
+        validate_look(row.get("look"))
         spacing = row.get("spacing")
         if not isinstance(spacing, list) or len(spacing) != 3 or any(
                 type(value) is not int or not 0 <= value <= 32767 for value in spacing):
@@ -293,6 +321,7 @@ def generate_wire(vocab):
 def generate_web(vocab):
     schema = resolved_schema(vocab)
     web = {kind: enum_entries(vocab, kind) for kind, _, _ in ENUMS}
+    web["skinLook"] = [skin_look(row["look"]) for row in vocab["webSkins"]]
     web["sizes"] = vocab["sizes"]
     web["webMeasureStatus"] = vocab["webMeasureStatus"]
     web["webButtonGeometry"] = vocab["webButtonGeometry"]
@@ -344,8 +373,9 @@ def main():
     args = parser.parse_args()
     vocab = json.loads(args.vocab.read_text(encoding="utf-8"))
     validate_web_skins(vocab)
-    for path, renderer in OUTPUTS.items():
-        write(args.output_root, path, renderer(vocab))
+    rendered = {path: renderer(vocab) for path, renderer in OUTPUTS.items()}
+    for path, content in rendered.items():
+        write(args.output_root, path, content)
 
 
 

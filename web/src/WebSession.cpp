@@ -152,7 +152,8 @@ WebSession::Ingress WebSession::click(loka::web::Token token, double now)
   if (entry != ACCEPTED && entry != NESTED)
     return entry;
   WebResource *row = this->routes_.find(token);
-  if (!row || row->kind != loka::web::BUTTON || !row->leaf() || !row->leaf()->active())
+  if (!row || (row->kind != loka::web::BUTTON && row->kind != loka::web::CELL) || !row->leaf()
+      || !row->leaf()->active())
     return REFUSED_TOKEN;
   return WebEntry::run(*this, entry, loka::web::BUTTON, token, 0, 0, loka::web::WAKE_COUNT, now);
 }
@@ -184,6 +185,7 @@ namespace
     switch (kind)
     {
     case loka::web::BUTTON:
+    case loka::web::CELL: // Both clicks enter through the BUTTON dispatch constant.
       WebInputDoor::buttonClick(*row->leaf());
       break;
     case loka::web::ROOT:

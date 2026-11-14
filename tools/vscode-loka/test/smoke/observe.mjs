@@ -30,7 +30,17 @@ export const webviewExpression = `(() => {
         x: Math.round(r.left - b.left), y: Math.round(r.top - b.top), width: r.width, height: r.height,
         visible: style.display !== 'none' && style.visibility !== 'hidden' && style.visibility !== 'collapse' && e.checkVisibility()};
     });
-    return {text: d.body.innerText.trim().slice(0, 4096), scripts: d.querySelectorAll('script').length, total: all.length, rows};
+    const root=d.body.querySelector(':scope > div[data-loka-token]'), button=root?.querySelector('button');
+    let paint=null;
+    if(root && button) {
+      const read=e=>{const s=d.defaultView.getComputedStyle(e);return {background:s.backgroundColor,radius:s.borderRadius};};
+      const probe=d.createElement('div');root.appendChild(probe);
+      const system={};for(const name of ['Canvas','CanvasText','GrayText','ButtonFace','ButtonText','ButtonBorder']) {
+        probe.style.backgroundColor=name;system[name]=d.defaultView.getComputedStyle(probe).backgroundColor;
+      }probe.remove();
+      paint={root:read(root),button:read(button),system};
+    }
+    return {paint,text: d.body.innerText.trim().slice(0, 4096), scripts: d.querySelectorAll('script').length, total: all.length, rows};
   } catch { return null; }
 })()`;
 
@@ -49,12 +59,22 @@ export function webviewMatches(value, status, expected) {
   if (expected.kind === 'message') return value.text === expected.text && value.scripts === 0
     && Object.values(markers).every(rows => rows.length === 0);
   const rows = markers[expected.id];
+  if(expected.look && !paintMatches(value.paint,expected.look)) return false;
   return rows?.length === 1 && rows[0].visible === true && rows[0].width > 0 && rows[0].height > 0
     && Math.abs(rows[0].x - expected.offset) <= 1 && Math.abs(rows[0].y - expected.offset) <= 1;
 }
 
+/** Cost: F4/F7 observation; compare three paint facts in Node, never interpolate vocabulary into CDP code. */
+export function paintMatches(paint,look) {
+  if(!paint) return false;
+  const colour=value=>/^#[0-9a-f]{6}$/.test(value)
+    ? 'rgb('+value.slice(1).match(/../g).map(v=>parseInt(v,16)).join(', ')+')' : paint.system?.[value];
+  return paint.root?.background===colour(look.ground) && paint.button?.background===colour(look.face)
+    && paint.button?.radius===look.radius+'px';
+}
+
 export function webviewDiagnostic(value) {
-  return {status: value?.status ?? null,
+  return {status: value?.status ?? null, paint:value?.body?.paint ?? null,
     markers: Object.fromEntries(Object.entries(markerRows(value?.body)).map(([id, rows]) =>
       [id, rows.map(({x, y, visible}) => ({id, x, y, visible}))])),
     scripts: value?.body?.scripts ?? null, text: value?.body?.text?.slice(0, 60) ?? null};

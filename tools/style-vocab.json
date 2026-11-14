@@ -43,10 +43,10 @@
     "BlockStyle": ["wrap", "truncation", "align"]
   },
   "webSkins": [
-    {"name": "web", "spacing": [12, 4, 9]},
-    {"name": "win32", "spacing": [6, 6, 10]},
-    {"name": "macos", "spacing": [6, 6, 16]},
-    {"name": "classic", "spacing": [8, 8, 12]}
+    {"name": "web", "spacing": [12, 4, 9], "look": {"scheme": "auto", "ground": "Canvas", "text": "CanvasText", "secondary": "GrayText", "face": "ButtonFace", "border": "GrayText", "radius": 4, "disabledText": "GrayText", "cellFace": "ButtonFace", "cellBorder": "GrayText"}},
+    {"name": "win32", "spacing": [6, 6, 10], "look": {"scheme": "light", "ground": "#f3f3f3", "text": "#1b1b1b", "secondary": "#5f5f5f", "face": "#fdfdfd", "border": "#d0d0d0", "radius": 4, "disabledText": "#a0a0a0", "cellFace": "#fdfdfd", "cellBorder": "#d0d0d0"}},
+    {"name": "macos", "spacing": [6, 6, 16], "look": {"scheme": "light", "ground": "#ececec", "text": "#262626", "secondary": "#6e6e6e", "face": "#ffffff", "border": "#c3c3c3", "radius": 6, "disabledText": "#a9a9a9", "cellFace": "#ffffff", "cellBorder": "#c3c3c3"}},
+    {"name": "classic", "spacing": [8, 8, 12], "look": {"scheme": "light", "ground": "#dddddd", "text": "#000000", "secondary": "#555555", "face": "#dddddd", "border": "#000000", "radius": 4, "disabledText": "#888888", "cellFace": "#dddddd", "cellBorder": "#000000"}}
   ],
   "webMeasureStatus": {"OK": 0, "REFUSED": 1, "PROTOCOL": 2},
   "webButtonGeometry": {"insetX": 8, "insetY": 4, "border": 1},
