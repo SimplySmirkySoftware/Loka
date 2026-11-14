@@ -18,7 +18,8 @@ def main():
     if not all(shutil.which(tool) for tool in ('emcmake', 'emcc', 'node')):
         print('[skip] Web catalog integration requires emsdk (emcmake, emcc and node on PATH)')
         return 77
-    expected = [('HelloWorld', 'LokaHelloWeb'), ('MineSweeper', 'LokaMineWeb')]
+    expected = [('HelloWorld', 'LokaHelloWeb'), ('MineSweeper', 'LokaMineWeb'),
+                ('Tutorial', 'LokaTutorialWeb')]
     for preset, directory in (('web', 'web'), ('testing-web', 'testing')):
         subprocess.run(['emcmake', 'cmake', '--preset', preset], cwd=ROOT, check=True)
         # Remove the expected pairs first: a stale pair left by an earlier build
@@ -49,7 +50,7 @@ def main():
                 raise AssertionError(f'{preset}: factory missing from JS')
             if wasm.read_bytes()[:4] != b'\0asm':
                 raise AssertionError(f'{preset}: invalid Wasm artifact')
-        print(f'[pass] {preset}: exact catalog and both built JS/Wasm pairs', flush=True)
+        print(f'[pass] {preset}: exact catalog and all built JS/Wasm pairs', flush=True)
     return 0
 
 

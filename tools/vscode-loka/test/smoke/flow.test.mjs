@@ -8,7 +8,8 @@ import {observeFlow, statusExpression} from './run.mjs';
 
 const rows = flow.skins(JSON.parse(await readFile(new URL('../../../style-vocab.json', import.meta.url), 'utf8')));
 const apps = [{id: 'LokaHelloWeb', name: 'HelloWorld', target: 'LokaHelloWeb'},
-  {id: 'LokaMineWeb', name: 'MineSweeper', target: 'LokaMineWeb'}];
+  {id: 'LokaMineWeb', name: 'MineSweeper', target: 'LokaMineWeb'},
+  {id: 'LokaTutorialWeb', name: 'Tutorial', target: 'LokaTutorialWeb'}];
 const owner = () => ({check() {}, async wait(read, _deadline, label) {
   for (let i = 0; i < 3; i++) if (await read()) return;
   throw new Error(label + ' timed out');

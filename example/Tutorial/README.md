@@ -22,6 +22,17 @@ When you want to check an answer, switch the active typedef to one of:
 2. Edit `src/DoItYourselfNode.hpp` to recreate the steps yourself.
 3. Uncomment a `StepNNode` typedef in `src/MyAppConfig.hpp` when you want to compare.
 
+## Web preview
+
+With the Web preview extension configured, choose **Tutorial** with
+**Loka: Select Example**, then run **Loka: Build** and **Loka: Open Preview**.
+Edit `src/DoItYourselfNode.hpp`, save, and run **Loka: Build** again; the preview
+reloads after a successful build. Switching the `TutorialNode` typedef in
+`src/MyAppConfig.hpp` to a step works the same way.
+
+`EditText` and other refused nodes do not appear on Web; see the
+[Web rail design](../../docs/WebRailDesign.md) for the supported projection.
+
 ## Step 4: a list with a capacity
 
 Each Add changes the count. `Keyed` retires the old generation first, then
@@ -57,6 +68,7 @@ The list still stops at 100 and scrolls to every row. See
 
 ## Targets
 
+- Web: `LokaTutorialWeb`
 - macOS: `LokaTutorialMacOS`
 - Win32: `LokaTutorialWin32`
 - Retro68 68K: `LokaTutorial68K`

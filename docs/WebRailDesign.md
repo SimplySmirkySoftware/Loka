@@ -136,12 +136,13 @@ VS Code webview. The capture tests (planning, host page and real-process runner)
 `node --test tests/web/js/capture.test.mjs`, a direct invocation like the other
 JS pins.
 
-Production build: `emcmake cmake --preset web && cmake --build --preset web
---target LokaHelloWeb LokaWebCounter`. Run
+Production build: `emcmake cmake --preset web && cmake --build --preset web -j 4`. Run
 `CHROMIUM=/path/to/chrome node tests/web/driver/run.mjs build/wasm/testing/web`.
 The same driver serves HelloWeb from `build/wasm/web/example/HelloWorld` and checks
 its content box, ScrollView content tree and Probe Button, completion and zero resources, plus staged
-fixture configuration, second-start refusal and both CSP branches.
+fixture configuration, second-start refusal and both CSP branches. The Tutorial cell
+serves `build/wasm/web/example/Tutorial` and asserts its projected title and first
+hint leaves, one resize, disposal completion and zero remaining resources.
 `tests/web/mutations/entry-{1,2}.py <worktree>` exercise factory dispatch and staging;
 entry placement and fixture leakage are separate expected compile refusals.
 
@@ -776,6 +777,15 @@ containment: a caller reached through a symlink beneath `example/` can register
 even when the symlink points outside that directory. Browser fixtures such
 as `LokaWebCounter` are excluded. The VS Code preview extension reads this catalog at Select, Build and document
 replacement preparation; it does not maintain a second example list.
+
+The preview examples are HelloWorld, MineSweeper, and
+[Tutorial](../example/Tutorial/README.md#web-preview), in that order.
+The Emscripten branch in [`CMakeLists.txt`](../CMakeLists.txt) visits those
+example directories in sequence; `_loka_web_register` appends indexed rows and
+`loka_finalize_web_apps` emits them in index order in
+[`cmake/LokaWebApp.cmake`](../cmake/LokaWebApp.cmake). This preserves the smoke
+flow's HelloWorld `apps[0]` and MineSweeper `apps[1]` fixtures. Tutorial uses the
+same Select Example, Build, and preview reload path.
 
 Schema v1 is `{"version":1,"apps":[{"id","name","target","exportName","sourceDir","js"}]}`.
 `id` equals the unique `target` (`[A-Za-z0-9_]+`); `name` is the example directory
