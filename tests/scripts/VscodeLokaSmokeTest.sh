@@ -7,7 +7,7 @@ missing() {
   if [[ ${LOKA_REQUIRE_VSCODE_FLOW:-0} == 1 || ${LOKA_REQUIRE_VSCODE_SMOKE:-0} == 1 || ${LOKA_REQUIRE_VSCODE_RUNTIME:-0} == 1 ]]; then
     label=fail code=1
   fi
-  echo "[$label] R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2: ${1} not found"
+  echo "[$label] R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2 W WR: ${1} not found"
   exit "$code"
 }
 command -v node >/dev/null 2>&1 || missing "Node >=24 or 22.18+"

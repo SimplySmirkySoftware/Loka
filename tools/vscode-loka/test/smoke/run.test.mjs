@@ -45,7 +45,7 @@ for (const [name, change, settings] of [
   for (const require of ['', 'LOKA_REQUIRE_VSCODE_SMOKE', 'LOKA_REQUIRE_VSCODE_RUNTIME', 'LOKA_REQUIRE_VSCODE_FLOW']) {
     const decision = prerequisiteDecision({...facts, ...change}, {...env, ...settings, [require]: '1'});
     assert.equal(decision.code, require ? 1 : 77);
-    assert.match(decision.lines.join('\n'), /R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2/);
+    assert.match(decision.lines.join('\n'), /R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2.* W WR:/);
   }
 });
 test('runtime prerequisite and invalid input precedence', () => {
@@ -205,7 +205,7 @@ test('shell Node bootstrap optional and required branches', async () => {
         const run = spawnSync('/bin/bash', [join(repo, 'tests/scripts/VscodeLokaSmokeTest.sh')],
           {env: {PATH: directory, [required]: '1'}, encoding: 'utf8'});
         assert.equal(run.status, required ? 1 : 77, run.stdout + run.stderr);
-        assert.match(run.stdout, /R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2/);
+        assert.match(run.stdout, /R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2 W WR:/);
       }
     }
   } finally { await rm(directory, {recursive: true, force: true}); }
@@ -253,7 +253,7 @@ test('unaudited Node prerequisite gives the exact reason', () => {
     const decision = prerequisiteDecision({...facts, node: '25.0.0'},
       {...env, LOKA_REQUIRE_VSCODE_SMOKE: required ? '1' : '0'});
     assert.equal(decision.code, required ? 1 : 77);
-    assert.equal(decision.lines[0], `[${required ? 'fail' : 'skip'}] R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2 F1 F2 F3 F4 F5 F6 F7: Node 25.0.0 is not in the audited list for child-signal ordering`);
+    assert.equal(decision.lines[0], `[${required ? 'fail' : 'skip'}] R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2 F1 F2 F3 F4 F5 F6 F7 W WR: Node 25.0.0 is not in the audited list for child-signal ordering`);
   }
 });
 test('display selection skips live locks and admits stale or absent locks', async () => {

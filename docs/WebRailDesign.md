@@ -543,6 +543,50 @@ focuses the first window. Open a second checkout of the repository there (for
 example a git worktree on the WSL filesystem) and run the commands in that
 window. Opening a source file does not open or select a preview.
 
+**Workspace installation.** The install/trust/restart protocol is
+runtime-verified on a local Linux window; Remote WSL not verified. The local
+VS Code 1.145.3 probe established this route; smoke cells W/WR below automate
+its acceptance checks. F5 above remains the verified development route.
+
+From `tools/vscode-loka`, run `npm run place`. In Extensions, find **Loka Preview**
+under **Workspace Recommendations** and choose **Install Workspace Extension**,
+then run **Loka: Open Preview**. The trust modal belongs to VS Code. Placement
+alone does not install the extension. To update, run `npm run place` and reopen
+the window; no reinstall is needed. Updating through Reload Window in a running
+window has not been runtime-verified. Source maps in the placed copy do not
+point back to source; use F5 for extension debugging.
+
+Placement builds under `tools/vscode-loka/.place.lock/`, copies the complete
+output into a private stage, validates the rewritten manifest and its reachable
+relative requires, then publishes an immutable `gen-*` directory. A single
+manifest rename commits the new `main`. Placement never deletes published
+generations: even an older manifest already read by an open window remains
+usable. After many updates, **close every window for this workspace** and run
+`npm run place:clean`; it keeps the current generation and removes other
+`gen-*` and leftover `.stage-*` directories. The command cannot check whether
+windows are closed. Placement prints this cleanup reminder above 20 generations.
+
+Recovery:
+
+- A leftover lock means another placement is running or was interrupted. Only
+  after confirming none is running, remove `tools/vscode-loka/.place.lock/`
+  and rerun `npm run place`. An interrupted first placement may leave only
+  `.stage-*` / `gen-*`, without a manifest; it is not yet a scannable extension
+  and the next placement accepts that layout. Other unowned contents are refused.
+- If `git clean -fdx` or another external action deletes `.vscode/extensions/`,
+  opening a window while the copy is absent silently drops VS Code's workspace
+  installation record. Run `npm run place` and **Install Workspace Extension**
+  again. An unreadable/missing manifest at startup has the same recovery.
+- After switching branches, run `npm run place`: the installed copy otherwise
+  continues to run its old code. Catalog schema checks are the existing version
+  handshake; placement adds no extension/module version negotiation.
+
+Repository separation contacts are the two package script arguments (`../..`),
+the workspace destination `.vscode/extensions/loka-preview`, its root ignore
+rule, this documentation, and the W/WR fixtures under `tools/vscode-loka/test/smoke`.
+The installer knows its own package directory and the supplied workspace root;
+it does not discover repository layout. The user owns cleanup and reinstallation.
+
 The removed `loka.preview.module` and `loka.preview.buildCommand` settings are
 no longer read. Remove those overrides and set `loka.preview.buildDirectory`
 and `loka.preview.configureCommand` together. The former is absolute or relative
@@ -608,8 +652,11 @@ Window content margin), and reopening the picker reports the selected skin as
 command, completion of old-document disposal, other skins or the four VS Code
 themes; CI does not run that flow.
 
-Build and every preview replacement read trust afresh. Untrusted workspaces run
-no task and receive a script-free MESSAGE page; Select Example does not read the catalog.
+Build and every preview replacement read trust afresh. When the extension is
+running (for example in the development host), untrusted workspaces run no task
+and receive a script-free MESSAGE page; Select Example does not read the catalog.
+For a workspace-installed copy in Restricted Mode, VS Code does not load the
+extension at all: Loka commands do not exist and its own refusal page is not reached.
 Catalog reads and validation are synchronous at Select, Build and replacement
 preparation, with no watcher or editor/configuration listener. Missing, malformed,
 unsupported-version, empty and unreadable catalogs diagnose **Configure**.
@@ -671,8 +718,9 @@ window's own folder, which is why the launch no longer passes one.
 
 Runtime-verified on Linux with VS Code 1.145.3 and the development
 extension: the smoke checks Configure, Build, Open Preview and Select Example
-refusals in Restricted Mode. Installed-extension manifest enforcement and Remote
-WSL/Windows hosts remain unverified.
+refusals in Restricted Mode. The local Linux workspace-install probe separately
+verified installed-extension manifest enforcement. Remote WSL/Windows workspace
+installation remains unverified.
 
 Not runtime-verified: Build from a VS Code started without the emsdk environment,
 New Game inside the webview, the four themes, and webview resource enforcement.
@@ -945,7 +993,8 @@ prints a skip.
 
 The optional Linux smoke in `tools/vscode-loka/test/smoke/` loads the development
 extension with Workspace Trust enabled. Launch order is T3, R, optional T2, then optional F,
-with a fresh profile and owned empty workspace for each launch.
+with a fresh profile and owned empty workspace for each launch. W and WR follow
+these cells using ordinary installed drivers (no extension development path).
 
 | Launch | Cells, in order | Observation |
 | --- | --- | --- |
@@ -953,6 +1002,16 @@ with a fresh profile and owned empty workspace for each launch.
 | R | R1, R3, R2, R4, R5 | Activation and six commands; Configure refusal; first Open refusal; Build refusal; Select Example refusal toast with no quick-input element, then successful command settlement after `notifications.clearAll`. No task starts throughout this suite. |
 | T2 | T1', T2 | Grant trust and first Open with the supplied built Web tree. |
 | F | F1–F7 | Configure, Build, first Open, Select Skin, Select Example, Build the selected example, Select Skin back to web. |
+| W | W3, W4 | Initially absent; place, trust, install from Workspace Recommendations, activate at the exact placed path; place a marked payload and restart without reinstall, observing the changed status. |
+| WR | WR1, WR2 | Cancel an untrusted install at the VS Code trust modal; restart W’s installed profile with fresh shared storage and verify no extension, command or status while the install record persists. |
+
+Only W/WR pass `--shared-data-dir`, isolating trust as well as user data. Their
+driver is placed in each fresh `--extensions-dir` and declares untrusted-workspace
+support. Git is disabled and no `.vscode/extensions.json` is created. The driver
+queries `@recommended ` and waits for the Workspace Recommendations row before
+installing; after granting trust it closes the modal trust editor. WR sends the
+install without awaiting its promise, then clicks Cancel through CDP. W/WR cover
+installation, activation, update and refusal; T/F own preview rendering evidence.
 
 K3 is provisional until K2 passes. R runs only after K1 passes; otherwise it is
 printed as not run because its control is not established. Positive task
@@ -1011,8 +1070,8 @@ against the vocabulary. Fixed CDP code reads computed colours (including host
 system-colour probes); data is compared in Node, never spliced into evaluated
 expressions. F does not cover all skin values, pixels, continued module
 health, old-document disposal completion, restart persistence or theme coverage.
-Installed-extension manifest enforcement, Reload, Remote WSL/Windows hosts and
-the default relative build path remain outside the smoke. CDP captures no images.
+W/WR cover installed-extension manifest enforcement. Reload, Remote WSL/Windows
+hosts and the default relative build path remain outside the smoke. CDP captures no images.
 
 Build the extension immediately before collecting evidence, and keep its
 `out/` and any supplied Web tree unchanged during the run:
@@ -1026,7 +1085,8 @@ node --test tools/vscode-loka/test/smoke/*.test.mjs
 python3 -m unittest discover -s tools/vscode-loka/test/smoke -p '*_test.py'
 ```
 
-The entry does not build the extension or download VS Code; F builds its Web examples. Use the archive-root executable, not
+The entry requires a built extension and does not download VS Code; W exercises
+placement’s build under lock and F builds its Web examples. Use the archive-root executable, not
 `bin/code`. It resolves symlinks and checks `resources/app/product.json` against
 [vscode-pin.json](../tools/vscode-loka/test/smoke/vscode-pin.json). The pin fixes
 VS Code 1.145.3, its commit and the Linux x64 archive SHA-256. Pin upgrades need

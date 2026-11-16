@@ -7,6 +7,7 @@ import {dirname, isAbsolute, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import flow from './flow.cjs';
+import {runWorkspaceCells} from './workspace.mjs';
 import {pickerExpression, pickerMatches, readWebview, webviewMatches, webviewDiagnostic, observe} from './observe.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -15,7 +16,7 @@ const extension = resolve(here, '../..');
 export const statuses = Object.freeze({R: 'Loka: Trust the workspace to preview',
   T3: 'Loka: Web catalog missing; run Configure', T2: 'Loka: Running', F: 'Loka: Running'});
 const cells = {F: 'F1 F2 F3 F4 F5 F6 F7', R: 'R1 R3 R2 R4 R5', T3: 'T1 K3 K2 K1 T3', T2: "T1' T2"};
-const allCells = "R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2 F1 F2 F3 F4 F5 F6 F7";
+const allCells = "R1 R2 R3 R4 R5 T1 K3 K2 K1 T3 T1' T2 F1 F2 F3 F4 F5 F6 F7 W WR";
 const manifest = JSON.parse(await readFile(join(extension, 'package.json'), 'utf8'));
 const commands = manifest.contributes.commands.map(item => item.command);
 export const pin = JSON.parse(await readFile(join(here, 'vscode-pin.json'), 'utf8'));
@@ -531,7 +532,9 @@ export async function main(env = process.env) {
         console.log('[pass] ' + cells[kind]);
       } catch (error) { throw new Error(cells[kind] + ': ' + error.message); }
     }, console.log, decision.flow);
+    await runWorkspaceCells(owner, executable, env, display, {connectCDP, trustExpression, statusExpression});
   } catch (error) {
+    console.log('[not run] W/WR remaining steps: ' + error.message);
     failures.push(error.message);
   }
   finally {

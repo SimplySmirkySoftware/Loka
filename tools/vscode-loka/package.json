@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('out',{recursive:true,force:true})\" && tsc -p .",
-    "check": "tsc -p . --noEmit"
+    "check": "tsc -p . --noEmit",
+    "place": "node scripts/place.cjs ../..",
+    "place:clean": "node scripts/place.cjs --clean ../.."
   },
   "devDependencies": {
     "@types/node": "24.19.2",
