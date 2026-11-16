@@ -15,6 +15,14 @@ export const recommendationExpression = `(() => [...document.querySelectorAll('.
   [...p.querySelectorAll('.monaco-list-row')].some(r => r.offsetParent !== null && r.textContent.includes('Loka Preview') &&
     [...r.querySelectorAll('.action-label')].some(a => a.offsetParent !== null && !a.classList.contains('hide') &&
       (a.innerText.trim() || a.getAttribute('aria-label') || a.title) === 'Install Workspace Extension'))))()`;
+/** Failure evidence only: what the Extensions view showed when the expected row never appeared. */
+export const recommendationDiagnostic = `JSON.stringify({view: !!document.querySelector('.extensions-viewlet'),
+  panes: [...document.querySelectorAll('.extensions-viewlet .pane')].map(p => ({
+    header: (p.querySelector('.pane-header')?.textContent || '').trim().slice(0, 60), shown: p.offsetParent !== null,
+    expanded: p.querySelector('.pane-header')?.getAttribute('aria-expanded'),
+    rows: [...p.querySelectorAll('.monaco-list-row')].slice(0, 6).map(r => r.textContent.trim().slice(0, 90))})),
+  message: (document.querySelector('.extensions-viewlet .message')?.textContent || '').trim().slice(0, 120),
+  dialogs: [...document.querySelectorAll('.monaco-dialog-box')].map(d => d.textContent.trim().slice(0, 120))})`;
 export const cancelInstallExpression = `(() => {
   const dialog = [...document.querySelectorAll('.monaco-dialog-box')].find(d => d.offsetParent !== null &&
     [...d.querySelectorAll('.monaco-button')].some(b => b.textContent.trim() === 'Trust Workspace & Install'));
@@ -117,7 +125,12 @@ async function session(owner, executable, env, display, directory, workspace, ph
   return {facts, request, command, cdp,
     async recommendations() {
       await command('workbench.extensions.search', ['@recommended ']);
-      await owner.wait(() => cdp.evaluate(recommendationExpression), Date.now() + 30000, 'Workspace Recommendations Loka Preview row');
+      try {
+        await owner.wait(() => cdp.evaluate(recommendationExpression), Date.now() + 30000, 'Workspace Recommendations Loka Preview row');
+      } catch (error) {
+        const seen = await cdp.evaluate(recommendationDiagnostic).catch(e => 'diagnostic failed: ' + e.message);
+        throw new Error(error.message + '; view=' + seen);
+      }
     },
     async trust() {
       await command('workbench.trust.manage');
