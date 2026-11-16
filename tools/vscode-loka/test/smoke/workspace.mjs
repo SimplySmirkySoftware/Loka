@@ -126,7 +126,8 @@ async function session(owner, executable, env, display, directory, workspace, ph
     async recommendations() {
       await command('workbench.extensions.search', ['@recommended ']);
       try {
-        await owner.wait(() => cdp.evaluate(recommendationExpression), Date.now() + 30000, 'Workspace Recommendations Loka Preview row');
+        // 90 s: the first hosted-runner launch of a fresh ordinary profile once took longer than 30 s to list the row.
+        await owner.wait(() => cdp.evaluate(recommendationExpression), Date.now() + 90000, 'Workspace Recommendations Loka Preview row');
       } catch (error) {
         const seen = await cdp.evaluate(recommendationDiagnostic).catch(e => 'diagnostic failed: ' + e.message);
         throw new Error(error.message + '; view=' + seen);
