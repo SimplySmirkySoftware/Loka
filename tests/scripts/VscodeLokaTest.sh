@@ -17,7 +17,7 @@ else
   skip
 fi
 shopt -s nullglob
-tests=(test/*.test.ts)
+tests=(test/*.test.ts test/*.test.mjs)
 if (( ${#tests[@]} == 0 )); then
   echo 'vscode-loka: no source tests found' >&2
   exit 1

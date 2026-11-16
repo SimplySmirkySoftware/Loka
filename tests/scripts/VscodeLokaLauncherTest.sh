@@ -36,7 +36,7 @@ if [[ \$1 == --version ]]; then echo '$version'; exit 0; fi
 shift
 (( \$# > 0 )) || exit 8
 for file in "\$@"; do
-  [[ \$file == test/*.test.ts && -f \$file ]] || exit 8
+  [[ ( \$file == test/*.test.ts || \$file == test/*.test.mjs ) && -f \$file ]] || exit 8
 done
 exit 0
 EOF_NODE

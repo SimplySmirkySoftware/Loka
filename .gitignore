@@ -253,3 +253,5 @@ win32/DesktopApp/*.VC.VC.opendb
 # End of https://www.toptal.com/developers/gitignore/api/node,macos,linux
 /Testing/
 .smells.md
+
+/.vscode/extensions/
