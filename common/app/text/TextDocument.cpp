@@ -1,3 +1,6 @@
+#include "app/text/TextDocumentViewContext.hpp"
+#include "app/text/TextDocumentViewAccess.hpp"
+#include "app/nodes/controls/TextDocumentEditor.hpp"
 #include "app/text/TextDocumentRegistration.hpp"
 #include "app/scene/Scene.hpp"
 #include "app/text/TextDocumentPublisher.hpp"
@@ -377,6 +380,7 @@ namespace loka
           TextStoreSource source(TextReplacement::Empty());
           TextStoreRow *fresh = 0;
           TextStoreReading reading;
+          BorrowScope borrow(this->controller_);
           if (this->controller_.createTextStore(source, 0, fresh, reading) == TEXT_STORE_BORN)
           {
             assert(fresh);
@@ -559,6 +563,24 @@ namespace loka
         }
         publish(row, controller, requests);
       }
+      /** Adapter delegates privileged work to a member of the befriended publisher (GCC 4.0.1). */
+      class TextDocumentPublisher::ViewVisitor
+      {
+      public:
+        void visit(scene::TextViewClaim &claim)
+        {
+          TextDocumentPublisher::publishView(claim);
+        }
+      };
+      void TextDocumentPublisher::publishView(scene::TextViewClaim &claim)
+      {
+        scene::TextDocumentViewContext &context = static_cast<scene::TextDocumentViewContext &>(claim);
+        scene::Node *node = context.owner();
+        if (node
+            && (node->lifecycleFact() == scene::NODE_FACT_ATTACHED
+                || node->lifecycleFact() == scene::NODE_FACT_DETACHED_RETAINED))
+          static_cast<TextDocumentEditorNode *>(node)->publishAttachment(claim.attachment());
+      }
       void TextDocumentPublisher::complete(scene::SceneTextDocuments &documents, scene::IPlatformController &controller)
       {
         scene::SceneTextDocuments::Publication publication(documents);
@@ -568,6 +590,8 @@ namespace loka
         scene::BorrowScope borrow(controller);
         Visitor visitor(controller, TAKE_REQUESTS);
         documents.visit(visitor);
+        ViewVisitor views;
+        documents.scene::MemberList<scene::TextViewClaim>::visit(views);
       }
       void TextDocumentPublisher::refresh(scene::SceneTextDocuments &documents, scene::IPlatformController &controller)
       {
@@ -575,6 +599,8 @@ namespace loka
         scene::BorrowScope borrow(controller);
         Visitor visitor(controller, KEEP_REQUESTS);
         documents.visit(visitor);
+        ViewVisitor views;
+        documents.scene::MemberList<scene::TextViewClaim>::visit(views);
       }
       TextBodyWrite TextDocumentPublisher::writeReplacement(scene::TextDocumentRegistration &row,
                                                             scene::IPlatformController &controller,
@@ -777,6 +803,159 @@ namespace loka
         if (next != previous)
           fact.set(next);
         replyBodyWrite(row, write);
+      }
+    } // namespace detail
+  } // namespace app
+} // namespace loka
+
+namespace loka
+{
+  namespace app
+  {
+    namespace scene
+    {
+      void TextStoreRow::retire()
+      {
+        if (this->phase_ == RETIRED)
+          return;
+        if (this->view_.remote())
+        {
+          BorrowScope borrow(this->controller_);
+          this->controller_.detachTextView(*this);
+        }
+        this->view_.cut();
+        this->link_.cut();
+        this->owner_.unlink(*this);
+        this->phase_ = RETIRED;
+        this->next_ = this->owner_.retired_;
+        if (this->next_)
+          this->next_->previous_ = this;
+        this->owner_.retired_ = this;
+      }
+
+      void TextStoreRow::transferView(TextStoreRow &old, TextStoreRow &fresh)
+      {
+        assert(&old.controller_ == &fresh.controller_ && old.phase_ == LIVE && fresh.phase_ == LIVE);
+        assert(!fresh.view_.remote());
+        TextViewClaim *claim = old.view_.remote();
+        if (claim)
+          claim->linkTo(fresh);
+      }
+      void TextViewClaim::linkTo(TextStoreRow &row)
+      {
+        this->reason_ = TextViewAttachment();
+        this->link_.connect(row.view_);
+      }
+      TextDocumentViewContext::TextDocumentViewContext(IPlatformController &controller,
+                                                       SceneTextDocuments &documents,
+                                                       TextDocumentEditorNode &node)
+          : controller_(controller)
+      {
+        this->setOwner(&node);
+        documents.MemberList<TextViewClaim>::join(this->membership_);
+      }
+      TextDocumentViewContext::~TextDocumentViewContext()
+      {
+        this->retireView();
+      }
+      void TextDocumentViewContext::retireView()
+      {
+        ::loka::app::detail::TextDocumentViewAccess::detach(*this);
+        this->membership_.leave();
+      }
+      void TextDocumentViewContext::attachView()
+      {
+        TextDocumentEditorNode *node = static_cast<TextDocumentEditorNode *>(this->owner());
+        if (node && node->lifecycleFact() == NODE_FACT_ATTACHED)
+          ::loka::app::detail::TextDocumentViewAccess::attach(*this, *node->props.document_, *this);
+      }
+      void TextDocumentViewContext::readLifecycleFactOnAttach()
+      {
+        this->attachView();
+      }
+      void TextDocumentViewContext::onFactChanged(NodeLifecycleFact, NodeLifecycleFact next)
+      {
+        if (next == NODE_FACT_ATTACHED)
+          this->attachView();
+        else if (next == NODE_FACT_RETIRED)
+          this->retireView();
+        else
+          ::loka::app::detail::TextDocumentViewAccess::detach(*this);
+      }
+      void TextDocumentViewContext::onPropsApplied()
+      {
+        TextDocumentEditorNode *node = static_cast<TextDocumentEditorNode *>(this->owner());
+        if (node)
+          ::loka::app::detail::TextDocumentViewAccess::present(*this, node->props.presentation_);
+      }
+    } // namespace scene
+    namespace detail
+    {
+      void TextDocumentViewAccess::attach(scene::TextViewClaim &claim,
+                                          TextDocument &document,
+                                          scene::TextDocumentViewContext &context)
+      {
+        using namespace scene;
+        TextDocumentRegistration *registration = document.registration_.remote();
+        TextStoreRow *store = registration ? registration->store() : 0;
+        const SceneTextDocuments *documents = static_cast<const SceneTextDocuments *>(claim.membership_.owner());
+        const SceneTextDocuments *owner =
+            registration ? static_cast<const SceneTextDocuments *>(registration->membership_.owner()) : 0;
+        if ((owner && owner != documents) || (store && &store->controller() != &context.controller_))
+        {
+          claim.refuse(TextViewAttachment::VIEW_REFUSED_FOREIGN);
+          return;
+        }
+        if (!store)
+        {
+          claim.refuse(TextViewAttachment::VIEW_REFUSED_UNAVAILABLE);
+          return;
+        }
+        TextViewClaim *occupant = store->view_.remote();
+        if (occupant == &claim)
+          return;
+        if (occupant)
+        {
+          TextDocumentViewContext &old = static_cast<TextDocumentViewContext &>(*occupant);
+          if (old.owner() && old.owner()->lifecycleFact() == NODE_FACT_ATTACHED)
+          {
+            claim.refuse(TextViewAttachment::VIEW_REFUSED_OCCUPIED);
+            return;
+          }
+          detach(*occupant);
+        }
+        const TextViewPresentation &presentation =
+            static_cast<TextDocumentEditorNode *>(context.owner())->props.presentation_;
+        bool attached;
+        {
+          BorrowScope borrow(context.controller_);
+          attached = context.controller_.attachTextView(*store, context, presentation);
+        }
+        if (!attached)
+        {
+          claim.refuse(TextViewAttachment::VIEW_REFUSED_UNSUPPORTED);
+          return;
+        }
+        claim.linkTo(*store);
+        present(claim, presentation);
+      }
+      void TextDocumentViewAccess::detach(scene::TextViewClaim &claim)
+      {
+        scene::TextStoreRow *store = claim.link_.remote();
+        if (store)
+        {
+          scene::BorrowScope borrow(store->controller());
+          store->controller().detachTextView(*store);
+        }
+        claim.unlink();
+      }
+      void TextDocumentViewAccess::present(scene::TextViewClaim &claim, const TextViewPresentation &presentation)
+      {
+        scene::TextStoreRow *store = claim.link_.remote();
+        if (!store)
+          return;
+        scene::BorrowScope borrow(store->controller());
+        store->controller().applyTextViewPresentation(*store, presentation);
       }
     } // namespace detail
   } // namespace app

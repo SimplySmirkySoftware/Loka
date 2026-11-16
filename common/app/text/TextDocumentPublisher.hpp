@@ -9,6 +9,7 @@ namespace loka
     namespace scene
     {
       class TextStoreRow;
+      class TextViewClaim;
       class TextStoreReading;
     } // namespace scene
     namespace detail
@@ -18,6 +19,8 @@ namespace loka
       class TextDocumentPublisher
       {
         class Visitor;
+        class ViewVisitor;
+        static void publishView(scene::TextViewClaim &claim);
         static void complete(scene::SceneTextDocuments &documents, scene::IPlatformController &controller);
         enum Requests
         {

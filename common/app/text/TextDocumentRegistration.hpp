@@ -87,6 +87,7 @@ namespace loka
         MemberHook<TextDocumentRegistration> membership_;
         friend class ::loka::app::TextReader;
         friend class SceneTextDocuments;
+        friend class ::loka::app::detail::TextDocumentViewAccess;
         friend class ::loka::app::detail::TextDocumentPublisher;
       };
     } // namespace scene

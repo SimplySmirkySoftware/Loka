@@ -9,6 +9,7 @@ namespace loka
     namespace detail
     {
       class TextDocumentReplyAccess;
+      class TextDocumentViewAccess;
     }
     namespace scene
     {
@@ -83,6 +84,7 @@ namespace loka
       friend class TextReader;
       friend class scene::ComposableNode;
       friend class scene::TextDocumentRegistration;
+      friend class detail::TextDocumentViewAccess;
       friend class detail::TextDocumentPublisher;
       friend struct testing::TextDocumentAccess;
 #ifdef TEST_BUILD

@@ -1,3 +1,4 @@
+#include "TextDocumentViewTests.hpp"
 #include "LinkActivationTests.hpp"
 #include "TextReplacementTests.hpp"
 #include "TextSpliceTests.hpp"
