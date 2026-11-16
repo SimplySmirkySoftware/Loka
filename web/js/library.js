@@ -42,8 +42,8 @@ addToLibrary({
     token >>>= 0; parent >>>= 0;
     let element, row;
     try {
-      element = document.createElement((kind === 2 || kind === 4) ? 'button' : kind === 1 ? 'span' : 'div');
-      row = {element, kind, listener:null, observer:null};
+      element = document.createElement((kind === 2 || kind === 4) ? 'button' : kind === 1 ? 'span' : kind === 5 ? 'select' : 'div');
+      row = {element, kind, listener:null, event:null, observer:null};
       element.dataset.lokaToken = String(token);
       element.style.cssText = 'box-sizing:border-box;position:absolute;white-space:pre;visibility:hidden;';
       if (kind === 0) {
@@ -74,7 +74,20 @@ addToLibrary({
           row.content.style.cssText = physical + 'position:relative;overflow:clip;';
           element.appendChild(row.content);
           row.listener = () => Module['_web_scroll'](token, Math.round(element.scrollLeft), Math.round(element.scrollTop));
-          element.addEventListener('scroll', row.listener, {passive:true});
+          element.addEventListener(row.event = 'scroll', row.listener, {passive:true});
+        }
+        if (kind === 5) {
+          const g=LokaWebStyle.webButtonGeometry;
+          Object.assign(element.style,{boxSizing:'border-box',
+            padding:g.insetY+'px '+g.insetX+'px',borderWidth:g.border+'px',borderStyle:'solid',
+            margin:'0',minWidth:'0',minHeight:'0',whiteSpace:'pre',overflow:'hidden',textAlign:'left'});
+          /** Cost: native change once; this select row only, before one export. */
+          row.listener = () => {
+            const candidate = element.selectedIndex;
+            if (row.selected !== undefined) element.selectedIndex = row.selected;
+            Module['web'].select(token, candidate);
+          };
+          element.addEventListener(row.event = 'change', row.listener);
         }
         if (kind === 2 || kind === 4) {
           element.type = 'button';
@@ -83,12 +96,12 @@ addToLibrary({
             padding:g.insetY+'px '+g.insetX+'px',borderWidth:g.border+'px',borderStyle:'solid',
             margin:'0',minWidth:'0',minHeight:'0',whiteSpace:'pre',overflow:'hidden'});
           row.listener = () => Module['web'].click(token);
-          element.addEventListener('click', row.listener);
+          element.addEventListener(row.event = 'click', row.listener);
         }
       }
       // Cost: creation once; at most four properties on this owned element, no resource walk.
       const look=LokaWebStyle.skinLook[WebDOM.skin];
-      const paint=kind===0 ? look.root : kind===2 ? look.button : kind===4 ? look.cell : {};
+      const paint=kind===0 ? look.root : (kind===2 || kind===5) ? look.button : kind===4 ? look.cell : {};
       for (const property of Object.keys(paint)) element.style.setProperty(property,paint[property]);
       WebDOM.hidden(row, true);
       element.style.visibility = 'visible';
@@ -96,7 +109,7 @@ addToLibrary({
       return 1;
     } catch (_) {
       if (row && row.observer) row.observer.disconnect();
-      if (row && row.listener) element.removeEventListener(row.kind === 3 ? 'scroll' : 'click', row.listener);
+      if (row && row.listener) element.removeEventListener(row.event, row.listener);
       if (row && row.content) row.content.remove();
       if (element) element.remove();
       return 0;
@@ -137,10 +150,50 @@ addToLibrary({
     Object.assign(row.element.style,{left:x+'px',top:y+'px',width:w+'px',height:h+'px'});
   },
   web_set_projected__deps:['$WebDOM'],
-  /** Cost: render once per visit, writes one owned element. */
+  /** Cost: projection once per visit (popup layout, text render), writes one owned element. */
   web_set_projected(token,projected) { const row=WebDOM.row(token); if(row) row.element.style.visibility=projected ? 'visible' : 'hidden'; },
   web_set_text__deps:['$WebDOM'],
   web_set_text(token,bytes,length) { const row=WebDOM.row(token); if(row) row.element.textContent=new TextDecoder('utf-8',{ignoreBOM:true}).decode(HEAPU8.subarray(bytes>>>0,(bytes>>>0)+length)); },
+  web_set_option_count__deps:['$WebDOM'],
+  /** Cost: popup render once; adjusts only this select's own option rows. */
+  web_set_option_count(token,count) {
+    const row=WebDOM.row(token);
+    if(!row || row.kind!==5 || !Number.isInteger(count) || count<0 || count>32767) return;
+    const element=row.element;
+    while(element.options.length<count) element.appendChild(document.createElement('option'));
+    while(element.options.length>count) element.remove(element.options.length-1);
+  },
+  web_set_option__deps:['$WebDOM'],
+  /** Cost: popup render per valid item; one owned option and its borrowed bytes. */
+  web_set_option(token,index,bytes,length) {
+    const row=WebDOM.row(token);
+    if(!row || row.kind!==5 || !Number.isInteger(index) || index<0 || index>=row.element.options.length) return;
+    bytes>>>=0; length>>>=0;
+    if(bytes>HEAPU8.length || length>HEAPU8.length-bytes) return;
+    const option=row.element.options[index];
+    const text=new TextDecoder('utf-8',{ignoreBOM:true}).decode(HEAPU8.subarray(bytes,bytes+length));
+    if(option.textContent!==text) option.textContent=text;
+    if(option.disabled) option.disabled=false;
+  },
+  web_clear_option__deps:['$WebDOM'],
+  /** Cost: popup render per refused item; one owned option row. */
+  web_clear_option(token,index) {
+    const row=WebDOM.row(token);
+    if(!row || row.kind!==5 || !Number.isInteger(index) || index<0 || index>=row.element.options.length) return;
+    const option=row.element.options[index];
+    if(option.textContent!=='') option.textContent='';
+    if(!option.disabled) option.disabled=true;
+  },
+  web_set_selected__deps:['$WebDOM'],
+  /** Cost: popup render once after options; one owned select row. */
+  web_set_selected(token,controlled,index) {
+    const row=WebDOM.row(token);
+    if(!row || row.kind!==5) return;
+    if(!controlled) { delete row.selected; return; }
+    if(!Number.isInteger(index) || index< -1 || index>=row.element.options.length) return;
+    row.selected=index;
+    if(row.element.selectedIndex!==index) row.element.selectedIndex=index;
+  },
   web_set_line_height__deps:['$WebDOM'],
   /** Cost: render once per visit, one element write after font. */
   web_set_line_height(token,height) { const row=WebDOM.row(token); if(row) row.element.style.lineHeight=height+'px'; },
@@ -223,7 +276,7 @@ addToLibrary({
   web_revoke__deps:['$WebDOM'],
   web_revoke(token) {
     const row=WebDOM.row(token); if(!row) return;
-    if(row.listener) row.element.removeEventListener(row.kind === 3 ? 'scroll' : 'click',row.listener);
+    if(row.listener) row.element.removeEventListener(row.event,row.listener);
     if(row.observer) row.observer.disconnect();
     row.listener=row.observer=null;
   },
@@ -231,7 +284,7 @@ addToLibrary({
   web_release(token) {
     token >>>=0; if(!token) return 2;
     const row=WebDOM.row(token); if(!row) return 1;
-    if(row.listener) row.element.removeEventListener(row.kind === 3 ? 'scroll' : 'click',row.listener);
+    if(row.listener) row.element.removeEventListener(row.event,row.listener);
     if(row.observer) row.observer.disconnect();
     row.element.remove(); WebDOM.resources.delete(token); return 0;
   },

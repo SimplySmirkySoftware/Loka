@@ -1,5 +1,6 @@
 #include "WebScrollContext.hpp"
 #include "WebResources.hpp"
+#include "WebPopupContext.hpp"
 #include "WebTestHooks.hpp"
 #include <cassert>
 #include <new>
@@ -116,4 +117,9 @@ WebElementContext *WebResource::leaf() const
 WebScrollContext *WebResource::scroll() const
 {
   return this->kind == loka::web::SCROLL ? static_cast<WebScrollContext *>(this->receiver) : 0;
+}
+
+WebPopupContext *WebResource::popup() const
+{
+  return this->kind == loka::web::POPUP ? static_cast<WebPopupContext *>(this->receiver) : 0;
 }

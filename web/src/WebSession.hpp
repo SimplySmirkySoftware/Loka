@@ -54,6 +54,9 @@ public:
   ~WebSession();
   /** Cost: module wrapper once; constructs its owner chain, App visits its own composition. */
   StartResult start(ConfigFactory factory, double now);
+  /** Cost: export once per selection; bounded own route/root lookups (33 probes each),
+      App-owned pending-close query twice; one receiver, then bounded completion. */
+  Ingress select(loka::web::Token token, int index, double now);
   /** Cost: one click; two button and two root lookups (each <=33 probes).
       App checks its pending-close rows twice; one receiver, then completion. */
   Ingress click(loka::web::Token token, double now);

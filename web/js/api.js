@@ -6,6 +6,8 @@
     completed,
     start: () => closed ? 2 : Module._web_start(),
     click: token => closed ? 4 : Module._web_click(token>>>0),
+    /** Cost: adapter change once; one module export, no rows. */
+    select: (token,index) => closed ? 4 : Module._web_select(token>>>0,index),
     resize: (root,w,h) => closed ? 4 : Module._web_resize(root>>>0,w,h),
     wake: (kind,now) => closed ? 4 : Module._web_wake(kind,now),
     /** Roster may decline quit; keep exports open until actual completion.

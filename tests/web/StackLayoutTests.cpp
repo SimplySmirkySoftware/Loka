@@ -44,7 +44,7 @@ namespace
     }
     virtual bool prepareProjectedLayout(Node *node, LayoutState &state)
     {
-      if (node && !node->asTextNode() && !node->asButtonNode() && !node->asCellNode())
+      if (node && !node->asTextNode() && !node->asButtonNode() && !node->asCellNode() && !node->asPopupMenuNode())
         this->refusedSeats.push_back(state);
       return WebScenePlatformController::prepareProjectedLayout(node, state);
     }

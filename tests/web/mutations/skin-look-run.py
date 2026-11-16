@@ -19,7 +19,7 @@ JS = 'web/js/library.js'
 CONTROLLER = 'web/src/WebScenePlatformController.cpp'
 MUTATIONS = [
     (JS, 'kind===0 ? look.root', 'kind===0 ? {}', 'root paint'),
-    (JS, 'kind===2 ? look.button', 'kind===2 ? {}', 'Button paint'),
+    (JS, '(kind===2 || kind===5) ? look.button', '(kind===2 || kind===5) ? {}', 'Button paint'),
     (CONTROLLER, 'Handler<CellNode, WebElementContext, loka::web::CELL>',
      'Handler<CellNode, WebElementContext, loka::web::BUTTON>', 'Cell kind'),
     (CONTROLLER, 'state = b->props.text_;\n        block = BlockStyle().align(TEXT_ALIGN_CENTER);',

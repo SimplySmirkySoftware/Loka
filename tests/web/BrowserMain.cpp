@@ -5,6 +5,7 @@
 #include "LayoutFixture.hpp"
 #include "GridFixture.hpp"
 #include "CellFixture.hpp"
+#include "PopupFixture.hpp"
 #include "WebTestHooks.hpp"
 #include "WebTestAccess.hpp"
 #include "WebWindow.hpp"
@@ -40,6 +41,8 @@ namespace loka
       vehicle.roots = webtest::staged.roots;
       vehicle.destroy = webtest::staged.destroy;
       session = &testing::Access::session(static_cast<WebPlatformContext &>(*platform));
+      if (webtest::staged.roots == -400)
+        return webtest::CreatePopups(platform);
       if (webtest::staged.roots == -301)
         return webtest::CreateSeededMine(platform);
       if (webtest::staged.roots <= -200)
@@ -81,6 +84,23 @@ namespace loka
 extern "C" int web_wake(int kind, double now);
 extern "C"
 {
+  /** Cost: driver command once; one fixture state or its Scene layout request, no rows. */
+  EMSCRIPTEN_KEEPALIVE void fixture_popup_command(int command)
+  {
+    {
+      loka::core::Operation turn;
+      if (command == 0)
+        webtest::popupFixture()->scene()->requestLayoutAfterRun();
+      else
+        webtest::popupFixture()->enabled.set(command != 1);
+    }
+    web_wake(loka::web::IMMEDIATE, emscripten_get_now());
+  }
+  /** Cost: driver observation once; reads only the fixture's selected state. */
+  EMSCRIPTEN_KEEPALIVE int fixture_popup_selected()
+  {
+    return webtest::popupFixture()->selected.get();
+  }
   /** Cost: driver observation once; one fixture-owned identity counter. */
   EMSCRIPTEN_KEEPALIVE int fixture_cell_hits(int index)
   {

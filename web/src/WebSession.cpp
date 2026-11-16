@@ -157,6 +157,17 @@ WebSession::Ingress WebSession::click(loka::web::Token token, double now)
     return REFUSED_TOKEN;
   return WebEntry::run(*this, entry, loka::web::BUTTON, token, 0, 0, loka::web::WAKE_COUNT, now);
 }
+// Deliberate admission twin of click; popup selection carries an integer payload.
+WebSession::Ingress WebSession::select(loka::web::Token token, int index, double now)
+{
+  const Ingress entry = this->ingress();
+  if (entry != ACCEPTED && entry != NESTED)
+    return entry;
+  WebResource *row = this->routes_.find(token);
+  if (!row || !row->popup() || !row->popup()->active())
+    return REFUSED_TOKEN;
+  return WebEntry::run(*this, entry, loka::web::POPUP, token, index, 0, loka::web::WAKE_COUNT, now);
+}
 WebSession::Ingress WebSession::resize(loka::web::Token token, int width, int height, double now)
 {
   const Ingress entry = this->ingress();
@@ -195,6 +206,9 @@ namespace
     case loka::web::SCROLL:
       if (row->scroll())
         WebInputDoor::scroll(*row->scroll(), width, height);
+      break;
+    case loka::web::POPUP:
+      WebInputDoor::popupSelect(*row->popup(), width);
       break;
     case loka::web::TEXT:
       break;

@@ -68,7 +68,7 @@ PR 1 initially projected one-line Text through INaturalSizeSource with fixed met
 
 Buttons are native `<button type="button">` elements. Mouse, Space and Enter use the same click export. Browser focus is read at completion; no keyboard or focus-event export is added. Layout containers other than ScrollView have no DOM elements.
 
-EditText, TextEditor, PopupMenu, ImageView, RectSurface, ScrollBar and CardBand are explicit refused handlers. A reached ScrollView visit settles once after projection, including refusal; a deferred visit leaves its request pending. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. IME, general pointer input and hot reload remain outside this increment. Skin spacing and inline paint are specified below.
+EditText, TextEditor, ImageView, RectSurface, ScrollBar and CardBand are explicit refused handlers. A reached ScrollView visit settles once after projection, including refusal; a deferred visit leaves its request pending. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. IME, general pointer input and hot reload remain outside this increment. Skin spacing and inline paint are specified below.
 
 ## Host contract
 
@@ -91,8 +91,8 @@ if the document remains alive and teardown finishes. If resources remain,
 `web_completed` throws and the Promise stays pending, not rejected. Load failure,
 abort and callback exceptions are separate failures, not completion signals.
 
-The seven production exports are `start`, `quit`, `dispose`, `click`, `resize`, `wake` and `scroll`.
-`click`, `resize`, `wake` and `scroll` are adapter-only exports, not host entry points. The
+The eight production exports are `start`, `quit`, `dispose`, `click`, `resize`, `wake`, `scroll` and `select`.
+`click`, `resize`, `wake`, `scroll` and `select` are adapter-only exports, not host entry points. The
 adapter's listeners and ResizeObserver deliver input; timers use the wasm
 function table callback. The host must not run a wake loop.
 
@@ -374,7 +374,8 @@ The existing text service owns the cache. Successful estimates populate only:
 | --- | --- |
 | textHeight, fallbackHeight | Default font line height H |
 | buttonHeight | H plus twice the Button vertical inset and border |
-| editTextHeight, popupMenuHeight, imageFallbackHeight | Zero |
+| popupMenuHeight | Button estimate (default font line height plus vertical inset and border) |
+| editTextHeight, imageFallbackHeight | Zero |
 
 Both H and H plus chrome must fit 1..32767 before either output is assigned.
 `rowEstimate` neither normalizes nor allocates. Natural queries retain their
@@ -412,7 +413,7 @@ paths remains separate work.
 SHARED rows divide remaining width without natural width consultations. NATURAL
 and Toolbar's NATURAL_LABELS_SHARE use the traversal as their natural source;
 unknown widths remain flexible. Refused kinds still occupy attached seats and
-gaps without DOM. EditText/PopupMenu estimate zero; Cell/CardBand use H;
+gaps without DOM. EditText estimates zero; PopupMenu uses the Button estimate; Cell/CardBand use H;
 ImageView/RectSurface use explicit heights or H. An aligned all-refused row
 reserves its largest estimate, falling back to H if that maximum is nonpositive;
 an unaligned all-refused row returns its starting y.
@@ -1254,3 +1255,63 @@ throws and one command registration removed (the activation check of the first
 launch), admission always false (K3), the `started` message ignored (T2), the
 trust click omitted (T1). Remote WSL/Windows hosts and the exclusions above
 remain unverified.
+
+
+## PopupMenu projection
+
+`WebPopupContext` projects one native `<select>` using the existing resource
+lifecycle, with no snapshot, subscriptions, or additional context fields. It
+borrows items only during each visit. Items are followed through props
+application (`NODE_DIRTY_PROPS`); mutating a borrowed Vector alone does not
+request projection. There is no natural-width answer. Focus participation is
+outside this increment; native focus on a select is currently reported as none.
+
+Render writes default text style, enabled, option count, option labels, then
+selection, in that order. One shared count query caps items at 32767 before
+narrowing; later items are neither shown nor accepted as input. UTF-8 acquisition
+borrows or uses one temporary item copy. A refused item becomes an empty,
+disabled option at the same index, never an old label; this schedules no retry.
+State or synthetic input may still select that index. JS compares count, label,
+disabled and selection before writing, preserving option identities and text on
+unchanged renders. Labels use textContent, never HTML.
+
+A valid selection seat makes the popup controlled. Render clamps its value to
+[0, count-1], or -1 for no items, without changing state. Without a seat, render
+clears the adapter's remembered selection and leaves native selection alone;
+input neither writes state nor emits. This policy is decided anew on every
+render, including both seat transitions.
+
+On change, JS captures the candidate and restores the last completed controlled
+selection before calling `web.select`. Admission checks session ingress, popup
+kind and active owner before borrowing the controller. Dispatch rechecks activity,
+seat presence and the full integer range, writes the seat with notification,
+then reads current props again to emit onChange. Input performs no C++ DOM
+writes. Disabled, parked, closed, completing and out-of-range input cannot write
+state. Nested input settles with the outer operation.
+
+Displayed selection equals clamped state only after the outer completion reaches
+this popup and its render succeeds. Grid capacity omissions, or a preceding
+refusal in ScrollView, may leave an unvisited popup's old display. Park hides it;
+a reached return visit catches up. Apps that keep producing work beyond the tail
+and four continuations have no callback-return convergence guarantee. A nested
+select may return before the DOM catches up.
+
+Layout uses the offered width and Button's default-font height (line height plus
+vertical insets and border). Measurement refusal uses the existing text refusal
+and after-run retry doors. Protocol failure asserts in debug and uses zero height
+in release. Layout alone publishes visibility: successful measurement, coordinate
+checks and projection write rect then projected=true; every refusal exit writes
+projected=false. Render never measures or publishes visibility, and still updates
+options while hidden. This deliberately differs from Text/Button, whose retained
+snapshot can remain visible after coordinate refusal.
+
+The four option imports return void. Missing rows, wrong kinds and invalid
+arguments are no-ops. JS helper exceptions propagate as fatal adapter failures;
+there is no catch-and-continue recovery from partially written options. A rejected
+text-style protocol asserts in debug; release continues option and selection
+publication without the font update.
+
+The select retains native appearance, arrow and opened list. Geometry is Button's
+padding and border; paint uses the existing skin's button entry, with left-aligned
+text. No popup skin vocabulary is added. Browser behavior when items change while
+the native dropdown is open is unspecified.

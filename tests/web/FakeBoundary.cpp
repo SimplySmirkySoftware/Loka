@@ -89,6 +89,33 @@ extern "C"
     webtest::resources[token] = row;
     return 1;
   }
+  void web_set_option_count(uint32_t token, int count)
+  {
+    webtest::Resource &row = webtest::resources[token];
+    row.options.resize(count);
+    row.optionDisabled.resize(count);
+    webtest::record("option-count", token);
+  }
+  void web_set_option(uint32_t token, int index, const char *bytes, unsigned length)
+  {
+    webtest::Resource &row = webtest::resources[token];
+    row.options[index].assign(bytes, length);
+    row.optionDisabled[index] = false;
+    webtest::record("option", token);
+  }
+  void web_clear_option(uint32_t token, int index)
+  {
+    webtest::Resource &row = webtest::resources[token];
+    row.options[index].clear();
+    row.optionDisabled[index] = true;
+    webtest::record("clear-option", token);
+  }
+  void web_set_selected(uint32_t token, int controlled, int index)
+  {
+    webtest::Resource &row = webtest::resources[token];
+    row.selection = webtest::PopupSelection(controlled != 0, controlled ? index : row.selection.index());
+    webtest::record("selected", token);
+  }
   int web_scrollbar_geometry(int *vertical, int *horizontal)
   {
     if (!webtest::geometryMeasurable)
