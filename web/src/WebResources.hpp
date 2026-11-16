@@ -6,6 +6,7 @@ class WebWindow;
 class WebElementContext;
 class WebResourceContext;
 class WebScrollContext;
+class WebPopupContext;
 class WebScenePlatformController;
 namespace loka
 {
@@ -60,6 +61,8 @@ struct WebResource
   WebElementContext *leaf() const;
   /** Cost: scroll admission/dispatch once each; checked kind conversion, O(1). */
   WebScrollContext *scroll() const;
+  /** Cost: select admission/dispatch once each; O(1) checked conversion, no rows. */
+  WebPopupContext *popup() const;
   WebWindow *root;
   WebResource *next;
   WebResource *left;

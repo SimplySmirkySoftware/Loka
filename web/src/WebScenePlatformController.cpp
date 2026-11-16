@@ -4,6 +4,7 @@
 #include "WebStackLayoutHandler.hpp"
 #include "WebGridLayoutHandler.hpp"
 #include "WebScrollContext.hpp"
+#include "WebPopupContext.hpp"
 #include "WebTextDescriptor.hpp"
 #include "WebScenePlatformController.hpp"
 #include "WebSession.hpp"
@@ -47,13 +48,13 @@ namespace
       return ctx;
     }
   };
+  Handler<PopupMenuNode, WebPopupContext, loka::web::POPUP> PopupHandler;
   Handler<TextNode, WebElementContext, loka::web::TEXT> TextHandler;
   Handler<ButtonNode, WebElementContext, loka::web::BUTTON> ButtonHandler;
   Handler<CellNode, WebElementContext, loka::web::CELL> CellHandler;
   Handler<ScrollViewNode, WebScrollContext, loka::web::SCROLL> ScrollHandler;
   RefusedNodeHandler Refused[] = {RefusedNodeHandler(NodeTypeToken<EditTextNode>()),
                                   RefusedNodeHandler(NodeTypeToken<TextEditorNode>()),
-                                  RefusedNodeHandler(NodeTypeToken<PopupMenuNode>()),
                                   RefusedNodeHandler(NodeTypeToken<ImageViewNode>()),
                                   RefusedNodeHandler(NodeTypeToken<RectSurfaceNode>()),
                                   RefusedNodeHandler(NodeTypeToken<ScrollBarNode>()),
@@ -187,6 +188,8 @@ bool WebScenePlatformController::prepareProjectedLayout(Node *node, LayoutState 
     return TextHandler.ensureContext(node, this, state) != 0;
   if (node->asButtonNode())
     return ButtonHandler.ensureContext(node, this, state) != 0;
+  if (node->asPopupMenuNode())
+    return PopupHandler.ensureContext(node, this, state) != 0;
   if (node->asCellNode())
     return CellHandler.ensureContext(node, this, state) != 0;
   for (unsigned i = 0; i < sizeof(Refused) / sizeof(Refused[0]); ++i)
@@ -384,6 +387,7 @@ bool WebScenePlatformController::acceptsInput() const
 }
 bool WebElementContext::active() const
 {
+  // Deliberate admission twin of WebPopupContext::active; enabled props differ.
   if (!this->controller_.acceptsInput())
     return false;
   if (!this->element_.token() || !this->owner() || this->owner()->lifecycleFact() != NODE_FACT_ATTACHED)

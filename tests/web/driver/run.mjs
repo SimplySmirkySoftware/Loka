@@ -9,6 +9,7 @@ const driverDir=fileURLToPath(new URL('.',import.meta.url));
 import assert from 'node:assert/strict';
 import {runStackCells, runHelloRoundTrip} from './stack-cells.mjs';
 import {runSkinCells} from './skin-cells.mjs';
+import {runPopupCells} from './popup-cells.mjs';
 import {runCellCells} from './cell-cells.mjs';
 import {runGridCells} from './grid-cells.mjs';
 import {renderPreviewHtml} from '../../../tools/vscode-loka/src/previewHtml.ts';
@@ -312,6 +313,7 @@ try {
   assert.equal(closingScroll.count,2);assert.equal(closingScroll.result,5,'pending-close root refuses scroll while another root remains');
   await client.evaluate('web.dispose();web.completed.then(()=>true)');
   await runGridCells(client, navigate);
+  await runPopupCells(client, navigate);
   await runCellCells(client, navigate);
   await runSkinCells(client, navigate);
   await runStackCells(client, navigate);
@@ -337,9 +339,10 @@ try {
       const scroller=document.querySelector('body > div[data-loka-token]').firstElementChild;
       return [...scroller.firstElementChild.children].map(e=>e.textContent);
     })()`);
-    assert.equal(leaves.length,12,'HelloWeb projected leaf order count');
-    for(const [index,label] of [[0,'Loka Sample'],[2,'Add +'],[4,'Probe Button'],[5,'Toggle Button Enabled'],[6,'Fruit Picker'],[8,'BMI Calculator'],[9,'Height (cm)'],[10,'Weight (kg)']])
+    assert.equal(leaves.length,13,'HelloWeb projected leaf order count');
+    for(const [index,label] of [[0,'Loka Sample'],[2,'Add +'],[4,'Probe Button'],[5,'Toggle Button Enabled'],[6,'Fruit Picker'],[9,'BMI Calculator'],[10,'Height (cm)'],[11,'Weight (kg)']])
       assert(leaves[index].includes(label),'HelloWeb leaf '+index);
+    assert.equal(await client.evaluate("document.querySelector('body > div[data-loka-token]').firstElementChild.firstElementChild.children[7].tagName"),'SELECT','Fruit Picker select at leaf 7');
     if(viewportWidth===800) {
       const hit=await client.evaluate(`(() => {
         const e=[...document.querySelectorAll('button')].find(e=>e.textContent==='Probe Button');

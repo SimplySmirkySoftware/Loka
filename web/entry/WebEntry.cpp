@@ -17,6 +17,11 @@ extern "C"
   {
     return session->click(token, emscripten_get_now());
   }
+  /** Cost: adapter change once; one session admission, no rows here. */
+  EMSCRIPTEN_KEEPALIVE int web_select(uint32_t token, int index)
+  {
+    return session->select(token, index, emscripten_get_now());
+  }
   EMSCRIPTEN_KEEPALIVE int web_scroll(uint32_t token, int x, int y)
   {
     return session->scroll(token, x, y, emscripten_get_now());

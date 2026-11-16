@@ -6,6 +6,28 @@
 #include <vector>
 namespace webtest
 {
+  /** Immutable observation of the adapter's last selection publication. */
+  class PopupSelection
+  {
+  public:
+    PopupSelection(bool controlled = false, int index = -1)
+        : controlled_(controlled),
+          index_(index)
+    {
+    }
+    bool controlled() const
+    {
+      return this->controlled_;
+    }
+    int index() const
+    {
+      return this->index_;
+    }
+
+  private:
+    bool controlled_;
+    int index_;
+  };
   struct Resource
   {
     Resource()
@@ -31,6 +53,9 @@ namespace webtest
     int width, height;
     int x, y, documentWidth, extent, originX, originY;
     std::string text;
+    PopupSelection selection;
+    std::vector<std::string> options;
+    std::vector<bool> optionDisabled;
   };
   struct Task
   {

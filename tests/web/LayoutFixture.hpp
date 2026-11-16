@@ -5,7 +5,6 @@
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/controls/Toolbar.hpp"
 #include "app/nodes/controls/EditText.hpp"
-#include "app/nodes/controls/PopupMenu.hpp"
 #include "app/nodes/controls/ScrollBar.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "app/nodes/ImageView.hpp"
@@ -109,7 +108,7 @@ namespace webtest
         if (layoutVariant() != 1)
           row.alignVertical(VERTICAL_ALIGNMENT_CENTER);
         if (layoutVariant() == 2)
-          row << EditText() << PopupMenu();
+          row << EditText() << ImageView();
         else if (layoutVariant() == 3)
           row << ImageView().size(20, 40);
         else if (layoutVariant() == 4)

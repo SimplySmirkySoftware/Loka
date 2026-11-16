@@ -555,12 +555,11 @@ namespace
       WebScenePlatformController controller(session, root.token(), width, height, 0);
       EditTextNode edit((EditTextProps()));
       TextEditorNode editor((TextEditorProps()));
-      PopupMenuNode popup((PopupMenuProps()));
       ImageViewNode image((ImageViewProps()));
       RectSurfaceNode surface((RectSurfaceProps()));
       ScrollBarNode bar((ScrollBarProps()));
       CardBandNode band((CardBandProps()));
-      Node *nodes[] = {&edit, &editor, &popup, &image, &surface, &bar, &band};
+      Node *nodes[] = {&edit, &editor, &image, &surface, &bar, &band};
       LayoutState layout;
       for (unsigned i = 0; i < sizeof(nodes) / sizeof(nodes[0]); ++i)
       {
@@ -1233,6 +1232,7 @@ void WebGridLayoutTests();
 void WebTextProtocolDeath();
 void WebStackProtocolDeath();
 void WebNaturalProtocolDeath();
+void WebPopupTests();
 void WebCellTests();
 void WebCellProtocolDeath();
 int main(int argc, char **argv)
@@ -1245,6 +1245,11 @@ int main(int argc, char **argv)
   if (argc == 2 && std::strcmp(argv[1], "cell-protocol-death") == 0)
   {
     WebCellProtocolDeath();
+    return 0;
+  }
+  if (argc == 2 && std::strcmp(argv[1], "popup-only") == 0)
+  {
+    WebPopupTests();
     return 0;
   }
   if (argc == 2 && std::strcmp(argv[1], "cell-only") == 0)
@@ -1290,6 +1295,7 @@ int main(int argc, char **argv)
     name();                                                                                                            \
   } while (0)
   RUN(RootMarginTest);
+  RUN(WebPopupTests);
   RUN(WebCellTests);
   RUN(WebGridLayoutTests);
   RUN(WebStackLayoutTests);

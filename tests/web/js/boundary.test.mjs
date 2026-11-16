@@ -225,11 +225,11 @@ context.document.createElement=tag=>{
 for(const [skin,index] of [['web',0],['win32',1],['macos',2],['classic',3]]) {
   context.Module.lokaSkin=skin;imports.web_skin();
   const look=context.LokaWebStyle.skinLook[index];
-  for(const [kind,paint] of [[0,look.root],[2,look.button],[4,look.cell]]) {
+  for(const [kind,paint] of [[0,look.root],[2,look.button],[4,look.cell],[5,look.button]]) {
     const token=100+kind;
     assert.equal(imports.web_create(kind,token,100,100,104),1);
     const row=context.WebDOM.row(token);
-    assert.equal(row.element.tag,kind===0?'div':'button');
+    assert.equal(row.element.tag,kind===0?'div':kind===5?'select':'button');
     for(const [key,value] of Object.entries(paint)) assert.equal(row.element.properties.get(key),value);
     if(kind===0) assert.equal(row.element.properties.has('color-scheme'),skin!=='web');
     else {
@@ -253,3 +253,75 @@ for(const [color,css] of [[0,'var(--loka-text)'],[1,'var(--loka-text)'],[2,'var(
 context.Module.lokaSkin='macos';imports.web_skin();context.Module.lokaSkin='classic';
 assert.equal(imports.web_create(0,200,0,100,104),1);
 assert.equal(context.WebDOM.row(200).element.style.getPropertyValue('background'),'#ececec');
+
+// Popup helpers own only one select's options; failures are never caught here.
+const popup={options:[],selectedIndex:0,
+  appendChild(option){this.options.push(option);},remove(index){this.options.splice(index,1);}};
+const make=context.document.createElement;
+context.document.createElement=()=>({textContent:'',disabled:false});
+context.WebDOM.resources.set(300,{kind:5,element:popup});
+imports.web_set_option_count(300,3);
+const options=popup.options.slice();
+context.HEAPU8.set(new TextEncoder().encode('<b>'),160);
+imports.web_set_option(300,1,160,3);
+assert.equal(popup.options[1].textContent,'<b>');
+imports.web_clear_option(300,1);
+assert.equal(popup.options[1].textContent,'');assert(popup.options[1].disabled);
+imports.web_set_option(300,1,160,3);
+assert.equal(popup.options[1].disabled,false);
+imports.web_set_option_count(300,3);
+assert(options.every((o,i)=>o===popup.options[i]));
+imports.web_set_selected(300,1,2);assert.equal(popup.selectedIndex,2);
+imports.web_set_selected(300,0,0);assert.equal(popup.selectedIndex,2);
+assert.equal(context.WebDOM.row(300).selected,undefined);
+for(const token of [999,104]) {
+  imports.web_set_option_count(token,2);imports.web_set_option(token,0,160,3);
+  imports.web_clear_option(token,0);imports.web_set_selected(token,1,0);
+}
+for(const index of [-2,3,40000,0.5]) {
+  imports.web_set_option(300,index,160,3);imports.web_clear_option(300,index);
+  imports.web_set_selected(300,1,index);
+}
+imports.web_set_option(300,1,512,1);
+assert.equal(popup.options[1].textContent,'<b>');assert.equal(popup.selectedIndex,2);
+for(const count of [-1,32768,0.5]) imports.web_set_option_count(300,count);
+assert.equal(popup.options.length,3);
+imports.web_set_option_count(300,1);assert.equal(popup.options[0],options[0]);
+context.document.createElement=()=>{throw Error('allocation');};
+assert.throws(()=>imports.web_set_option_count(300,2),/allocation/);
+context.document.createElement=make;
+imports.web_set_selected(300,1,-1);assert.equal(popup.selectedIndex,-1);
+console.log('Popup helpers: count/identity, literal label, clear/recover, seat transitions, invalid no-ops, fatal exception passed');
+
+// Exercise the production listener, including all three listener teardown paths.
+let listener,removed=[];
+const create=context.document.createElement;
+context.document.createElement=tag=>{
+  const element=create(tag);
+  element.addEventListener=(event,fn)=>{listener=fn;};
+  element.removeEventListener=(event)=>removed.push(event);
+  return element;
+};
+assert.equal(imports.web_create(5,301,200,100,104),1);
+const popupRow=context.WebDOM.row(301);
+assert.equal(popupRow.event,'change');assert.equal(popupRow.element.style.appearance,undefined);
+popupRow.element.options=[{},{}];
+imports.web_set_selected(301,1,0);
+let delivered;
+context.Module.web.select=(token,candidate)=>{delivered=[token,candidate,popupRow.element.selectedIndex];};
+popupRow.element.selectedIndex=1;listener();assert.deepEqual(delivered,[301,1,0]);
+imports.web_set_selected(301,0,0);
+popupRow.element.selectedIndex=1;listener();assert.deepEqual(delivered,[301,1,1]);
+imports.web_revoke(301);assert.deepEqual(removed,['change']);
+assert.equal(imports.web_create(5,302,200,100,104),1);
+imports.web_release(302);assert.deepEqual(removed,['change','change']);
+context.WebDOM.hidden=()=>{throw Error('creation failure');};
+assert.equal(imports.web_create(5,303,200,100,104),0);
+assert.deepEqual(removed,['change','change','change']);
+console.log('Popup listener: candidate capture, controlled restore, uncontrolled native value and teardown paths passed');
+
+const apiModule={_web_select:(token,index)=>[token,index],_web_dispose(){}};
+vm.runInNewContext(readFileSync(new URL('api.js',dir),'utf8'),{Module:apiModule});
+assert.deepEqual(apiModule.web.select(-1,65536),[4294967295,65536]);
+apiModule.web.dispose();assert.equal(apiModule.web.select(1,0),4);
+console.log('Popup API: unsigned token, full integer payload and closed refusal passed');

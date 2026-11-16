@@ -13,6 +13,7 @@ namespace loka
       BUTTON,
       SCROLL,
       CELL,
+      POPUP,
       KIND_COUNT
     };
     enum ScrollCommit
@@ -63,8 +64,16 @@ extern "C"
   /** Cost: bootstrap and accepted resize once; one temporary probe, synchronous layout. */
   int web_scrollbar_geometry(int *vertical, int *horizontal);
   void web_set_rect(uint32_t token, int x, int y, int width, int height);
-  /** Cost: render once per visit, writes one owned element. */
+  /** Cost: projection once per visit (popup layout, text render), writes one owned element. */
   void web_set_projected(uint32_t token, int projected);
+  /** Cost: popup render once; adjusts only its own select's option rows. */
+  void web_set_option_count(uint32_t token, int count);
+  /** Cost: popup render once per valid item; writes one owned option row. */
+  void web_set_option(uint32_t token, int index, const char *bytes, unsigned length);
+  /** Cost: popup render once per refused item; clears one owned option row. */
+  void web_clear_option(uint32_t token, int index);
+  /** Cost: popup render once after options; writes one owned select row. */
+  void web_set_selected(uint32_t token, int controlled, int index);
   void web_set_text(uint32_t token, const char *bytes, unsigned length);
   bool web_set_text_style(uint32_t token, const int *descriptor, unsigned count);
   /** Cost: breaker miss or natural width once; measures the borrowed range only. */

@@ -23,7 +23,7 @@ int WebStackLayoutHandler::layoutNode(Node *node,
     else
     {
       metrics.textHeight = metrics.fallbackHeight = line;
-      metrics.buttonHeight = button;
+      metrics.buttonHeight = metrics.popupMenuHeight = button;
     }
   }
   return layout::LayoutStack(stack, state, metrics, this->controller_.spacing(), traversal, range, spans);
