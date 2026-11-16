@@ -188,6 +188,13 @@ void ToolboxAttributedTextContext::render(loka::app::scene::IPlatformController 
     LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     return;
   }
+  const loka::app::AttributedString &value = this->table_.value();
+  for (std::size_t i = 0; i < value.segmentCount(); ++i)
+    if (!value.segment(i).link.isNone())
+    {
+      this->controller()->recordLinkHit(this->rect_, this);
+      break;
+    }
   // Geometry layout would place differently waits for layout: paint what
   // fits, but never certify the value as presented.
   const bool fits = this->placedWidth(constraint) == placementWidth

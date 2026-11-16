@@ -1115,6 +1115,9 @@ namespace
   }
 } // namespace
 #endif
+#if defined(LOKA_HOST_CONTROL_ORDER) && !defined(LOKA_HOST_GAP_DISPATCH)
+#include "ToolboxClipBoxRender.cpp"
+#endif
 #include "ToolboxScrollViewRender.cpp"
 #endif
 
@@ -1239,6 +1242,25 @@ static void DrawGrowIcon(ToolboxWindow::WindowPort *) {}
 
 #endif
 #include "ToolboxHitLedger.inc"
+namespace toolbox_host
+{
+  MouseScript mouse;
+  unsigned testControls = 0;
+} // namespace toolbox_host
+bool WaitMouseUp()
+{
+  return toolbox_host::mouse.calls++ < toolbox_host::mouse.held.size();
+}
+bool toolbox_host::Button()
+{
+  return !toolbox_host::mouse.held.empty() && toolbox_host::mouse.calls <= toolbox_host::mouse.held.size();
+}
+void GetMouse(Point *out)
+{
+  const toolbox_host::MouseScript &script = toolbox_host::mouse;
+  *out = !script.held.empty() && script.calls <= script.held.size() ? script.held[script.calls ? script.calls - 1 : 0]
+                                                                    : script.release;
+}
 
 void ToolboxScenePlatformController::retireNodeContext(loka::app::scene::NodeContext *context,
                                                        loka::app::scene::NativeLifetimeHint lifetimeHint)

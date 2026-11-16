@@ -433,54 +433,117 @@ if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/text-editor-scroll" then
     if not gestureOk then say("editor gesture failed: %s", tostring(gestureError)) end
 end
 
+-- Shared cell-40 mouse placement and live titled-control lookup. No event
+-- injection: only the cursor is placed; buttons are real ADB state.
+local function cellMouseTransport(mem, window, button)
+    local function ptr(address) return mem:read_u32(address) & 0xFFFFFF end
+    local function signed(address)
+        local n = mem:read_u16(address)
+        return n >= 32768 and n - 65536 or n
+    end
+    local function move(x, y)
+        mem:write_u16(0x828, y); mem:write_u16(0x82A, x)
+        mem:write_u16(0x82C, y); mem:write_u16(0x82E, x)
+        mem:write_u8(0x8CE, mem:read_u8(0x8CF))
+        emu.wait(0.2)
+    end
+    local function click(x, y)
+        move(x, y); button:set_value(1); emu.wait(0.3)
+        button:clear_value(); emu.wait(1)
+    end
+    local ox, oy = -signed(window + 10), -signed(window + 8)
+    local function titledPoint(title)
+        local handle = ptr(window + 140)
+        for _ = 1, 64 do
+            assert(handle ~= 0, title .. " control missing")
+            local c = ptr(handle)
+            -- ControlRecord.contrlTitle is a Str255 at offset 40.
+            local matches = mem:read_u8(c + 40) == #title
+            for i = 1, #title do
+                matches = matches and mem:read_u8(c + 40 + i) == title:byte(i)
+            end
+            if matches then
+                return ox + (signed(c + 10) + signed(c + 14)) // 2,
+                      oy + (signed(c + 8) + signed(c + 12)) // 2
+            end
+            handle = ptr(c)
+        end
+        error(title .. " control walk bound exceeded")
+    end
+    local function pressTitled(title) click(titledPoint(title)) end
+    return move, click, pressTitled, titledPoint, ox, oy
+end
+
+if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/link-press" then
+    local button = field(":macadb:MOUSE0", "Mouse Button 0")
+    local gestureOk, gestureError = pcall(function()
+        local cpu = manager.machine.devices[":maincpu"]
+        assert(not cpu.shortname:match("^ppc"), "link gestures currently target maciix")
+        local mem = cpu.spaces["program"]
+        local function ptr(address) return mem:read_u32(address) & 0xFFFFFF end
+        local window
+        -- Identify this scene by its Busy control; no assumptions about the
+        -- input method's position in the native window chain.
+        for attempt = 1, 200 do
+            local candidate = ptr(0x9D6)
+            for _ = 1, 16 do
+                if candidate == 0 then break end
+                local _, _, _, titledPoint = cellMouseTransport(mem, candidate, button)
+                if pcall(titledPoint, "Busy") then window = candidate; break end
+                candidate = ptr(candidate + 144)
+            end
+            if window then break end
+            emu.wait(0.1)
+        end
+        assert(window, "link cell window missing")
+        local move, click, nextButton, titledPoint, ox, oy = cellMouseTransport(mem, window, button)
+        emu.wait(3) -- OPEN checks the paired local link/label coordinates.
+        local sx, sy = ox + 16, oy + 16
+        local function acknowledge() nextButton("Next") end
+        local function drag(x, y, back)
+            move(sx, sy); button:set_value(1); emu.wait(0.3)
+            move(x, y)
+            if back then move(sx, sy) end
+            button:clear_value(); emu.wait(1)
+            acknowledge()
+        end
+        click(sx, sy); acknowledge()
+        drag(ox + 320, oy + 180, true)
+        drag(ox + 320, oy + 180, false)
+        local nx, ny = titledPoint("Native")
+        drag(nx, ny, false)
+        drag(ox + 96, oy + 16, false)
+        move(sx, sy); button:set_value(1); emu.wait(0.05)
+        button:clear_value(); emu.wait(1); acknowledge()
+        -- Busy lasts 240 ticks. Post both completed clicks during it, then
+        -- leave the current cursor on run one until both DOWNs dequeue.
+        nextButton("Busy")
+        move(sx, sy)
+        for _ = 1, 2 do
+            button:set_value(1); emu.wait(0.15)
+            button:clear_value(); emu.wait(0.15)
+        end
+        emu.wait(4); acknowledge()
+        move(0, 0)
+    end)
+    button:clear_value()
+    if not gestureOk then say("link press gesture failed: %s", tostring(gestureError)) end
+end
+
 if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/clip-edge-tracking" then
     local button = field(":macadb:MOUSE0", "Mouse Button 0")
     local gestureOk, gestureError = pcall(function()
         local mem, barPoint, awaitBar = editorBarTransport()
-        local function ptr(address) return mem:read_u32(address) & 0xFFFFFF end
-        local function signed(address)
-            local n = mem:read_u16(address)
-            return n >= 32768 and n - 65536 or n
-        end
-        local function move(x, y)
-            mem:write_u16(0x828, y); mem:write_u16(0x82A, x)
-            mem:write_u16(0x82C, y); mem:write_u16(0x82E, x)
-            mem:write_u8(0x8CE, mem:read_u8(0x8CF))
-            emu.wait(0.2)
-        end
-        local function click(x, y)
-            move(x, y); button:set_value(1); emu.wait(0.3)
-            button:clear_value(); emu.wait(1)
-        end
         awaitBar(true, 0)
         emu.wait(3) -- OPEN must have sampled settled ground before input.
         local x, y, top, _, _, window = barPoint(true)
         assert(window, "clip cell window missing")
-        local ox, oy = -signed(window + 10), -signed(window + 8)
+        local move, click, pressTitled, _, ox, oy = cellMouseTransport(mem, window, button)
         -- Paired with ClipEdgeGeometry in ToolboxClipEdgeTrackingScenario.hpp.
         -- OPEN guards edit full=(13,14,211,31), clip=(12,12,92,36),
         -- bar full=(156,60,172,180), clip=(12,60,164,180).
         local editOutside = {ox + 92, oy + 12, ox + 212, oy + 36}
         local barOutside = {x, top, x + 8, y + 24}
-        local function pressTitled(title)
-            local handle = ptr(window + 140)
-            for _ = 1, 64 do
-                assert(handle ~= 0, title .. " control missing")
-                local c = ptr(handle)
-                -- ControlRecord.contrlTitle is a Str255 at offset 40.
-                local matches = mem:read_u8(c + 40) == #title
-                for i = 1, #title do
-                    matches = matches and mem:read_u8(c + 40 + i) == title:byte(i)
-                end
-                if matches then
-                    click(ox + (signed(c + 10) + signed(c + 14)) // 2,
-                          oy + (signed(c + 8) + signed(c + 12)) // 2)
-                    return
-                end
-                handle = ptr(c)
-            end
-            error(title .. " control walk bound exceeded")
-        end
         local function acknowledge() pressTitled("Next") end
         local function drag(label, sx, sy, ex, ey, outside)
             local leaked = false

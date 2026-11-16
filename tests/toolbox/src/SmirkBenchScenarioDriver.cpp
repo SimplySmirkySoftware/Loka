@@ -9,6 +9,7 @@
 #include "ToolboxTextEditorKeysScenario.hpp"
 #include "ToolboxTextEditorJapaneseScenario.hpp"
 #include "ToolboxClipEdgeTrackingScenario.hpp"
+#include "ToolboxLinkPressScenario.hpp"
 #include "ObservedMainDefinition.hpp"
 #include "RectSurfaceScenarioObservation.hpp"
 #include "ScenarioDriverSupport.hpp"
@@ -91,6 +92,12 @@ namespace loka
             window.scene(scenario_tests::ObservedMainDefinition<scenario_tests::SmirkBenchPlainEditorProps,
                                                                scenario_tests::SmirkBenchPlainEditorNode>(
                 scenario_tests::SmirkBenchPlainEditorProps(&this->model_), 0));
+          }
+          else if (this->scenario_ == "link-press")
+          {
+            window.scene(
+                scenario_tests::ObservedMainDefinition<scenario_tests::LinkPressProps, scenario_tests::LinkPressNode>(
+                    scenario_tests::LinkPressProps(), 0));
           }
           else if (this->scenario_ == "clip-edge-tracking")
           {
@@ -323,6 +330,21 @@ namespace loka
             }
             return;
           }
+          if (this->scenario_ == "link-press")
+          {
+            dsl::SnapRecord record;
+            if (this->linkScenario_.advance(
+                    elapsedSeconds, scene, *window->asToolboxWindow(), *controller, this->audit_, record)
+                == scenario_tests::SCENARIO_ADVANCE_DRIVER_COMPLETION_READY)
+            {
+              std::string status;
+              const bool ok = record.get("status", status) && status == dsl::SnapStatusOk();
+              (void)this->terminal_.emit(
+                  ok ? dsl::testing::SCENARIO_AUDIT_SUCCEEDED : dsl::testing::SCENARIO_AUDIT_FAILED, record);
+              (void)this->completionPublisher_.publish(window);
+            }
+            return;
+          }
           if (this->scenario_ == "clip-edge-tracking")
           {
             dsl::SnapRecord record;
@@ -408,6 +430,7 @@ namespace loka
         scenario_tests::ToolboxTextEditorKeysScenario keysScenario_;
         scenario_tests::ToolboxTextEditorJapaneseScenario japaneseScenario_;
         scenario_tests::ToolboxClipEdgeTrackingScenario clipScenario_;
+        scenario_tests::ToolboxLinkPressScenario linkScenario_;
         long tick_;
         double lingerRemaining_;
         ScenarioCompletionPublisher completionPublisher_;

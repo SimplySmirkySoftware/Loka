@@ -19,6 +19,7 @@ struct PressRow
     CELL_HIT,
     BUTTON_HIT,
     UNIT,
+    LINK_HIT,
     PRESS_ROW_KIND_COUNT
   };
   Kind kind;

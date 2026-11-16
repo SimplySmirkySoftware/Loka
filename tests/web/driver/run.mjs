@@ -15,6 +15,7 @@ import {renderPreviewHtml} from '../../../tools/vscode-loka/src/previewHtml.ts';
 
 const build=resolve(process.argv[2] || 'build/wasm/testing/web');
 const mineBuild=resolve('build/wasm/web/example/MineSweeper');
+const tutorialBuild=resolve('build/wasm/web/example/Tutorial');
 const helloBuild=resolve('build/wasm/web/example/HelloWorld');
 const chromium=process.env.CHROMIUM || ['chromium','chromium-browser','google-chrome']
   .find(name=>spawnSync('which',[name],{stdio:'ignore'}).status===0);
@@ -101,9 +102,14 @@ const server=createServer(async(req,res)=>{
         LokaHelloWeb({locateFile:name=>name,lokaSkin:new URLSearchParams(location.search).get('skin')}).then(m=>{window.fixture=m;window.web=m.web;window.ready=true});
         </script>`;
     } else if(file === 'LokaHelloWeb.wasm') data=await readFile(join(helloBuild,file));
+    else if(file === 'tutorial.html') {
+      data=`<!doctype html><body><script src="LokaTutorialWeb.js"></script><script>
+        LokaTutorialWeb({locateFile:name=>name,lokaSkin:new URLSearchParams(location.search).get('skin')}).then(m=>{window.fixture=m;window.web=m.web;window.ready=true});
+        </script>`;
+    } else if(file === 'LokaTutorialWeb.wasm') data=await readFile(join(tutorialBuild,file));
     else if(file === 'text-cells.js') data=await readFile(join(driverDir,file));
-    else if(file === 'LokaMineWeb.js' || file === 'skew.js' || file === 'LokaWebCounter.js' || file === 'LokaHelloWeb.js' || file === 'preview-module.js' || file === 'preview-mine.js') {
-      data=await readFile((file === 'LokaMineWeb.js' || file === 'preview-mine.js') ? join(mineBuild,'LokaMineWeb.js') : (file === 'LokaHelloWeb.js' || file === 'preview-module.js') ? join(helloBuild,'LokaHelloWeb.js') : join(build,'LokaWebCounter.js'),'utf8');
+    else if(file === 'LokaTutorialWeb.js' || file === 'LokaMineWeb.js' || file === 'skew.js' || file === 'LokaWebCounter.js' || file === 'LokaHelloWeb.js' || file === 'preview-module.js' || file === 'preview-mine.js') {
+      data=await readFile(file === 'LokaTutorialWeb.js' ? join(tutorialBuild,file) : (file === 'LokaMineWeb.js' || file === 'preview-mine.js') ? join(mineBuild,'LokaMineWeb.js') : (file === 'LokaHelloWeb.js' || file === 'preview-module.js') ? join(helloBuild,'LokaHelloWeb.js') : join(build,'LokaWebCounter.js'),'utf8');
       // Driver-only closure access, never a production export or a C++ test-shaped door.
       const hook=`Module['textTest']={
         service:()=>WebDOM.text,
@@ -372,6 +378,26 @@ try {
     console.log('HelloWeb smoke: passed '+JSON.stringify({viewportWidth,...hello,resources:0,completed:true}));
   }
   await client.send('Emulation.setDeviceMetricsOverride',{width:800,height:600,deviceScaleFactor:1,mobile:false});
+  await navigate('tutorial.html');
+  assert.equal(await client.evaluate('!!window.ready'),true,'Tutorial module ready');
+  assert.equal(await client.evaluate('web.start()'),0,'Tutorial start');
+  const tutorial=await client.evaluate(`(() => {
+    const roots=[...document.querySelectorAll('body > div[data-loka-token]')];
+    const root=roots[0];
+    const leaves=[...root.querySelectorAll('[data-loka-token]')]
+      .filter(e=>e.childElementCount===0).map(e=>e.textContent);
+    return {roots:roots.length,token:Number(root.dataset.lokaToken),leaves};
+  })()`);
+  assert.equal(tutorial.roots,1,'Tutorial root');
+  assert(tutorial.leaves.includes('Loka Tutorial'),'Tutorial projected title leaf');
+  assert(tutorial.leaves.includes('Edit DoItYourselfNode.hpp and build the scene yourself.'),
+    'Tutorial projected first hint leaf');
+  assert.equal(await client.evaluate(`web.resize(${tutorial.token},320,240)`),0,'Tutorial resize');
+  await client.evaluate('web.dispose();web.completed.then(()=>true)');
+  assert.equal(await client.evaluate('fixture.textTest.resources()'),0,'Tutorial releases all resources');
+  assert.equal(await client.evaluate('document.querySelectorAll("[data-loka-token]").length'),0);
+  assert.deepEqual(client.errors,[],'Tutorial runtime errors');
+  console.log('Tutorial smoke: passed (title, hint, resize, completed, resources=0)');
   for(const allow of [true,false]) {
     client.errors=[];
     const fetchesBefore=helloWasmFetches;

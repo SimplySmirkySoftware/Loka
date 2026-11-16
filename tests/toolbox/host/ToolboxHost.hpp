@@ -478,12 +478,18 @@ public:
   typedef ToolboxHitLedger::EditHit EditHit;
   typedef ToolboxHitLedger::ButtonHit ButtonHit;
   typedef ToolboxHitLedger::CellHit CellHit;
+  typedef ToolboxHitLedger::LinkHit LinkHit;
+  void recordLinkHit(const Rect &, ToolboxAttributedTextContext *);
   typedef ToolboxHitLedger::PopupHit PopupHit;
   ToolboxHitLedger hitLedger_;
   loka::app::scene::NodeContext *selectedPress(const Point &, PressRow &) const;
   const ToolboxPressRows<ButtonHit, PressRow::BUTTON_HIT> &buttonHits() const
   {
     return this->hitLedger_.buttonHits_;
+  }
+  const ToolboxPressRows<LinkHit, PressRow::LINK_HIT> &linkHits() const
+  {
+    return this->hitLedger_.linkHits_;
   }
   const ToolboxPressRows<CellHit, PressRow::CELL_HIT> &cellHits() const
   {

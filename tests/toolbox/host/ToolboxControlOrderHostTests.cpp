@@ -370,13 +370,16 @@ namespace
 } // namespace
 #include "ToolboxParkedPressHost.hpp"
 #include "ToolboxPressDoorHost.hpp"
+#include "ToolboxLinkPressPins.inc"
 #include "ToolboxNativeDoorPins.hpp"
 #include "ToolboxFullControlPins.hpp"
 #include "ToolboxButtonFollowPins.hpp"
 int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
-  if (std::strncmp(argv[1], "Follow", 6) == 0)
+  if (std::strncmp(argv[1], "LinkPress", 9) == 0)
+    link_press::run(argv[1]);
+  else if (std::strncmp(argv[1], "Follow", 6) == 0)
     button_follow::run(argv[1]);
   else if (std::strncmp(argv[1], "FullControl", 11) == 0)
     full_control::run(argv[1]);
