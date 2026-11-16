@@ -544,11 +544,14 @@ example a git worktree on the WSL filesystem) and run the commands in that
 window. Opening a source file does not open or select a preview.
 
 **Workspace installation.** The install/trust/restart protocol is
-runtime-verified on a local Linux window; Remote WSL not verified. The local
-VS Code 1.145.3 probe established this route; smoke cells W/WR below automate
-its acceptance checks. F5 above remains the verified development route.
+runtime-verified on a local Linux window (the VS Code 1.145.3 probe and smoke
+cells W/WR below) and, by the hand run recorded below, in a Remote WSL window
+with the repository on a Windows drive. F5 above remains the route for
+developing the extension itself.
 
-From `tools/vscode-loka`, run `npm run place`. In Extensions, find **Loka Preview**
+From `tools/vscode-loka`, run `npm run place` (Node and npm must be on the
+shell's `PATH`; in a WSL shell without them, source the emsdk environment
+first). In Extensions, find **Loka Preview**
 under **Workspace Recommendations** and choose **Install Workspace Extension**,
 then run **Loka: Open Preview**. The trust modal belongs to VS Code. Placement
 alone does not install the extension. To update, run `npm run place` and reopen
@@ -716,11 +719,20 @@ replaces the panel with HelloWorld, whose buttons react. The same run showed
 that the development host opens empty when the launch passes the debugging
 window's own folder, which is why the launch no longer passes one.
 
+Runtime-verified by hand on 2026-11-16 with VS Code 1.145.3 (commit dcd3ad6e,
+Windows x64 host) in a Remote WSL (Ubuntu) window on the repository's checkout
+under `/mnt/c`, without an Extension Development Host: `npm run place`,
+**Install Workspace Extension** from Workspace Recommendations, **Open
+Preview**, then **Configure** and **Build** with the emsdk environment
+available, showed HelloWorld in the panel. In the same run, **Configure** from
+a window without the emsdk environment failed with `emcmake: command not
+found`, and `npm` was absent from a WSL shell that had not sourced it.
+
 Runtime-verified on Linux with VS Code 1.145.3 and the development
 extension: the smoke checks Configure, Build, Open Preview and Select Example
 refusals in Restricted Mode. The local Linux workspace-install probe separately
-verified installed-extension manifest enforcement. Remote WSL/Windows workspace
-installation remains unverified.
+verified installed-extension manifest enforcement. Workspace installation in a
+native Windows or macOS window remains unverified.
 
 Not runtime-verified: Build from a VS Code started without the emsdk environment,
 New Game inside the webview, the four themes, and webview resource enforcement.
