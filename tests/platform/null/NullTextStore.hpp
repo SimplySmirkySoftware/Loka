@@ -19,6 +19,12 @@ namespace loka
       bool consumeTextSpliceAfterChangeFailure();
       void failTextStoreReads(unsigned count);
       bool consumeTextStoreReadFailure();
+      void failTextViewAttaches(unsigned count);
+      bool consumeTextViewAttachFailure();
+      void failTextViewPreparations(unsigned count);
+      bool consumeTextViewPreparationFailure();
+      void onTextViewCall(void (*callback)(void *), void *data, unsigned count);
+      void invokeTextViewCall();
       void failTextStoreBirths(scene::TextStoreBirth reason, unsigned count);
       scene::TextStoreBirth consumeTextStoreBirthFailure();
       void startTextDocumentRevision(TextDocument &, unsigned long revision);
@@ -40,10 +46,29 @@ public:
         anchor_(0)
   {
   }
+  /** Native place reference, independent of the kernel claim for teardown verification. */
+  struct View
+  {
+    View()
+        : place(0)
+    {
+    }
+    loka::app::scene::NodeContext *place;
+    loka::app::TextViewPresentation presentation;
+  } view;
+  void transferFrom(NullTextStore &old)
+  {
+    this->view = old.view;
+    old.view = View();
+    transferView(old, *this);
+  }
   /** Construct the native body in one source traversal, then consume construction marks. */
-  loka::app::scene::TextStoreReading build(loka::app::TextStoreSource &source)
+  void prepareBody(loka::app::TextStoreSource &source)
   {
     this->committedText_ = materialize(source);
+  }
+  loka::app::scene::TextStoreReading finishBirth(loka::app::TextStoreSource &source)
+  {
     const loka::app::TextPlacement placement = source.appliedPlacement();
     this->apply(placement.kind() == loka::app::TextPlacement::START ? 0
                 : placement.kind() == loka::app::TextPlacement::END ? this->length()

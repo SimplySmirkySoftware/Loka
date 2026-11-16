@@ -3,6 +3,7 @@
 
 #include "app/scene/Node.hpp"
 #include "app/text/TextStore.hpp"
+#include "app/text/TextViewValues.hpp"
 #include "app/text/TextSplice.hpp"
 #include "app/text/TextStoreSource.hpp"
 #include "app/scene/projection/PlatformNodeHandler.hpp"
@@ -175,6 +176,23 @@ namespace loka
         /** Copy handles and identities before the native call and revalidate the row afterwards.
             Callbacks during the call may only mark the row's change note. */
         virtual void commitMarkedText(TextStoreRow &) {}
+        /** Once per view attach, only this row and place. Prepare fallible resources before
+            attaching; refusal keeps the store parked. Parked stores still serve app requests.
+            Preserve body, selection, undo and marks. Prior IME commit is a separate input operation.
+            Never reenter the kernel: notifications only mark. Any synchronous paint sees the
+            attached shape. Defaults refuse unsupported rails. Replacement birth must finish
+            all fallible work before transferring the view, preserving old on refusal. */
+        virtual bool attachTextView(TextStoreRow &, NodeContext &, const TextViewPresentation &)
+        {
+          return false;
+        }
+        /** Once per linked detach or row retirement. No allocation, no failure; remove borrowed
+            presentation resources and park the body. Preserve body, selection, undo and marks.
+            No kernel reentry. Retired native resources are silent, including at drain. */
+        virtual void detachTextView(TextStoreRow &) {}
+        /** Once after attach or compatible props apply, only this row. No kernel reentry.
+            Cosmetic preparation failure uses defaults; behavioral settings must be honored. */
+        virtual void applyTextViewPresentation(TextStoreRow &, const TextViewPresentation &) {}
         virtual bool readTextStore(TextStoreRow &, TextStoreReading &)
         {
           return false;

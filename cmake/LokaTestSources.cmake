@@ -31,6 +31,7 @@ set(LOKA_SHARED_TEST_SOURCES
   ${_LOKA_TEST_SOURCE_ROOT}/tests/LazyLayoutTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/LazyViewTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/TextDocumentKernelTests.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/TextDocumentViewTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/TextReaderTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/TestingHooks.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/ExampleAppConfigCompileTests.cpp
@@ -41,6 +42,7 @@ set(LOKA_SHARED_TEST_SOURCES
   ${_LOKA_TEST_SOURCE_ROOT}/tests/platform/null/context/NullButtonContext.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/platform/null/context/NullEditTextContext.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/platform/null/context/NullTextEditorContext.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/platform/null/context/NullTextDocumentViewContext.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/platform/null/context/NullScrollBarContext.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/platform/null/context/NullTextMetrics.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/platform/null/context/NullAttributedTextContext.cpp

@@ -4,6 +4,7 @@
 #include "support/NullLayoutRefusal.hpp"
 #include "app/scene/Scene.hpp"
 #include "platform/null/context/NullTextEditorContext.hpp"
+#include "platform/null/context/NullTextDocumentViewContext.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
 #include "platform/null/context/NullAttributedTextContext.hpp"
 
@@ -244,6 +245,7 @@ NullScenePlatformController::NullScenePlatformController(std::size_t bucketDepth
   RegisterNullButtonNodeHandler(*this);
   RegisterNullEditTextNodeHandler(*this);
   RegisterNullTextEditorNodeHandler(*this);
+  RegisterNullTextDocumentViewNodeHandler(*this);
   RegisterNullScrollBarNodeHandler(*this);
   RegisterNullTextNodeHandler(*this);
   RegisterNullAttributedTextNodeHandler(*this);
@@ -1324,10 +1326,55 @@ NullScenePlatformController::createTextStore(loka::app::TextStoreSource &source,
     row->retire();
     return failure;
   }
-  // Null has no attached native views. Page 4 rails must transfer views here,
-  // before selection and construction marks are finalized, without allocation.
-  (void)old;
-  reading = row->build(source);
+  row->prepareBody(source);
+  if (old)
+  {
+    NullTextStore &previous = static_cast<NullTextStore &>(*old);
+    if (previous.view.place)
+    {
+      this->textViewCalls.push_back(TextViewCall(TextViewCall::TRANSFER, *row, this->borrowPhase().open()));
+      row->transferFrom(previous);
+    }
+  }
+  reading = row->finishBirth(source);
   fresh = row;
   return TEXT_STORE_BORN;
+}
+
+NullTextDocumentViewContext *NullScenePlatformController::createTextViewContext(loka::app::TextDocumentEditorNode &node)
+{
+  loka::app::scene::BoundaryNode *root = this->rootNode_ ? this->rootNode_->asBoundary() : 0;
+  if (!root || !root->getScene())
+    return 0;
+  return new (std::nothrow) NullTextDocumentViewContext(*this, root->getScene()->textDocuments(), node);
+}
+bool NullScenePlatformController::attachTextView(loka::app::scene::TextStoreRow &row,
+                                                 loka::app::scene::NodeContext &context,
+                                                 const loka::app::TextViewPresentation &)
+{
+  this->textViewCalls.push_back(TextViewCall(TextViewCall::ATTACH, row, this->borrowPhase().open()));
+  loka::app::testing::invokeTextViewCall();
+  if (loka::app::testing::consumeTextViewAttachFailure())
+    return false;
+  NullTextStore &store = static_cast<NullTextStore &>(row);
+  assert(!store.view.place);
+  store.view.place = &context;
+  return true;
+}
+void NullScenePlatformController::detachTextView(loka::app::scene::TextStoreRow &row)
+{
+  this->textViewCalls.push_back(TextViewCall(TextViewCall::DETACH, row, this->borrowPhase().open()));
+  loka::app::testing::invokeTextViewCall();
+  static_cast<NullTextStore &>(row).view = NullTextStore::View();
+}
+void NullScenePlatformController::applyTextViewPresentation(loka::app::scene::TextStoreRow &row,
+                                                            const loka::app::TextViewPresentation &presentation)
+{
+  this->textViewCalls.push_back(TextViewCall(TextViewCall::PRESENT, row, this->borrowPhase().open()));
+  loka::app::testing::invokeTextViewCall();
+  static_cast<NullTextStore &>(row).view.presentation =
+      loka::app::testing::consumeTextViewPreparationFailure()
+          ? loka::app::TextViewPresentation(
+                loka::app::TextStyle(), presentation.margin(), presentation.readOnly(), presentation.wrap())
+          : presentation;
 }
