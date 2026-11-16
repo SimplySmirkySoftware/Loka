@@ -219,7 +219,7 @@ namespace loka
         }
         AppendIndent(out, depth);
         out += "};\n";
-        char count[48];
+        char count[64];
         ::snprintf(count,
                    sizeof(count),
                    "const std::size_t AssetCount = %lu;\n",
