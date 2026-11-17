@@ -1193,6 +1193,8 @@ void testMacClipBoxPopupMenuOpensLikeTwin()
   const char *items[] = {"One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"};
   const int itemCount = 8;
   const int boxHeight = 80;
+  // The menu relative to the popup's top-left: the host window itself may land
+  // a point apart between the two fixtures.
   NSRect presented[2];
   NSInteger selected[2];
   for (int clipped = 0; clipped != 2; ++clipped)
@@ -1237,6 +1239,10 @@ void testMacClipBoxPopupMenuOpensLikeTwin()
     LOKA_VERIFY(presented[clipped].size.height > boxHeight);
     LOKA_VERIFY(NSMinX(presented[clipped]) < NSMaxX(screen) && NSMaxX(presented[clipped]) > NSMinX(screen));
     LOKA_VERIFY(selected[clipped] == 5);
+    // Window-server rects are top-left based on the primary screen.
+    const CGFloat primaryTop = NSMaxY([[[NSScreen screens] objectAtIndex:0] frame]);
+    presented[clipped].origin.x -= NSMinX(screen);
+    presented[clipped].origin.y -= primaryTop - NSMaxY(screen);
   }
   LOKA_VERIFY(NSEqualRects(presented[0], presented[1]));
 }
