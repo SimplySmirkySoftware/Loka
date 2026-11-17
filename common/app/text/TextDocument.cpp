@@ -823,6 +823,7 @@ namespace loka
           BorrowScope borrow(this->controller_);
           this->controller_.detachTextView(*this);
         }
+        this->controller_.retireTextStore(*this);
         this->view_.cut();
         this->link_.cut();
         this->owner_.unlink(*this);

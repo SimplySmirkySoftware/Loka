@@ -113,6 +113,7 @@
 #include "Win32RectSurfacePaintTests.hpp"
 #include "Win32RectSurfaceRedrawTests.hpp"
 #include "Win32WideApiTests.hpp"
+#include "Win32TextStoreTests.hpp"
 #include "Win32WindowClientSizeTests.hpp"
 #include "Win32ProfilerTests.hpp"
 #include "Win32IdlePacerTests.hpp"

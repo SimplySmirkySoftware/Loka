@@ -27,13 +27,14 @@ namespace loka
           }
           // The second edit's coordinates follow the first edit. Expand the old and
           // new spans together, preserving the net size change without signed offsets.
-          const unsigned long start = std::min(previous.start(), range->start());
+          const unsigned long start = (std::min)(previous.start(), range->start());
           const unsigned long oldEnd = previous.start() + previous.length();
           const unsigned long newEnd = previous.start() + previous.insertedLength();
           const unsigned long editEnd = range->start() + range->length();
           const unsigned long tail = editEnd > newEnd ? editEnd - newEnd : 0;
           const unsigned long oldLength = oldEnd + tail - start;
-          const unsigned long newLength = std::max(newEnd, editEnd) - start - range->length() + range->insertedLength();
+          const unsigned long newLength =
+              (std::max)(newEnd, editEnd) - start - range->length() + range->insertedLength();
           const TextChangedRange combined(start, oldLength, newLength);
           this->reading_ = TextStoreReading(true, &combined, 0, 0, this->reading_.marked());
         }

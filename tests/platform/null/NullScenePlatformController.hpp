@@ -178,6 +178,7 @@ public:
                               loka::app::scene::NodeContext &,
                               const loka::app::TextViewPresentation &);
   virtual void detachTextView(loka::app::scene::TextStoreRow &);
+  virtual void retireTextStore(loka::app::scene::TextStoreRow &);
   virtual void applyTextViewPresentation(loka::app::scene::TextStoreRow &, const loka::app::TextViewPresentation &);
   /** Null-only call evidence; no production observability surface. */
   struct TextViewCall
@@ -187,23 +188,27 @@ public:
       ATTACH,
       DETACH,
       PRESENT,
-      TRANSFER
+      TRANSFER,
+      RETIRE
     };
     TextViewCall()
         : kind(ATTACH),
           row(0),
-          borrowed(false)
+          borrowed(false),
+          links(0)
     {
     }
-    TextViewCall(Kind k, loka::app::scene::TextStoreRow &r, bool b)
+    TextViewCall(Kind k, loka::app::scene::TextStoreRow &r, bool b, unsigned linked = 0)
         : kind(k),
           row(&r),
-          borrowed(b)
+          borrowed(b),
+          links(linked)
     {
     }
     Kind kind;
     const loka::app::scene::TextStoreRow *row;
     bool borrowed;
+    unsigned links;
   };
   /** Bounded fixture evidence: recording detach must not allocate. */
   class TextViewCalls

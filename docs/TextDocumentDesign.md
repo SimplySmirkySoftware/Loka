@@ -162,11 +162,12 @@ then plays the native role. It is still the only copy.
 
   V1 limits: Button, Toolbar and Ribbon commands that do not pass through the
   menu do not commit. Classic (Toolbox) does not commit uncommitted text before
-  commands: its default store door does nothing. Win32 store creation explicitly
-  refuses until page 1d is frozen and implemented, because committed IME text
-  reaches the body later through the message queue (see [Native facts](#native-facts)).
-  This is a documented refusal marker, not a compile-time wall. Production rails
-  still create no stores, so the shipped `TextEditor` behavior is unchanged.
+  commands: its default store door does nothing. Win32 also leaves composition
+  uncommitted: its store reading reports MARKED only for the focused EDIT, and
+  treats a failed composition query as marked. Committed characters can still
+  be waiting for queued WM_CHAR delivery (see [Native facts](#native-facts)).
+  Win32 now creates parked stores; native views remain unsupported in this slice.
+  The shipped `TextEditor` path is unchanged.
 
 `TextReader` pulls a revision's logical UTF-8 body in bounded chunks, with CR,
 LF, and CRLF each represented by one LF. Malformed content refuses the read;
@@ -209,7 +210,7 @@ for creation, [SceneTextDocuments](../common/app/scene/SceneTextDocuments.hpp)
 for membership, and [TextDocumentPublisher](../common/app/text/TextDocument.cpp)
 for the single read/take/apply/read/write sequence. Controller doors in
 [IPlatformController](../common/app/scene/projection/PlatformController.hpp)
-refuse by default; only the Null rail supplies stores in this step. The
+refuse by default; Null and Win32 supply stores. The
 `commitMarkedText` operation defaults to doing nothing. `TextStoreReading`
 reports marked text; the latest reading determines `MARKED`, with positions
 assembled just as in `READY`.
@@ -260,7 +261,7 @@ documented behavior that no Loka probe has observed yet.
 | Toolbox Unicode | MLTE `TXNObject`, created with no window | attaching it to an offscreen GWorld | the object |
 | Toolbox TextEdit | the `hText` handle † | swapping it for an empty handle before `TEDispose` † | the TE record † |
 | macOS | `NSTextStorage` | exists without a view † | the view's undo manager † |
-| Win32 | the EDIT's `HLOCAL`, through `EM_SETHANDLE` | swapping it for an empty handle before `DestroyWindow` | the EDIT; `EM_SETHANDLE` clears it |
+| Win32 | a store-owned EDIT, born with an `HLOCAL` through `EM_SETHANDLE` | parked under a controller-owned message-only window; view attachment is deferred | the EDIT; `EM_SETHANDLE` clears it |
 | Null | a host string | not needed | none |
 
 - **Win32** (Windows 11, MS-IME; the comctl32 6 EDIT and the user32 EDIT
@@ -470,3 +471,54 @@ remain compatible and update the retained context. The kernel and Null pins
 are in `tests/TextDocumentViewTests.cpp`. Win32, macOS, and Toolbox keep the
 refusing/default view doors; their native implementations and runtime evidence
 belong to the respective rail pages.
+
+
+### Win32 store row and parking (4w-1)
+
+`Win32TextParking` owns one lazily created message-only window and the controller's
+`TextStoreLedger`. Each `Win32TextStore` owns a hidden multiline EDIT and a
+`TextChangeNote`. The parking procedure receives EN_CHANGE and calls `noteEdit(0)`;
+it neither enters the kernel nor forwards to the legacy dispatcher/subclass.
+Reading folds EM_GETMODIFY into the note before consuming it and resets the native
+modify flag. Peek consumes neither source. EM_GETSEL uses DWORD outputs: the low
+endpoint is anchor and the high endpoint is caret, without reconstructing selection
+direction. Reading can occur twice in one document completion.
+
+Birth traverses `TextStoreSource` once, converts separators to CRLF, and maps logical
+UTF-8 placement to native UTF-16 units with the source's round-down/clamp rule.
+A movable, unlocked, terminated HLOCAL transfers to EDIT through EM_SETHANDLE;
+the displaced empty buffer is freed once, while EDIT frees the installed buffer
+on destruction. NUL refuses as NOT_REPRESENTABLE; integer/capacity overflow refuses
+as CAPACITY. Parking/EDIT/DPI refusal is UNSUPPORTED, allocation refusal is ALLOCATION.
+A failure after row allocation retires the row through its ledger. Replacement
+prepares an independent row and preserves the old body, selection, undo and marks.
+
+`IPlatformController::retireTextStore` is a default no-op, called exactly once per
+row retirement after view detach, outside that detach borrow, before either link
+is cut. It must allocate nothing, cannot fail or reenter the kernel, and only stops
+marks. Win32 clears EDIT's GWLP_USERDATA there. Native destruction happens later:
+ordinary controller drains reclaim retired rows; both controller shutdown paths
+retire all rows, drain them, then destroy parking. Scene teardown cuts the document
+links before root destruction. No second HWND retirement queue owns these EDITs.
+
+Chunk reads lock the EDIT's EM_GETHANDLE storage for the call only. They validate
+both endpoints, reject boundaries inside CRLF/surrogate pairs, normalize CR/LF/CRLF
+to LF, preserve other Unicode separators, and refuse isolated surrogates without
+advancing the cursor. There is no persistent Loka body copy. Caret uses EM_SETSEL;
+commit remains a no-op and splice remains UNAVAILABLE. No view or focus participant
+is added in 4w-1; positive composition and native view evidence belongs to 4w-2.
+
+Birth checks EDIT/parking DPI awareness equality when the dynamically resolved
+Windows 10 1607 APIs exist. Earlier systems omit the query under the frozen
+process-awareness limitation. ES_EX_ALLOWEOL_ALL is requested, but older EDITs
+(including user32 and Windows 8.1) may ignore it: lone CR/LF still normalize during
+reading even when native navigation/display does not treat them as line breaks.
+Saving and reopening can therefore change visible line breaks. The native text
+limit is explicitly raised with EM_SETLIMITTEXT(0); this is not a capacity guarantee.
+
+These rules follow page 4w v1.0 (§0.4 through §0.1 precedence), Gate 1 v1.1,
+page 1d §2.1, page 2 §2.1/§2.2, and page 3 P3-1 (v6 and user32 buffer ownership
+and notification probes). `Win32TextStoreTests.cpp` pins the rail contracts;
+`TextDocumentKernelTests.cpp` and `TextDocumentViewTests.cpp` pin the retirement
+door. Win32 build/runtime verification remains the VM handoff's responsibility;
+Linux suite results do not establish native behavior.

@@ -11,6 +11,12 @@ namespace loka
     {
       struct TextStoreTestAccess
       {
+        // A null-local document endpoint is not visible from remote(); an explicit
+        // test witness supplies its identity when pinning the store-link cut order.
+        static unsigned links(const scene::TextStoreRow &row)
+        {
+          return (row.link_.row() ? 1u : 0u) | (row.view_.remote() ? 2u : 0u);
+        }
         static bool retired(const scene::TextStoreRow &row)
         {
           return row.phase_ == scene::TextStoreRow::RETIRED;

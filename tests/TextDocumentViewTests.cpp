@@ -558,7 +558,8 @@ void testTextViewBorrowAndPublication()
   f.complete();
   LOKA_VERIFY(f.root().result.get().value() == TextViewAttachment::VIEW_DETACHED);
   for (std::size_t i = 0; i < f.controller.textViewCalls.size(); ++i)
-    LOKA_VERIFY(f.controller.textViewCalls[i].borrowed);
+    if (f.controller.textViewCalls[i].kind != NullScenePlatformController::TextViewCall::RETIRE)
+      LOKA_VERIFY(f.controller.textViewCalls[i].borrowed);
 }
 namespace
 {
@@ -858,4 +859,21 @@ void testTextViewInitialObserverAndOtherClaim()
   LOKA_VERIFY(root.firstResult.get().value() == TextViewAttachment::VIEW_DETACHED);
   LOKA_VERIFY(root.observations == 1);
   SceneAccess::unmount(scene);
+}
+
+void testTextViewStoreRetirementDoor()
+{
+  Fixture f;
+  NullTextStore *row = TextDocumentAccess::store(f.root().first);
+  LOKA_VERIFY(row && row->view.place);
+  const std::size_t before = f.controller.textViewCalls.size();
+  row->retire();
+  row->retire();
+  LOKA_VERIFY(f.controller.textViewCalls.size() == before + 2);
+  const NullScenePlatformController::TextViewCall &detach = f.controller.textViewCalls[before];
+  const NullScenePlatformController::TextViewCall &retire = f.controller.textViewCalls[before + 1];
+  LOKA_VERIFY(detach.kind == NullScenePlatformController::TextViewCall::DETACH && detach.borrowed);
+  LOKA_VERIFY(retire.kind == NullScenePlatformController::TextViewCall::RETIRE && !retire.borrowed);
+  LOKA_VERIFY(detach.row == row && retire.row == row && retire.links == 2);
+  LOKA_VERIFY(!row->view.place && !TextDocumentAccess::store(f.root().first));
 }

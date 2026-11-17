@@ -18,6 +18,10 @@ ALLOWLIST = {
         "MoveWindow", "SetWindowPos", "CreateWindowExW", "InvalidateRect"},
     # Typed top-level wrappers; chrome, desktop origin and #712 clamp stay native.
     "win32/src/Win32Window.cpp": {"MoveWindow", "SetWindowPos", "CreateWindowExW"},
+    # Text body parking (page 4w): a message-only parent and hidden EDIT children
+    # born at a zero rect. They carry no layout geometry; a view places them later.
+    "win32/src/text/Win32TextParking.cpp": {"CreateWindowExW"},
+    "win32/src/text/Win32TextStore.cpp": {"CreateWindowExW"},
 }
 # macOS exceptions name each native-only site. Layout writes live in typed
 # adapters; allowing NSMakeRect here does not also license a raw setFrame.
