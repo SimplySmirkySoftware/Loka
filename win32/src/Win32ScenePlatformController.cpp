@@ -1,4 +1,5 @@
 #include "text/Win32TextStore.hpp"
+#include "context/Win32TextDocumentViewContext.hpp"
 #include "app/nodes/nestable/ScrollViewSettlement.hpp"
 #include "context/Win32ZStackContext.hpp"
 #include "context/Win32ClipBoxContext.hpp"
@@ -132,6 +133,7 @@ namespace
       {loka::app::scene::NODE_KIND_TEXT, loka::app::scene::NodeTypeToken<loka::app::TextNode>()},
       {loka::app::scene::NODE_KIND_BUTTON, loka::app::scene::NodeTypeToken<loka::app::ButtonNode>()},
       {loka::app::scene::NODE_KIND_EDIT_TEXT, loka::app::scene::NodeTypeToken<loka::app::EditTextNode>()},
+      {loka::app::scene::NODE_KIND_UNKNOWN, loka::app::scene::NodeTypeToken<loka::app::TextDocumentEditorNode>()},
       {loka::app::scene::NODE_KIND_TEXT_EDITOR, loka::app::scene::NodeTypeToken<loka::app::TextEditorNode>()},
       {loka::app::scene::NODE_KIND_POPUP_MENU, loka::app::scene::NodeTypeToken<loka::app::PopupMenuNode>()},
       {loka::app::scene::NODE_KIND_CARD_BAND, loka::app::scene::NodeTypeToken<loka::app::CardBandNode>()},
@@ -155,13 +157,10 @@ namespace
       using namespace loka::app::scene;
       for (size_t i = 0; i < sizeof(kPaintContextKinds) / sizeof(kPaintContextKinds[0]); ++i)
       {
-        if (node->kind() == kPaintContextKinds[i].kind)
+        if (node->kind() == kPaintContextKinds[i].kind && node->nodeTypeKey() == kPaintContextKinds[i].typeKey)
         {
-          if (node->nodeTypeKey() != kPaintContextKinds[i].typeKey)
-            answer = PaintAnswer::refused(PAINT_REFUSED_UNSUPPORTED_KIND);
-          else
-            answer = context ? static_cast<Win32RetirableContext *>(context)->queryPaintDamage(query)
-                             : PaintAnswer::refused(PAINT_REFUSED_NO_CONTEXT);
+          answer = context ? static_cast<NativeNodeContext *>(context)->queryPaintDamage(query)
+                           : PaintAnswer::refused(PAINT_REFUSED_NO_CONTEXT);
           return true;
         }
       }
@@ -215,10 +214,14 @@ namespace
   {
     const DisplayFontReplacement &fonts = *reinterpret_cast<const DisplayFontReplacement *>(fontValue);
     Win32TextContext *text = Win32TextContext::fromWindow(hwnd);
+    Win32TextDocumentViewContext *view = Win32TextDocumentViewContext::fromWindow(hwnd);
     loka::app::TextStyle style;
     HFONT applied;
     if (text && text->queryFontStyle(style))
       applied = Win32ScenePlatformController::fallbackFont(fonts.next, style);
+    else if (view)
+      applied = Win32ScenePlatformController::fallbackFont(
+          fonts.next, static_cast<loka::app::TextDocumentEditorNode *>(view->owner())->props.presentation_.style());
     else if (Win32TextEditorContext::fromWindow(hwnd))
       applied = Win32ScenePlatformController::fallbackFont(fonts.next, loka::app::TextStyle() + loka::app::Monospace);
     else
@@ -226,7 +229,13 @@ namespace
       const HFONT previous = reinterpret_cast<HFONT>(SendMessageW(hwnd, WM_GETFONT, 0, 0));
       applied = fonts.previous.replacementFor(previous, fonts.next);
     }
-    SendMessageW(hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(applied), TRUE);
+    // An attached document EDIT re-applies its whole presentation: WM_SETFONT resets its margins,
+    // and the margins scale with the display (displayScale_ is already the new one here).
+    Win32TextStore *store = view ? view->store() : 0;
+    if (store && store->edit() == hwnd)
+      store->present(static_cast<loka::app::TextDocumentEditorNode *>(view->owner())->props.presentation_, applied);
+    else
+      SendMessageW(hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(applied), TRUE);
     return TRUE;
   }
 
@@ -2020,8 +2029,7 @@ Win32ScenePlatformController::createTextStore(loka::app::TextStoreSource &source
                                               loka::app::scene::TextStoreRow *&fresh,
                                               loka::app::scene::TextStoreReading &reading)
 {
-  (void)old; // No view exists in this slice; replacement prepares an independent row.
-  return Win32TextStore::create(this->textParking_, *this, source, fresh, reading);
+  return Win32TextStore::create(this->textParking_, *this, source, old, fresh, reading);
 }
 void Win32ScenePlatformController::retireTextStore(loka::app::scene::TextStoreRow &row)
 {
@@ -2048,4 +2056,67 @@ loka::app::scene::TextChunkResult Win32ScenePlatformController::readTextChunk(lo
                                                                               unsigned long &written)
 {
   return static_cast<Win32TextStore &>(row).chunk(offset, end, out, capacity, written);
+}
+
+Win32TextDocumentViewContext *
+Win32ScenePlatformController::createTextViewContext(loka::app::TextDocumentEditorNode &node, HWND parent)
+{
+  loka::app::scene::BoundaryNode *root = this->rootNode_ ? this->rootNode_->asBoundary() : 0;
+  if (!root || !root->getScene())
+    return 0;
+  return new (std::nothrow) Win32TextDocumentViewContext(*this, root->getScene()->textDocuments(), node, parent);
+}
+bool Win32ScenePlatformController::attachTextView(loka::app::scene::TextStoreRow &row,
+                                                  loka::app::scene::NodeContext &context,
+                                                  const loka::app::TextViewPresentation &presentation)
+{
+  return static_cast<Win32TextStore &>(row).attach(
+      static_cast<Win32TextDocumentViewContext &>(context).viewWindow(), context, presentation);
+}
+void Win32ScenePlatformController::detachTextView(loka::app::scene::TextStoreRow &row)
+{
+  static_cast<Win32TextStore &>(row).detach(this->textParking_.window());
+}
+void Win32ScenePlatformController::applyTextViewPresentation(loka::app::scene::TextStoreRow &row,
+                                                             const loka::app::TextViewPresentation &presentation)
+{
+  static_cast<Win32TextStore &>(row).present(presentation);
+}
+void Win32ScenePlatformController::showNativeWindowAt(HWND hwnd, const loka::win32::NativeRect &geometry)
+{
+  const RECT &frame = geometry.r;
+  const UINT flags =
+      SWP_NOACTIVATE | SWP_NOZORDER | SWP_SHOWWINDOW | (this->activeNativeLayoutPass_ ? SWP_NOREDRAW : 0);
+  SetWindowPos(hwnd, 0, frame.left, frame.top, frame.right - frame.left, frame.bottom - frame.top, flags);
+}
+
+void Win32ScenePlatformController::swapNativeReplacement(HWND fresh, HWND old)
+{
+  // Swap visibility without drawing: on the VM both SW_SHOWNA of fresh and SW_HIDE of the covered old
+  // erased the view window synchronously (probe and trace, 2026-11-17). Fresh sits exactly over old,
+  // so nothing is exposed; fresh alone is invalidated and paints once at the next pump.
+  SetWindowPos(
+      fresh, 0, 0, 0, 0, 0, SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
+  SetWindowPos(
+      old, 0, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
+  InvalidateRect(fresh, 0, TRUE);
+}
+
+bool Win32ScenePlatformController::positionNativeReplacement(HWND fresh, HWND old)
+{
+  RECT frame;
+  if (!GetWindowRect(old, &frame))
+    return false;
+  SetLastError(0);
+  if (!MapWindowPoints(0, GetParent(old), reinterpret_cast<POINT *>(&frame), 2) && GetLastError())
+    return false;
+  const HWND above = GetWindow(old, GW_HWNDPREV);
+  return SetWindowPos(fresh,
+                      above ? above : HWND_TOP,
+                      frame.left,
+                      frame.top,
+                      frame.right - frame.left,
+                      frame.bottom - frame.top,
+                      SWP_NOACTIVATE | SWP_NOREDRAW)
+         != FALSE;
 }

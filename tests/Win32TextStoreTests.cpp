@@ -376,7 +376,8 @@ void testWin32TextStoreDpiQualification()
   TextStoreSource source(TextReplacement::Empty());
   TextStoreRow *fresh = 0;
   TextStoreReading reading;
-  LOKA_VERIFY(Win32TextStore::create(parking, f.controller, source, fresh, reading) == TEXT_STORE_REFUSED_UNSUPPORTED);
+  LOKA_VERIFY(Win32TextStore::create(parking, f.controller, source, 0, fresh, reading)
+              == TEXT_STORE_REFUSED_UNSUPPORTED);
   LOKA_VERIFY(!fresh);
 }
 

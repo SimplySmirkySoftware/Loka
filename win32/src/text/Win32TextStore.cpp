@@ -1,5 +1,8 @@
 #include "Win32TextStore.hpp"
 #include "Win32TextParking.hpp"
+#include "../context/Win32FocusParticipant.hpp"
+#include "../Win32ScenePlatformController.hpp"
+#include <cassert>
 #include "app/text/TextStoreSource.hpp"
 #include <imm.h>
 #include <climits>
@@ -156,6 +159,7 @@ namespace
 TextStoreBirth Win32TextStore::create(Win32TextParking &parking,
                                       IPlatformController &controller,
                                       TextStoreSource &source,
+                                      TextStoreRow *old,
                                       TextStoreRow *&fresh,
                                       TextStoreReading &reading)
 {
@@ -189,7 +193,7 @@ TextStoreBirth Win32TextStore::create(Win32TextParking &parking,
     row->edit_ = CreateWindowExW(0,
                                  L"EDIT",
                                  L"",
-                                 WS_CHILD | WS_TABSTOP | ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN,
+                                 WS_CHILD | WS_TABSTOP | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN,
                                  0,
                                  0,
                                  0,
@@ -220,6 +224,26 @@ TextStoreBirth Win32TextStore::create(Win32TextParking &parking,
   {
     row->retire();
     return TEXT_STORE_REFUSED_UNSUPPORTED;
+  }
+  Win32TextStore *previousRow = static_cast<Win32TextStore *>(old);
+#ifdef LOKA_LIFECYCLE_AUDIT
+  assert(!previousRow || previousRow->viewAttached() == (GetParent(previousRow->edit_) != parking.window()));
+#endif
+  if (previousRow && previousRow->viewAttached())
+  {
+    if (!row->prepareReplacement(*previousRow))
+    {
+      row->detach(parking.window());
+      row->retire();
+      return TEXT_STORE_REFUSED_UNSUPPORTED;
+    }
+    const bool hadFocus = GetFocus() == previousRow->edit_;
+    transferView(*previousRow, *row);
+    if (GetWindowLongW(previousRow->edit_, GWL_STYLE) & WS_VISIBLE)
+      Win32ScenePlatformController::swapNativeReplacement(edit, previousRow->edit_);
+    previousRow->detach(parking.window());
+    if (hadFocus)
+      SetFocus(edit);
   }
   row->changes_.take();
   const TextChangedRange range(0, 0, buffer.size());
@@ -352,4 +376,85 @@ TextChunkResult Win32TextStore::chunk(
   offset = cursor;
   written = count;
   return TEXT_CHUNK_PROGRESS;
+}
+
+bool Win32TextStore::attach(HWND view, NodeContext &context, const TextViewPresentation &presentation)
+{
+  if (!presentation.wrap() || !equalDpi(this->edit_, view))
+    return false;
+  if (!Win32FocusParticipant::attach(this->edit_, &context))
+    return false;
+  if (!SetParent(this->edit_, view))
+  {
+    Win32FocusParticipant::detach(this->edit_);
+    return false;
+  }
+  static_cast<Win32ScenePlatformController &>(this->controller()).requestRelayout();
+  return true;
+}
+void Win32TextStore::detach(HWND parking)
+{
+  Win32FocusParticipant::detach(this->edit_);
+  ShowWindow(this->edit_, SW_HIDE);
+  const HWND previous = SetParent(this->edit_, parking);
+#ifdef LOKA_LIFECYCLE_AUDIT
+  assert(previous && "qualified EDIT must return to its live parking window");
+#endif
+  (void)previous;
+  SendMessageW(this->edit_, WM_SETFONT, 0, FALSE);
+}
+void Win32TextStore::present(const TextViewPresentation &presentation)
+{
+#ifdef LOKA_LIFECYCLE_AUDIT
+  assert(presentation.wrap() && !(GetWindowLongW(this->edit_, GWL_STYLE) & ES_AUTOHSCROLL));
+#endif
+  Win32ScenePlatformController &controller = static_cast<Win32ScenePlatformController &>(this->controller());
+  this->present(presentation, controller.fallbackFont(presentation.style()));
+}
+void Win32TextStore::present(const TextViewPresentation &presentation, HFONT font)
+{
+  Win32ScenePlatformController &controller = static_cast<Win32ScenePlatformController &>(this->controller());
+  SendMessageW(this->edit_,
+               WM_SETFONT,
+               reinterpret_cast<WPARAM>(font),
+               (GetWindowLongW(this->edit_, GWL_STYLE) & WS_VISIBLE) != 0);
+  SendMessageW(this->edit_, EM_SETREADONLY, presentation.readOnly(), 0);
+  const int margin = controller.displayScale().nativeLength(0, presentation.margin()).px;
+  SendMessageW(this->edit_, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELPARAM(margin, margin));
+}
+bool Win32TextStore::prepareReplacement(const Win32TextStore &old)
+{
+  const HWND view = GetParent(old.edit_);
+#ifdef TEST_BUILD
+  if (loka::win32::testing::refuseTextViewPreparation(loka::win32::testing::TEXT_VIEW_DPI))
+    return false;
+#endif
+  if (!equalDpi(this->edit_, view))
+    return false;
+#ifdef TEST_BUILD
+  if (loka::win32::testing::refuseTextViewPreparation(loka::win32::testing::TEXT_VIEW_PROPERTY))
+    return false;
+#endif
+  if (!Win32FocusParticipant::attach(this->edit_, Win32FocusParticipant::read(old.edit_)))
+    return false;
+#ifdef TEST_BUILD
+  if (loka::win32::testing::refuseTextViewPreparation(loka::win32::testing::TEXT_VIEW_PARENT))
+    return false;
+#endif
+  if (!SetParent(this->edit_, view))
+    return false;
+  SendMessageW(this->edit_, WM_SETFONT, SendMessageW(old.edit_, WM_GETFONT, 0, 0), FALSE);
+  if (!SendMessageW(this->edit_, EM_SETREADONLY, (GetWindowLongW(old.edit_, GWL_STYLE) & ES_READONLY) != 0, 0))
+    return false;
+  SendMessageW(
+      this->edit_, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, SendMessageW(old.edit_, EM_GETMARGINS, 0, 0));
+#ifdef TEST_BUILD
+  if (loka::win32::testing::refuseTextViewPreparation(loka::win32::testing::TEXT_VIEW_PRESENTATION))
+    return false;
+#endif
+#ifdef TEST_BUILD
+  if (loka::win32::testing::refuseTextViewPreparation(loka::win32::testing::TEXT_VIEW_POSITION))
+    return false;
+#endif
+  return Win32ScenePlatformController::positionNativeReplacement(this->edit_, old.edit_);
 }

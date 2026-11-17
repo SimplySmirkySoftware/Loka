@@ -455,6 +455,8 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
       break;
     case WM_CTLCOLORSTATIC:
     {
+      if (Win32TextDocumentViewContext::fromWindow(reinterpret_cast<HWND>(lParam)))
+        return DefWindowProcW(hwnd, msg, wParam, lParam);
       return reinterpret_cast<LRESULT>(
           loka::win32::Win32StaticTextColors(reinterpret_cast<HDC>(wParam), reinterpret_cast<HWND>(lParam)));
     }
@@ -816,7 +818,8 @@ bool Win32Window::handleEditCommandInput(loka::app::EditVerb verb)
   loka::app::scene::NodeContext *const context = Win32FocusParticipant::attachedTarget(this->hwnd_, focused);
   if (!context)
     return false;
-  const bool textEditor = !context->owner()->asEditTextNode();
+  const bool textEditor =
+      context->owner()->nodeTypeKey() == loka::app::scene::NodeTypeToken<loka::app::TextEditorNode>();
   // Native input may retire the receiver. Use only copied facts after entry.
   switch (verb)
   {
