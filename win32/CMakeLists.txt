@@ -38,6 +38,7 @@ set(SOURCES
   src/context/Win32AttributedTextTable.cpp
   src/context/Win32LinkPress.cpp
   src/context/Win32EditTextContext.cpp
+  src/context/Win32TextDocumentViewContext.cpp
   src/context/Win32TextEditorContext.cpp
   src/context/Win32OpenFileDialogContext.cpp
   src/context/Win32ConfirmDialogContext.cpp

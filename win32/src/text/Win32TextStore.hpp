@@ -11,6 +11,17 @@ namespace loka
     namespace testing
     {
 #ifdef TEST_BUILD
+      enum TextViewPreparation
+      {
+        TEXT_VIEW_DPI,
+        TEXT_VIEW_PROPERTY,
+        TEXT_VIEW_PARENT,
+        TEXT_VIEW_PRESENTATION,
+        TEXT_VIEW_POSITION,
+        TEXT_VIEW_PREPARATION_COUNT
+      };
+      void failTextViewPreparations(TextViewPreparation, unsigned);
+      bool refuseTextViewPreparation(TextViewPreparation);
       void failTextParkingCreations(unsigned);
       void failTextLocalAllocations(unsigned);
       void failTextEditCreations(unsigned);
@@ -31,9 +42,18 @@ public:
   static loka::app::scene::TextStoreBirth create(Win32TextParking &,
                                                  loka::app::scene::IPlatformController &,
                                                  loka::app::TextStoreSource &,
+                                                 loka::app::scene::TextStoreRow *,
                                                  loka::app::scene::TextStoreRow *&,
                                                  loka::app::scene::TextStoreReading &);
   virtual ~Win32TextStore();
+  HWND edit() const
+  {
+    return this->edit_;
+  }
+  bool attach(HWND, loka::app::scene::NodeContext &, const loka::app::TextViewPresentation &);
+  void detach(HWND parking);
+  void present(const loka::app::TextViewPresentation &);
+
   /** Parking notifications only mark; no kernel entry or allocation. */
   void noteEdit()
   {
@@ -51,6 +71,7 @@ private:
         edit_(0)
   {
   }
+  bool prepareReplacement(const Win32TextStore &);
   bool matches(HWND edit) const;
   HWND edit_;
   loka::app::scene::TextChangeNote changes_;

@@ -455,6 +455,8 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
       break;
     case WM_CTLCOLORSTATIC:
     {
+      if (Win32TextDocumentViewContext::fromWindow(reinterpret_cast<HWND>(lParam)))
+        return DefWindowProcW(hwnd, msg, wParam, lParam);
       return reinterpret_cast<LRESULT>(
           loka::win32::Win32StaticTextColors(reinterpret_cast<HDC>(wParam), reinterpret_cast<HWND>(lParam)));
     }

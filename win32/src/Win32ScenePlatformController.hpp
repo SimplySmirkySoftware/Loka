@@ -18,8 +18,17 @@
 #include "platform/Win32DisplayFont.hpp"
 #include "platform/Win32DisplayScale.hpp"
 
+namespace loka
+{
+  namespace app
+  {
+    class TextDocumentEditorNode;
+  }
+} // namespace loka
+
 class PlatformContext;
 
+class Win32TextStore;
 class Win32ButtonContext;
 class Win32EditTextContext;
 class Win32NativeLayoutPass;
@@ -85,6 +94,8 @@ namespace loka
 } // namespace loka
 #endif
 
+class Win32TextDocumentViewContext;
+
 class Win32ScenePlatformController : public loka::app::scene::IPlatformController,
                                      public loka::app::layout::INaturalSizeSource
 {
@@ -93,6 +104,12 @@ public:
                                                            loka::app::scene::TextStoreRow *,
                                                            loka::app::scene::TextStoreRow *&,
                                                            loka::app::scene::TextStoreReading &);
+  Win32TextDocumentViewContext *createTextViewContext(loka::app::TextDocumentEditorNode &, HWND);
+  virtual bool attachTextView(loka::app::scene::TextStoreRow &,
+                              loka::app::scene::NodeContext &,
+                              const loka::app::TextViewPresentation &);
+  virtual void detachTextView(loka::app::scene::TextStoreRow &);
+  virtual void applyTextViewPresentation(loka::app::scene::TextStoreRow &, const loka::app::TextViewPresentation &);
   virtual void retireTextStore(loka::app::scene::TextStoreRow &);
   virtual bool readTextStore(loka::app::scene::TextStoreRow &, loka::app::scene::TextStoreReading &);
   virtual bool peekTextStore(loka::app::scene::TextStoreRow &);
@@ -265,6 +282,8 @@ private:
   friend class ::loka::app::scene::Win32PlatformLayoutTraversal;
   friend class ::Win32NativeLayoutPass;
   friend class ::Win32OwnedChildWindow;
+  friend class ::Win32TextDocumentViewContext;
+  friend class ::Win32TextStore;
   friend class ::Win32TextContext;
   friend class ::Win32AttributedTextContext;
   friend void RegisterWin32BuiltInSupport(Win32ScenePlatformController &controller);
@@ -395,6 +414,10 @@ private:
   bool refuseNarrowingInScrollScope(int resultY);
   void refuseScrollViewShortRange();
   void performLayout(int clientWidth, int clientHeight);
+  /** Hidden replacement copies already-native geometry and inserts immediately above old. */
+  static bool positionNativeReplacement(HWND fresh, HWND old);
+  /** Position and first-show one projected HWND; suppress redraw only in a layout pass. */
+  void showNativeWindowAt(HWND hwnd, const loka::win32::NativeRect &geometry);
   /** Position one projected HWND. A root layout pass suppresses per-child
       repaint and presents the completed native layout once at the pass end. */
   void positionNativeWindow(HWND hwnd, const loka::win32::NativeRect &geometry);
