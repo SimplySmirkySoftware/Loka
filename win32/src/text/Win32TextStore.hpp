@@ -53,6 +53,8 @@ public:
   bool attach(HWND, loka::app::scene::NodeContext &, const loka::app::TextViewPresentation &);
   void detach(HWND parking);
   void present(const loka::app::TextViewPresentation &);
+  /** The one presentation order: WM_SETFONT resets EDIT margins (VM probe 2026-11-17), so margins follow the font. */
+  void present(const loka::app::TextViewPresentation &, HFONT);
 
   /** Parking notifications only mark; no kernel entry or allocation. */
   void noteEdit()

@@ -36,10 +36,14 @@ Win32TextDocumentViewContext::Win32TextDocumentViewContext(Win32ScenePlatformCon
       viewWindow_(parent)
 {
 }
+Win32TextStore *Win32TextDocumentViewContext::store() const
+{
+  return static_cast<Win32TextStore *>(this->attachedStore());
+}
 HWND Win32TextDocumentViewContext::hwnd() const
 {
-  scene::TextStoreRow *store = this->attachedStore();
-  return store ? static_cast<Win32TextStore *>(store)->edit() : 0;
+  Win32TextStore *store = this->store();
+  return store ? store->edit() : 0;
 }
 Win32TextDocumentViewContext *Win32TextDocumentViewContext::fromWindow(HWND hwnd)
 {

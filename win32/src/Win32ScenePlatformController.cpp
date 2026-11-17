@@ -229,7 +229,13 @@ namespace
       const HFONT previous = reinterpret_cast<HFONT>(SendMessageW(hwnd, WM_GETFONT, 0, 0));
       applied = fonts.previous.replacementFor(previous, fonts.next);
     }
-    SendMessageW(hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(applied), TRUE);
+    // An attached document EDIT re-applies its whole presentation: WM_SETFONT resets its margins,
+    // and the margins scale with the display (displayScale_ is already the new one here).
+    Win32TextStore *store = view ? view->store() : 0;
+    if (store && store->edit() == hwnd)
+      store->present(static_cast<loka::app::TextDocumentEditorNode *>(view->owner())->props.presentation_, applied);
+    else
+      SendMessageW(hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(applied), TRUE);
     return TRUE;
   }
 

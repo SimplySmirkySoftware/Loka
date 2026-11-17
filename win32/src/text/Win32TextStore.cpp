@@ -240,10 +240,30 @@ TextStoreBirth Win32TextStore::create(Win32TextParking &parking,
     const bool hadFocus = GetFocus() == previousRow->edit_;
     transferView(*previousRow, *row);
     if (GetWindowLongW(previousRow->edit_, GWL_STYLE) & WS_VISIBLE)
-      ShowWindow(edit, SW_SHOWNA);
-    previousRow->detach(parking.window());
+    {
+      // Swap visibility without drawing: on the VM both SW_SHOWNA of fresh and SW_HIDE of the covered old
+      // erased the view window synchronously (probe and trace, 2026-11-17). Fresh sits exactly over old,
+      // so nothing is exposed; fresh alone is invalidated below and paints once at the next pump.
+      SetWindowPos(edit,
+                   0,
+                   0,
+                   0,
+                   0,
+                   0,
+                   SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
+      SetWindowPos(previousRow->edit_,
+                   0,
+                   0,
+                   0,
+                   0,
+                   0,
+                   SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
+      InvalidateRect(edit, 0, TRUE);
+    }
+    // A hidden window keeps focus until it moves, so focus reaches fresh before old is reparented.
     if (hadFocus)
       SetFocus(edit);
+    previousRow->detach(parking.window());
   }
   row->changes_.take();
   const TextChangedRange range(0, 0, buffer.size());
@@ -409,9 +429,14 @@ void Win32TextStore::present(const TextViewPresentation &presentation)
   assert(presentation.wrap() && !(GetWindowLongW(this->edit_, GWL_STYLE) & ES_AUTOHSCROLL));
 #endif
   Win32ScenePlatformController &controller = static_cast<Win32ScenePlatformController &>(this->controller());
+  this->present(presentation, controller.fallbackFont(presentation.style()));
+}
+void Win32TextStore::present(const TextViewPresentation &presentation, HFONT font)
+{
+  Win32ScenePlatformController &controller = static_cast<Win32ScenePlatformController &>(this->controller());
   SendMessageW(this->edit_,
                WM_SETFONT,
-               reinterpret_cast<WPARAM>(controller.fallbackFont(presentation.style())),
+               reinterpret_cast<WPARAM>(font),
                (GetWindowLongW(this->edit_, GWL_STYLE) & WS_VISIBLE) != 0);
   SendMessageW(this->edit_, EM_SETREADONLY, presentation.readOnly(), 0);
   const int margin = controller.displayScale().nativeLength(0, presentation.margin()).px;

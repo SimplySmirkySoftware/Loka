@@ -14,6 +14,7 @@ namespace loka
   } // namespace app
 } // namespace loka
 class Win32ScenePlatformController;
+class Win32TextStore;
 /** Borrows a projection parent; the claimed store owns the EDIT and its body. */
 class Win32TextDocumentViewContext : public loka::app::scene::TextDocumentViewContext
 {
@@ -28,6 +29,8 @@ public:
   }
   /** Claim-derived target, including during replacement preparation. */
   HWND hwnd() const;
+  /** Claim-derived row, or zero when detached. */
+  Win32TextStore *store() const;
   /** Typed recognition only; two replacement HWNDs may carry the same mark. */
   static Win32TextDocumentViewContext *fromWindow(HWND);
   virtual short layout(loka::app::scene::IPlatformController *, loka::app::scene::LayoutState &);

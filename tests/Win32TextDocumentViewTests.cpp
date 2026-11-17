@@ -431,7 +431,9 @@ namespace
           LOKA_VERIFY(!Win32FocusParticipant::attachedTarget(replacementView->viewWindow(), call.hwnd));
           ++preparedTargets;
         }
-        if (call.message == WM_SHOWWINDOW && call.wParam)
+        // The commit shows fresh through SetWindowPos, which sends no WM_SHOWWINDOW.
+        if (call.message == WM_WINDOWPOSCHANGING
+            && (reinterpret_cast<const WINDOWPOS *>(call.lParam)->flags & SWP_SHOWWINDOW))
         {
           LOKA_VERIFY(Win32FocusParticipant::target(replacementView) == call.hwnd);
           LOKA_VERIFY(!Win32FocusParticipant::attachedTarget(replacementView->viewWindow(), replacementOld));
@@ -466,6 +468,8 @@ void testWin32TextViewReplacement()
   {
     Fixture f;
     f.replace("old");
+    // The first-born row retired at that replacement is still parked until the safe-point drain.
+    f.rail().drainNativeRetirements();
     HWND old = f.view().hwnd();
     detach(f.view());
     HWND parking = GetParent(old);
@@ -518,6 +522,9 @@ void testWin32TextViewReplacement()
       std::printf("replacement case %u: parent erases=%u paints=%u old paints=%u sibling paints=%u fresh paints=%u\n",
                   focusCase, parent.erases, parent.paints, oldPaint.paints, siblingPaint.paints, freshPaints);
     LOKA_VERIFY(parent.erases == 0 && oldPaint.paints == 0 && siblingPaint.paints == 0 && freshPaints == 0);
+    // The swap draws nothing itself; a visible fresh is left invalid so it paints once at the next pump.
+    RECT pending;
+    LOKA_VERIFY(GetUpdateRect(edit, &pending, FALSE) == (wasVisible ? TRUE : FALSE));
     LOKA_VERIFY(GetFocus() == (focus == old ? edit : focus));
     if (!active && focusCase != 2)
       std::printf("[skip] replacement focused case: activation refused\n");
@@ -532,6 +539,8 @@ void testWin32TextViewReplacementRollback()
   {
     Fixture f;
     f.replace("old");
+    // The first-born row retired at that replacement is still parked until the safe-point drain.
+    f.rail().drainNativeRetirements();
     HWND old = f.view().hwnd();
     detach(f.view());
     HWND parking = GetParent(old);
@@ -608,6 +617,16 @@ void testWin32TextViewFocus()
 }
 namespace
 {
+  /** The Scene gives this unsized editor no height; place it explicitly, as LayoutShow does. */
+  void place(Win32TextDocumentViewContext &view, Win32ScenePlatformController &rail)
+  {
+    LayoutState state;
+    state.x = 4;
+    state.y = 4;
+    state.width = 160;
+    state.height = 60;
+    view.layout(&rail, state);
+  }
   void defaultGround(HWND parent, HWND edit)
   {
     HDC dc = GetDC(edit);
@@ -625,7 +644,12 @@ namespace
     // Sentinel distinguishes an unpainted transparent ground from the native default.
     HBRUSH sentinel = CreateSolidBrush(RGB(255, 0, 255));
     FillRect(memory, &client, sentinel);
-    LOKA_VERIFY(PrintWindow(edit, memory, kPrintFullContent));
+    const BOOL printed = PrintWindow(edit, memory, kPrintFullContent);
+    if (!printed)
+      std::printf("defaultGround: PrintWindow refused client=%ldx%ld visible=%d parentVisible=%d error=%lu\n",
+                  client.right, client.bottom, (GetWindowLongW(edit, GWL_STYLE) & WS_VISIBLE) != 0,
+                  IsWindowVisible(parent) != 0, GetLastError());
+    LOKA_VERIFY(printed);
     LOKA_VERIFY(GetPixel(memory, client.right / 2, client.bottom - 4) == expected);
     DeleteObject(sentinel);
     SelectObject(memory, previous);
@@ -649,6 +673,7 @@ void testWin32TextViewPresentation()
     LOKA_VERIFY(SendMessageW(edit, EM_GETMARGINS, 0, 0) == MAKELPARAM(margin, margin));
     LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(edit, WM_GETFONT, 0, 0))
                 == f.rail().fallbackFont(f.node().props.presentation_.style()));
+    place(f.view(), f.rail());
     defaultGround(GetParent(edit), edit);
     SendMessageW(edit, WM_CHAR, L'X', 0);
     LOKA_VERIFY(native(edit) == L"read only");
@@ -656,6 +681,7 @@ void testWin32TextViewPresentation()
     edit = f.view().hwnd();
     LOKA_VERIFY(native(edit) == L"document request" && (GetWindowLongW(edit, GWL_STYLE) & ES_READONLY));
     LOKA_VERIFY(SendMessageW(edit, EM_GETMARGINS, 0, 0) == MAKELPARAM(margin, margin));
+    place(f.view(), f.rail());
     defaultGround(GetParent(edit), edit);
     // Unmarked static children retain their existing transparent treatment.
     HWND label =
@@ -678,6 +704,14 @@ void testWin32TextViewDpi()
   Witness witness(edit);
   f.rail().updateDisplayScale(loka::win32::Win32DisplayScale(144));
   LOKA_VERIFY(witness.fonts == 1);
+  {
+    // WM_SETFONT resets EDIT margins (VM probe 2026-11-17); the DPI walk must restore them at the new scale.
+    const int scaled = f.rail().displayScale().nativeLength(0, 5).px;
+    const LRESULT margins = SendMessageW(edit, EM_GETMARGINS, 0, 0);
+    if (margins != MAKELPARAM(scaled, scaled))
+      std::printf("dpi walk margins: left=%u right=%u expected %d\n", LOWORD(margins), HIWORD(margins), scaled);
+    LOKA_VERIFY(scaled > 5 && margins == MAKELPARAM(scaled, scaled));
+  }
   LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(edit, WM_GETFONT, 0, 0))
               == f.rail().fallbackFont(f.node().props.presentation_.style()));
   detach(f.view());
@@ -689,10 +723,11 @@ void testWin32TextViewDpi()
               == f.rail().fallbackFont(f.node().props.presentation_.style()));
   {
     const LRESULT margins = SendMessageW(edit, EM_GETMARGINS, 0, 0);
-    if (margins != MAKELPARAM(10, 10))
-      std::printf("dpi margins: left=%u right=%u expected 10,10\n", LOWORD(margins), HIWORD(margins));
+    const int expected = f.rail().displayScale().nativeLength(0, 5).px;
+    if (margins != MAKELPARAM(expected, expected))
+      std::printf("dpi margins: left=%u right=%u expected %d\n", LOWORD(margins), HIWORD(margins), expected);
+    LOKA_VERIFY(expected > 5 && margins == MAKELPARAM(expected, expected));
   }
-  LOKA_VERIFY(SendMessageW(edit, EM_GETMARGINS, 0, 0) == MAKELPARAM(10, 10));
   detach(f.view());
   typedef HANDLE(WINAPI * GetContext)(HWND);
   typedef HANDLE(WINAPI * SetContext)(HANDLE);
