@@ -157,7 +157,7 @@ public:
   }
   void apply(unsigned long caret)
   {
-    this->caret_ = this->anchor_ = std::min(caret, this->length());
+    this->caret_ = this->anchor_ = (std::min)(caret, this->length());
   }
 
   loka::app::scene::TextChunkResult
