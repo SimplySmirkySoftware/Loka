@@ -818,7 +818,8 @@ bool Win32Window::handleEditCommandInput(loka::app::EditVerb verb)
   loka::app::scene::NodeContext *const context = Win32FocusParticipant::attachedTarget(this->hwnd_, focused);
   if (!context)
     return false;
-  const bool textEditor = !context->owner()->asEditTextNode();
+  const bool textEditor =
+      context->owner()->nodeTypeKey() == loka::app::scene::NodeTypeToken<loka::app::TextEditorNode>();
   // Native input may retire the receiver. Use only copied facts after entry.
   switch (verb)
   {

@@ -618,6 +618,18 @@ void testWin32TextViewFocus()
   LOKA_VERIFY(GetFocus() == edit && f.root().focus.state()->get().is(1));
   NodeContext *focused = 0;
   LOKA_VERIFY(f.rail().readNativeFocus(focused) && focused == &f.view());
+  {
+    // Attached typing notifies the parking window only (probe F3); the view window sees no WM_COMMAND
+    // that its legacy EDIT dispatcher could misread through this row's GWLP_USERDATA.
+    Witness viewWindow(f.view().viewWindow());
+    SendMessageW(edit, WM_CHAR, L'Z', 0);
+    LOKA_VERIFY(viewWindow.commands == 0 && f.rail().peekTextStore(f.store()));
+  }
+  // The Edit menu's Select All reaches a document EDIT natively, not through the legacy editor's door.
+  LOKA_VERIFY(f.window.handleEditCommand(EDIT_SELECT_ALL));
+  DWORD start = 1, end = 0;
+  SendMessageW(edit, EM_GETSEL, reinterpret_cast<WPARAM>(&start), reinterpret_cast<LPARAM>(&end));
+  LOKA_VERIFY(start == 0 && end == static_cast<DWORD>(GetWindowTextLengthW(edit)) && end > 0);
   SetFocus(f.window.hwnd());
   MSG tab = {};
   tab.hwnd = f.window.hwnd();
