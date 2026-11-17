@@ -38,6 +38,7 @@ bool WebPopupContext::select(int index)
 }
 short WebPopupContext::layout(IPlatformController *, LayoutState &state)
 {
+  // Deliberate refuse-then-hide twin of WebRectSurfaceContext::place.
   short line = 0, button = 0;
   const int status = WebTextLayout::rowEstimate(line, button);
   if (status == WEB_MEASURE_REFUSED)

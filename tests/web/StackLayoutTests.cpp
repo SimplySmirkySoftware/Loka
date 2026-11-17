@@ -609,12 +609,23 @@ namespace
       Rig rig(webtest::REFUSED_ROW);
       rig.flush();
       LOKA_VERIFY(Label("after").y == heights[variant]);
-      LOKA_VERIFY(webtest::resources.size() == 1);
+      LOKA_VERIFY(webtest::resources.size() == (variant == 4 ? 2u : 1u));
+      if (variant == 4)
+      {
+        const webtest::Resource &surface = webtest::resources[webtest::token(RECT_SURFACE)];
+        std::printf("RefusedOnlyRow surface: %d,%d %dx%d projected=%d\n",
+                    surface.x,
+                    surface.y,
+                    surface.width,
+                    surface.height,
+                    surface.projected);
+        LOKA_VERIFY(surface.kind == RECT_SURFACE && surface.projected);
+        LOKA_VERIFY(surface.x == 0 && surface.y == 0 && surface.width == 20 && surface.height == 40);
+      }
       const unsigned visits = static_cast<unsigned>(rig.controller.refusedSeats.size());
       rig.controller.requestRelayout();
       rig.flush();
-      // RectSurface has no IProjectedLayoutNode door; its generic leaf visit
-      // returns y without entering the registered refusal handler.
+      // RectSurface takes its dedicated placement path without preparation.
       LOKA_VERIFY(rig.controller.refusedSeats.size() - visits == (variant == 4 ? 0u : variant == 2 ? 2u : 1u));
       if (variant != 4)
       {

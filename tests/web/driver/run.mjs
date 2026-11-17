@@ -9,6 +9,7 @@ const driverDir=fileURLToPath(new URL('.',import.meta.url));
 import assert from 'node:assert/strict';
 import {runStackCells, runHelloRoundTrip} from './stack-cells.mjs';
 import {runSkinCells} from './skin-cells.mjs';
+import {runRectSurfaceCells} from './rect-surface-cells.mjs';
 import {runPopupCells} from './popup-cells.mjs';
 import {runCellCells} from './cell-cells.mjs';
 import {runGridCells} from './grid-cells.mjs';
@@ -313,6 +314,7 @@ try {
   assert.equal(closingScroll.count,2);assert.equal(closingScroll.result,5,'pending-close root refuses scroll while another root remains');
   await client.evaluate('web.dispose();web.completed.then(()=>true)');
   await runGridCells(client, navigate);
+  await runRectSurfaceCells(client, navigate);
   await runPopupCells(client, navigate);
   await runCellCells(client, navigate);
   await runSkinCells(client, navigate);

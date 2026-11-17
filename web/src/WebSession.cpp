@@ -210,6 +210,7 @@ namespace
     case loka::web::POPUP:
       WebInputDoor::popupSelect(*row->popup(), width);
       break;
+    case loka::web::RECT_SURFACE:
     case loka::web::TEXT:
       break;
     case loka::web::KIND_COUNT:

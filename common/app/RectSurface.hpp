@@ -220,7 +220,8 @@ namespace loka
       }
 
       /** Supplies app-owned storage for the logical extent published by the
-          layout rail after it places this surface. */
+          layout rail after it places this surface. The Web placeholder leaves it unchanged;
+          see docs/WebRailDesign.md#rectsurface-placeholder for this exception. */
       RectSurfaceProps &laidOutExtent(const scene::NodeState<loka::core::Frame> &state)
       {
         this->laidOutExtent_ = state;
