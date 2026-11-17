@@ -25,6 +25,7 @@
 #include "support/MacWindowCapture.hpp"
 #include <mach/mach.h>
 #include <mach/mach_time.h>
+#include <unistd.h>
 #include <cstring>
 #include <climits>
 #include <cstdio>
@@ -1128,6 +1129,110 @@ void testMacClipBoxPopupAnchorMatchesTwin()
   }
   LOKA_VERIFY(NSEqualRects(windowRects[0], windowRects[1]));
   LOKA_VERIFY(NSEqualRects(screenRects[0], screenRects[1]));
+}
+
+// Runs inside the popup's menu tracking loop: records the menu window that
+// AppKit presented for this process, picks one item, and ends the tracking.
+@interface LokaClipTestMenuProbe : NSObject
+{
+  NSMenu *menu_;
+  NSInteger pick_;
+  NSRect presented_;
+  BOOL fired_;
+}
+@property(assign) NSMenu *menu;
+@property(assign) NSInteger pick;
+@property(assign) NSRect presented;
+@property(assign) BOOL fired;
+- (void)tracking:(NSTimer *)timer;
+@end
+@implementation LokaClipTestMenuProbe
+@synthesize menu = menu_;
+@synthesize pick = pick_;
+@synthesize presented = presented_;
+@synthesize fired = fired_;
+- (void)tracking:(NSTimer *)timer
+{
+  (void)timer;
+  if ([self fired])
+    return;
+  [self setFired:YES];
+  // Window-server rects are top-left based in global coordinates. Only this
+  // process's windows at the popup-menu level are considered.
+  NSRect presented = NSZeroRect;
+  CFArrayRef windows = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
+  const int menuLevel = static_cast<int>(CGWindowLevelForKey(kCGPopUpMenuWindowLevelKey));
+  for (CFIndex i = 0; windows && i < CFArrayGetCount(windows); ++i)
+  {
+    NSDictionary *info = (NSDictionary *)CFArrayGetValueAtIndex(windows, i);
+    if ([[info objectForKey:(NSString *)kCGWindowOwnerPID] intValue] != getpid()
+        || [[info objectForKey:(NSString *)kCGWindowLayer] intValue] != menuLevel)
+      continue;
+    CGRect bounds;
+    if (!CGRectMakeWithDictionaryRepresentation((CFDictionaryRef)[info objectForKey:(NSString *)kCGWindowBounds],
+                                                &bounds))
+      continue;
+    if (bounds.size.height > presented.size.height)
+      presented = NSMakeRect(bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height);
+  }
+  if (windows)
+    CFRelease(windows);
+  [self setPresented:presented];
+  [[self menu] performActionForItemAtIndex:[self pick]];
+  [[self menu] cancelTracking];
+}
+@end
+
+void testMacClipBoxPopupMenuOpensLikeTwin()
+{
+  // #1828: the menu itself is opened from a popup inside a clip box. The
+  // presented menu window must match the unclipped twin, be taller than the
+  // box (the box does not cut it), sit over the popup's columns, and the
+  // picked item must reach the popup.
+  // Expected red: mutation-b-no-bounds-origin.patch.
+  const char *items[] = {"One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"};
+  const int itemCount = 8;
+  const int boxHeight = 80;
+  NSRect presented[2];
+  NSInteger selected[2];
+  for (int clipped = 0; clipped != 2; ++clipped)
+  {
+    Fixture f;
+    if (!f.host.show() || !keyClipWindow(f.host))
+      return;
+    f.tree = box(180, boxHeight, clipped != 0);
+    f.tree->asNestable()->addChild(new PopupMenuNode(PopupMenuProps().items(items, itemCount)));
+    f.at(60, 50, 180, boxHeight);
+    settleClipWindow(f.host);
+    NSPopUpButton *popup = (NSPopUpButton *)descendant(f.host.root, [NSPopUpButton class]);
+    LOKA_VERIFY(popup && [popup indexOfSelectedItem] == 0);
+    LokaClipTestMenuProbe *probe = [[[LokaClipTestMenuProbe alloc] init] autorelease];
+    [probe setMenu:[popup menu]];
+    [probe setPick:5];
+    NSTimer *timer = [NSTimer timerWithTimeInterval:0.3
+                                             target:probe
+                                           selector:@selector(tracking:)
+                                           userInfo:nil
+                                            repeats:NO];
+    [[NSRunLoop currentRunLoop] addTimer:timer forMode:NSEventTrackingRunLoopMode];
+    [popup performClick:nil];
+    [timer invalidate];
+    LOKA_VERIFY([probe fired]);
+    presented[clipped] = [probe presented];
+    selected[clipped] = [popup indexOfSelectedItem];
+    NSRect screen = [popup convertRect:[popup bounds] toView:nil];
+    if ([f.host.window respondsToSelector:@selector(convertRectToScreen:)])
+      screen = [f.host.window convertRectToScreen:screen];
+    else
+      screen.origin = [f.host.window convertBaseToScreen:screen.origin];
+    std::printf("[pin] clip popup menu %d: menu (%.0f,%.0f %.0fx%.0f), popup x %.0f..%.0f, selected %ld\n", clipped,
+                presented[clipped].origin.x, presented[clipped].origin.y, presented[clipped].size.width,
+                presented[clipped].size.height, NSMinX(screen), NSMaxX(screen), (long)selected[clipped]);
+    LOKA_VERIFY(presented[clipped].size.height > boxHeight);
+    LOKA_VERIFY(NSMinX(presented[clipped]) < NSMaxX(screen) && NSMaxX(presented[clipped]) > NSMinX(screen));
+    LOKA_VERIFY(selected[clipped] == 5);
+  }
+  LOKA_VERIFY(NSEqualRects(presented[0], presented[1]));
 }
 
 void testMacClipBoxUnresolvedWidthLayerBackedRssIsFlat()
