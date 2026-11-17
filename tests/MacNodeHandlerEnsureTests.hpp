@@ -12,6 +12,11 @@ void testMacAttributedTextCharacterizeBytes();
 void testMacAttributedTextCharacterizeRefusals();
 void testMacAttributedTextRetainedLifecycle();
 void testMacAttributedTextRefusalClearsProjection();
+void testMacAttributedTextSourceIntervals();
+void testMacAttributedTextSourceAgreement();
+void testMacAttributedTextSourceSearchEmpties();
+void testMacAttributedTextSourceAllocationLifecycle();
+void testMacAttributedTextSourceLateFailure();
 
 void testMacPlainTextMeasurementReuse();
 void testMacAttributedTextMeasurementReuse();
