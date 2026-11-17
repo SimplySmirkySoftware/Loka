@@ -68,7 +68,7 @@ PR 1 initially projected one-line Text through INaturalSizeSource with fixed met
 
 Buttons are native `<button type="button">` elements. Mouse, Space and Enter use the same click export. Browser focus is read at completion; no keyboard or focus-event export is added. Layout containers other than ScrollView have no DOM elements.
 
-EditText, TextEditor, ImageView, RectSurface, ScrollBar and CardBand are explicit refused handlers. A reached ScrollView visit settles once after projection, including refusal; a deferred visit leaves its request pending. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. IME, general pointer input and hot reload remain outside this increment. Skin spacing and inline paint are specified below.
+EditText, TextEditor, ImageView, ScrollBar and CardBand are explicit refused handlers. A reached ScrollView visit settles once after projection, including refusal; a deferred visit leaves its request pending. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. IME, general pointer input and hot reload remain outside this increment. Skin spacing and inline paint are specified below.
 
 ## Host contract
 
@@ -414,7 +414,7 @@ SHARED rows divide remaining width without natural width consultations. NATURAL
 and Toolbar's NATURAL_LABELS_SHARE use the traversal as their natural source;
 unknown widths remain flexible. Refused kinds still occupy attached seats and
 gaps without DOM. EditText estimates zero; PopupMenu uses the Button estimate; Cell/CardBand use H;
-ImageView/RectSurface use explicit heights or H. An aligned all-refused row
+ImageView and the RectSurface placeholder use explicit heights or H. An aligned all-refused row
 reserves its largest estimate, falling back to H if that maximum is nonpositive;
 an unaligned all-refused row returns its starting y.
 
@@ -1315,3 +1315,39 @@ The select retains native appearance, arrow and opened list. Geometry is Button'
 padding and border; paint uses the existing skin's button entry, with left-aligned
 text. No popup skin vocabulary is added. Browser behavior when items change while
 the native dropdown is open is unspecified.
+
+## RectSurface placeholder
+
+RectSurface projects one hatched div labelled `RectSurface`, without model or
+sprite drawing, input listeners, or example registration. Its plain Node reaches
+`WebRectSurfaceContext::place` directly, before the generic nestable fallback;
+it does not use projected-layout preparation. The retained handler and
+WebResourceContext own creation, park, reattach and deferred retirement.
+
+Each positive explicit size axis wins; an unspecified/nonpositive axis uses the
+containing layout's offer. Nonpositive resolved dimensions hide the placeholder.
+Default Column offers its remaining height clamped to zero; natural-height Column
+offers zero; unaligned Row offers its incoming height; aligned Row offers explicit
+height or resolved row height. Grid offers one cell's height (explicit dimensions
+may exceed the cell). Direct ScrollView children each receive the full viewport
+height after any horizontal scrollbar gutter. Box applies its height and padding;
+root offers are margin-inset. These offers are not universally remaining space.
+An aligned row can reserve its estimate even for a refused surface.
+
+Placement checks logical x, y, right and bottom in int with the existing
+viewport-sensitive coordinate wall, then projects a local LayoutState. Every
+reached refusal hides the resource. Success writes rect then projected=true and
+returns the unsaturated int bottom. The inherited unvisited-leaf limitation remains:
+a container refusing before reaching the leaf does not hide its previous snapshot.
+
+Cost: each already materialized successful visit makes two layout imports (five
+style assignments); a reached geometry refusal makes one visibility import;
+failed ensure makes no placement imports. Creation/adoption/rollback have their
+own lifecycle calls. Model publications can coalesce; count reached visits, not
+publications or browser paints. Fixed text and decoration are written only at
+creation. There is no model rendering or geometry cache.
+
+Explicit shared-contract exception: the Web rail does not report `laidOutExtent`.
+It leaves a supplied State unchanged, including on refusal, park and retirement;
+it does not publish zero or transient geometry. An unchanged State is not a
+refusal signal. Other rails' extent publication contracts remain unchanged.

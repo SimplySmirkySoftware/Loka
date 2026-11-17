@@ -5,6 +5,7 @@
 #include "WebGridLayoutHandler.hpp"
 #include "WebScrollContext.hpp"
 #include "WebPopupContext.hpp"
+#include "WebRectSurfaceContext.hpp"
 #include "WebTextDescriptor.hpp"
 #include "WebScenePlatformController.hpp"
 #include "WebSession.hpp"
@@ -48,6 +49,7 @@ namespace
       return ctx;
     }
   };
+  Handler<RectSurfaceNode, WebRectSurfaceContext, loka::web::RECT_SURFACE> RectSurfaceHandler;
   Handler<PopupMenuNode, WebPopupContext, loka::web::POPUP> PopupHandler;
   Handler<TextNode, WebElementContext, loka::web::TEXT> TextHandler;
   Handler<ButtonNode, WebElementContext, loka::web::BUTTON> ButtonHandler;
@@ -56,7 +58,6 @@ namespace
   RefusedNodeHandler Refused[] = {RefusedNodeHandler(NodeTypeToken<EditTextNode>()),
                                   RefusedNodeHandler(NodeTypeToken<TextEditorNode>()),
                                   RefusedNodeHandler(NodeTypeToken<ImageViewNode>()),
-                                  RefusedNodeHandler(NodeTypeToken<RectSurfaceNode>()),
                                   RefusedNodeHandler(NodeTypeToken<ScrollBarNode>()),
                                   RefusedNodeHandler(NodeTypeToken<CardBandNode>())};
   short Narrow(int n)
@@ -337,6 +338,14 @@ int WebScenePlatformController::layoutNode(Node *node, const LayoutState &receiv
     const int result = projected->layoutProjected(this, state);
     node->render(this);
     return result;
+  }
+  // Dedicated surface path (the Win32 layoutRectSurfaceNode twin). Cost: once per
+  // reached surface visit; own props only, no row walk.
+  if (node->asRectSurfaceNode())
+  {
+    WebRectSurfaceContext *context =
+        static_cast<WebRectSurfaceContext *>(RectSurfaceHandler.ensureContext(node, this, state));
+    return context ? context->place(state) : state.y;
   }
   INestable *nestable = node->asNestable();
   if (!nestable)

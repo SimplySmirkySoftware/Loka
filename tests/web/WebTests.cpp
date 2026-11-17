@@ -559,6 +559,7 @@ namespace
       RectSurfaceNode surface((RectSurfaceProps()));
       ScrollBarNode bar((ScrollBarProps()));
       CardBandNode band((CardBandProps()));
+      // RectSurface is outside Refused[]: its dedicated placement path bypasses preparation.
       Node *nodes[] = {&edit, &editor, &image, &surface, &bar, &band};
       LayoutState layout;
       for (unsigned i = 0; i < sizeof(nodes) / sizeof(nodes[0]); ++i)
@@ -1232,6 +1233,7 @@ void WebGridLayoutTests();
 void WebTextProtocolDeath();
 void WebStackProtocolDeath();
 void WebNaturalProtocolDeath();
+void WebRectSurfaceTests();
 void WebPopupTests();
 void WebCellTests();
 void WebCellProtocolDeath();
@@ -1245,6 +1247,11 @@ int main(int argc, char **argv)
   if (argc == 2 && std::strcmp(argv[1], "cell-protocol-death") == 0)
   {
     WebCellProtocolDeath();
+    return 0;
+  }
+  if (argc == 2 && std::strcmp(argv[1], "rect-surface-only") == 0)
+  {
+    WebRectSurfaceTests();
     return 0;
   }
   if (argc == 2 && std::strcmp(argv[1], "popup-only") == 0)
@@ -1295,6 +1302,7 @@ int main(int argc, char **argv)
     name();                                                                                                            \
   } while (0)
   RUN(RootMarginTest);
+  RUN(WebRectSurfaceTests);
   RUN(WebPopupTests);
   RUN(WebCellTests);
   RUN(WebGridLayoutTests);
@@ -1323,7 +1331,7 @@ int main(int argc, char **argv)
   RUN(RootVisibilityTest);
   RUN(TwoRootTest);
 #undef RUN
-  std::puts(
-      "32 Web test groups passed (20 legacy, 6 projection, 1 scroll, 1 stack, 1 grid, 1 Cell, 1 skin, 1 root margin)");
+  std::puts("33 Web test groups passed (20 legacy, 6 projection, 1 scroll, 1 stack, 1 grid, 1 Cell, 1 skin, 1 root "
+            "margin, 1 RectSurface)");
   return 0;
 }
