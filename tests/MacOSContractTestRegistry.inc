@@ -48,6 +48,9 @@ LOKA_TEST(testMacOpenFileDialogCloseDropsPendingAtDrain)
 LOKA_TEST(testMacOpenFileDialogRetargetDropsResult)
 
 LOKA_TEST(testMacAttributedTextWholeLineProjection)
+LOKA_TEST(testMacAttributedTextCharacterizeStyles)
+LOKA_TEST(testMacAttributedTextCharacterizeBytes)
+LOKA_TEST(testMacAttributedTextCharacterizeRefusals)
 LOKA_TEST(testMacAttributedTextRetainedLifecycle)
 LOKA_TEST(testMacAttributedTextRefusalClearsProjection)
 

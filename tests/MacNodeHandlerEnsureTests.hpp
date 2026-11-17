@@ -7,6 +7,9 @@ void testMacTextItalicTraits();
 void testMacSmallLabelUsesTheSmallSystemFont();
 
 void testMacAttributedTextWholeLineProjection();
+void testMacAttributedTextCharacterizeStyles();
+void testMacAttributedTextCharacterizeBytes();
+void testMacAttributedTextCharacterizeRefusals();
 void testMacAttributedTextRetainedLifecycle();
 void testMacAttributedTextRefusalClearsProjection();
 
