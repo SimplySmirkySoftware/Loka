@@ -760,7 +760,7 @@ void testWin32TextViewIme()
     std::printf("[skip] 4w-2b Gate-1 section 5.8 IME: no native input context; VM handoff must run positive case\n");
     return;
   }
-  const wchar_t composition[] = L"\x304b\x306a";
+  wchar_t composition[] = L"\x304b\x306a";
   const BOOL set = ImmSetCompositionStringW(context, SCS_SETSTR, composition, 2 * sizeof(wchar_t), 0, 0);
   const LONG length = ImmGetCompositionStringW(context, GCS_COMPSTR, 0, 0);
   if (!set || length <= 0)
