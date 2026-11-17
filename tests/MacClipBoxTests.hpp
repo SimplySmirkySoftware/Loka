@@ -28,6 +28,7 @@ void testMacClipBoxChannelRefusalKeepsHostRect();
 void testMacClipBoxClickReachesSiblingBelow();
 void testMacClipBoxDragTracksLikeTwin();
 void testMacClipBoxPopupAnchorMatchesTwin();
+void testMacClipBoxPopupMenuOpensLikeTwin();
 void testMacClipBoxGroundCapturesInBothBlurPaths();
 void testMacClipBoxUnresolvedWidthLayerBackedRssIsFlat();
 #endif

@@ -5,6 +5,7 @@
 #include "app/scene/Node.hpp"
 #include "Win32EditTextContext.hpp"
 #include "Win32TextEditorContext.hpp"
+#include "Win32TextDocumentViewContext.hpp"
 
 /** Typed, non-owning HWND property shared only by focus participants.
     SetPropW interns the name as a property atom. Store the adjusted NodeContext
@@ -22,6 +23,8 @@ public:
       return static_cast<Win32EditTextContext *>(context)->hwnd();
     if (node && node->nodeTypeKey() == loka::app::scene::NodeTypeToken<loka::app::TextEditorNode>())
       return static_cast<Win32TextEditorContext *>(context)->hwnd();
+    if (node && node->nodeTypeKey() == loka::app::scene::NodeTypeToken<loka::app::TextDocumentEditorNode>())
+      return static_cast<Win32TextDocumentViewContext *>(context)->hwnd();
     return 0;
   }
 

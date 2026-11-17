@@ -2,6 +2,7 @@
 #define LOKA_WIN32_CONTAINER_WINDOW_HPP
 
 #include "../Win32PaintGround.hpp"
+#include "Win32TextDocumentViewContext.hpp"
 #include "../Win32ScenePlatformController.hpp"
 
 namespace loka
@@ -25,6 +26,11 @@ namespace loka
       switch (msg)
       {
       case WM_CTLCOLORSTATIC:
+        if (Win32TextDocumentViewContext::fromWindow(reinterpret_cast<HWND>(lParam)))
+        {
+          result = DefWindowProcW(hwnd, msg, wParam, lParam);
+          return true;
+        }
         result = reinterpret_cast<LRESULT>(
             Win32StaticTextColors(reinterpret_cast<HDC>(wParam), reinterpret_cast<HWND>(lParam)));
         return true;

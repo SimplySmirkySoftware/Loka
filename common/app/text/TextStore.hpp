@@ -144,6 +144,12 @@ namespace loka
 
       protected:
         TextStoreRow(TextStoreLedger &owner, IPlatformController &controller);
+        /** Rail-only read: the claim link is attachment authority, never the native place.
+            O(1), no callbacks. */
+        bool viewAttached() const
+        {
+          return this->view_.remote() != 0;
+        }
         /** Rail birth commit only: move the view after all fallible preparation succeeds.
             Once per replacement, O(1), touches only old and fresh rows. */
         static void transferView(TextStoreRow &old, TextStoreRow &fresh);

@@ -26,6 +26,7 @@
 #include "context/Win32CardBandContext.hpp"
 #include "context/Win32EditTextContext.hpp"
 #include "context/Win32TextEditorContext.hpp"
+#include "context/Win32TextDocumentViewContext.hpp"
 #include "context/Win32ImageViewContext.hpp"
 #include "context/Win32OpenFileDialogContext.hpp"
 #include "context/Win32ConfirmDialogContext.hpp"
@@ -53,6 +54,7 @@ void RegisterWin32BuiltInSupport(Win32ScenePlatformController &controller)
   // Win32 owns the ZStack unit loop; only flat-layout rails register its handler.
   loka::app::layout::RegisterBuiltinNonZStackLayoutHandlers(
       controller.layoutHandlerRegistry_, &controller.rowLayoutMetrics(), &gridMetrics, Win32SceneLayout::spacing());
+  RegisterWin32TextDocumentViewNodeHandler(controller.nodeHandlerRegistry_);
   RegisterWin32TextEditorNodeHandler(controller.nodeHandlerRegistry_);
   RegisterWin32ButtonNodeHandler(controller.nodeHandlerRegistry_);
   RegisterWin32TextNodeHandler(controller.nodeHandlerRegistry_);

@@ -54,7 +54,7 @@ namespace loka
         return this->presentation_ < other.presentation_;
       }
     };
-    /** One view of a document; replacing document or result identity requires a new node. */
+    /** One view of a document; document/result identity and wrap are fixed for its lifetime. */
     class TextDocumentEditorNode : public scene::Node, public scene::IProjectedLayoutNode
     {
     public:
@@ -107,7 +107,8 @@ namespace loka
       {
         static bool accepts(const TextDocumentEditorNode *node, const TextDocumentEditorProps &next)
         {
-          return node->props.document_ == next.document_ && node->props.attachment_.state() == next.attachment_.state();
+          return node->props.document_ == next.document_ && node->props.attachment_.state() == next.attachment_.state()
+                 && node->props.presentation_.wrap() == next.presentation_.wrap();
         }
       };
       template <> struct NodePropsApplier<TextDocumentEditorNode, TextDocumentEditorProps>

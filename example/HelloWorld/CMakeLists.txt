@@ -123,6 +123,7 @@ if(WIN32)
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32CellContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32TextContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32EditTextContext.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32TextDocumentViewContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32TextEditorContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32OpenFileDialogContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32ConfirmDialogContext.cpp
@@ -160,6 +161,7 @@ if(WIN32)
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32RectSurfaceRedrawTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32WideApiTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32TextStoreTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32TextDocumentViewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32RailMetricsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32WindowClientSizeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32ProfilerTests.cpp
