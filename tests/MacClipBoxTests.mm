@@ -1165,8 +1165,8 @@ void testMacClipBoxPopupAnchorMatchesTwin()
   for (CFIndex i = 0; windows && i < CFArrayGetCount(windows); ++i)
   {
     NSDictionary *info = (NSDictionary *)CFArrayGetValueAtIndex(windows, i);
-    if ([[info objectForKey:(NSString *)kCGWindowOwnerPID] intValue] != getpid()
-        || [[info objectForKey:(NSString *)kCGWindowLayer] intValue] != menuLevel)
+    if ([[info objectForKey:(NSString *)kCGWindowOwnerPID] intValue] != getpid() ||
+        [[info objectForKey:(NSString *)kCGWindowLayer] intValue] != menuLevel)
       continue;
     CGRect bounds;
     if (!CGRectMakeWithDictionaryRepresentation((CFDictionaryRef)[info objectForKey:(NSString *)kCGWindowBounds],
@@ -1225,9 +1225,15 @@ void testMacClipBoxPopupMenuOpensLikeTwin()
       screen = [f.host.window convertRectToScreen:screen];
     else
       screen.origin = [f.host.window convertBaseToScreen:screen.origin];
-    std::printf("[pin] clip popup menu %d: menu (%.0f,%.0f %.0fx%.0f), popup x %.0f..%.0f, selected %ld\n", clipped,
-                presented[clipped].origin.x, presented[clipped].origin.y, presented[clipped].size.width,
-                presented[clipped].size.height, NSMinX(screen), NSMaxX(screen), (long)selected[clipped]);
+    std::printf("[pin] clip popup menu %d: menu (%.0f,%.0f %.0fx%.0f), popup x %.0f..%.0f, selected %ld\n",
+                clipped,
+                presented[clipped].origin.x,
+                presented[clipped].origin.y,
+                presented[clipped].size.width,
+                presented[clipped].size.height,
+                NSMinX(screen),
+                NSMaxX(screen),
+                (long)selected[clipped]);
     LOKA_VERIFY(presented[clipped].size.height > boxHeight);
     LOKA_VERIFY(NSMinX(presented[clipped]) < NSMaxX(screen) && NSMaxX(presented[clipped]) > NSMinX(screen));
     LOKA_VERIFY(selected[clipped] == 5);
