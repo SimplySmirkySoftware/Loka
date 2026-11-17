@@ -2090,6 +2090,18 @@ void Win32ScenePlatformController::showNativeWindowAt(HWND hwnd, const loka::win
   SetWindowPos(hwnd, 0, frame.left, frame.top, frame.right - frame.left, frame.bottom - frame.top, flags);
 }
 
+void Win32ScenePlatformController::swapNativeReplacement(HWND fresh, HWND old)
+{
+  // Swap visibility without drawing: on the VM both SW_SHOWNA of fresh and SW_HIDE of the covered old
+  // erased the view window synchronously (probe and trace, 2026-11-17). Fresh sits exactly over old,
+  // so nothing is exposed; fresh alone is invalidated and paints once at the next pump.
+  SetWindowPos(
+      fresh, 0, 0, 0, 0, 0, SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
+  SetWindowPos(
+      old, 0, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
+  InvalidateRect(fresh, 0, TRUE);
+}
+
 bool Win32ScenePlatformController::positionNativeReplacement(HWND fresh, HWND old)
 {
   RECT frame;

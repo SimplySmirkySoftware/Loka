@@ -416,6 +416,8 @@ private:
   void performLayout(int clientWidth, int clientHeight);
   /** Hidden replacement copies already-native geometry and inserts immediately above old. */
   static bool positionNativeReplacement(HWND fresh, HWND old);
+  /** Commit-time visibility swap of a covering replacement; draws nothing, leaves fresh invalid. */
+  static void swapNativeReplacement(HWND fresh, HWND old);
   /** Position and first-show one projected HWND; suppress redraw only in a layout pass. */
   void showNativeWindowAt(HWND hwnd, const loka::win32::NativeRect &geometry);
   /** Position one projected HWND. A root layout pass suppresses per-child

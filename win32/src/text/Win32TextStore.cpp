@@ -240,21 +240,7 @@ TextStoreBirth Win32TextStore::create(Win32TextParking &parking,
     const bool hadFocus = GetFocus() == previousRow->edit_;
     transferView(*previousRow, *row);
     if (GetWindowLongW(previousRow->edit_, GWL_STYLE) & WS_VISIBLE)
-    {
-      // Swap visibility without drawing: on the VM both SW_SHOWNA of fresh and SW_HIDE of the covered old
-      // erased the view window synchronously (probe and trace, 2026-11-17). Fresh sits exactly over old,
-      // so nothing is exposed; fresh alone is invalidated below and paints once at the next pump.
-      SetWindowPos(
-          edit, 0, 0, 0, 0, 0, SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
-      SetWindowPos(previousRow->edit_,
-                   0,
-                   0,
-                   0,
-                   0,
-                   0,
-                   SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
-      InvalidateRect(edit, 0, TRUE);
-    }
+      Win32ScenePlatformController::swapNativeReplacement(edit, previousRow->edit_);
     // A hidden window keeps focus until it moves, so focus reaches fresh before old is reparented.
     if (hadFocus)
       SetFocus(edit);
