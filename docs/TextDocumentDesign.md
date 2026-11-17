@@ -454,20 +454,23 @@ publish, and an attach/detach/attach interval may produce no result change.
 requested by observers wait until publication ends; document writes posted
 from those observers are refused by the existing publication admission gate.
 
-Document and result-box identity cannot change in an existing editor node.
+Document identity, result-box identity, and wrap cannot change in an existing editor node.
 Compatibility refusal has path-dependent consequences:
 
-| Path | Incompatible identity |
+| Path | Incompatible identity or wrap |
 |---|---|
 | Ordinary child retain/reconcile, including an editor nested inside a parked container | Materialize a new child and retire the old node. A parked replacement has no attached view until return. |
 | Returning to a parked branch | Discard an incompatible parked candidate and build anew. If construction refuses, the outgoing active branch stays. |
-| Applying props while the editor itself is the parked branch root | Refuse; retain the existing node, claim, store, and body. |
+| Applying props while the editor itself is the parked branch root | Refuse; retain the existing node, claim, store, and body with the old wrap. |
 | Keyed replacement | Replace the generation regardless of compatibility. |
 | Direct Lazy item | Not supported: the editor is not a `ComponentNodeWithProps`. Editors inside Lazy components remain outside this page's scope. |
 
 The branch-root versus nested-child distinction follows the page 4 v1.2 ruling;
-Boundary reconciliation is unchanged. Presentation and focus-binding changes
-remain compatible and update the retained context. The kernel and Null pins
+Boundary reconciliation is unchanged. Wrap is a birth-time fact on Win32 (probe
+P4-2a), so wrap changes are incompatible on every rail and the Win32 view, page 4w,
+refuses `wrap=false` (native view implementation in 4w-2b).
+Other presentation and focus-binding changes remain compatible and update the
+retained context. The kernel and Null pins
 are in `tests/TextDocumentViewTests.cpp`. Win32, macOS, and Toolbox keep the
 refusing/default view doors; their native implementations and runtime evidence
 belong to the respective rail pages.
