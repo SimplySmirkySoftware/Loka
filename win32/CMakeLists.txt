@@ -18,6 +18,8 @@ set(SOURCES
   src/Win32BuiltInSupport.cpp
   src/Win32Window.cpp
   src/Win32ScenePlatformController.cpp
+  src/text/Win32TextParking.cpp
+  src/text/Win32TextStore.cpp
   src/Win32OpenURL.cpp
   src/Win32LaunchURLs.cpp
   src/Win32PlatformContext.cpp
@@ -70,7 +72,7 @@ target_include_directories(LokaWin32Core PRIVATE
 )
 
 target_link_libraries(LokaWin32Core
-  PUBLIC LokaWin32WideApiContract
+  PUBLIC imm32 LokaWin32WideApiContract
   PRIVATE windowscodecs ole32 shell32
 )
 
@@ -117,7 +119,7 @@ if(LOKA_WIN32_TOP_LEVEL_SOURCE_NORMALIZED STREQUAL
     )
     target_compile_definitions(${target} PRIVATE TEST_BUILD)
     target_link_libraries(${target} PRIVATE
-      LokaWin32WideApiContract
+      imm32 LokaWin32WideApiContract
       windowscodecs
       ole32
       shell32
@@ -366,7 +368,7 @@ if(LOKA_WIN32_TOP_LEVEL_SOURCE_NORMALIZED STREQUAL
         "LOKA_STANDALONE_FLOW_CONFIG_TYPE=${config_type}"
       )
       target_link_libraries(${_loka_standalone_target} PRIVATE
-        LokaWin32WideApiContract
+        imm32 LokaWin32WideApiContract
         windowscodecs
         ole32
         shell32
@@ -502,7 +504,7 @@ if(LOKA_WIN32_TOP_LEVEL_SOURCE_NORMALIZED STREQUAL
       ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
     target_compile_definitions(${target} PRIVATE TEST_BUILD)
-    target_link_libraries(${target} PRIVATE LokaWin32WideApiContract windowscodecs ole32 shell32 psapi)
+    target_link_libraries(${target} PRIVATE imm32 LokaWin32WideApiContract windowscodecs ole32 shell32 psapi)
     set_target_properties(${target} PROPERTIES
       CXX_STANDARD 98
       CXX_STANDARD_REQUIRED YES

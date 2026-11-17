@@ -104,6 +104,8 @@ if(WIN32)
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/platform/Win32DisplayScale.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/platform/Win32DisplayFont.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/Win32ScenePlatformController.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/text/Win32TextParking.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/text/Win32TextStore.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/Win32BuiltInSupport.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/Win32App.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/Win32MenuAttachment.cpp
@@ -157,6 +159,7 @@ if(WIN32)
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32RectSurfacePaintTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32RectSurfaceRedrawTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32WideApiTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32TextStoreTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32RailMetricsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32WindowClientSizeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32ProfilerTests.cpp
@@ -179,7 +182,7 @@ if(WIN32)
   )
 
   target_compile_definitions(LokaTestsWin32 PRIVATE TEST_BUILD)
-  target_link_libraries(LokaTestsWin32 PRIVATE LokaWin32WideApiContract ole32 windowscodecs shell32)
+  target_link_libraries(LokaTestsWin32 PRIVATE imm32 LokaWin32WideApiContract ole32 windowscodecs shell32)
 
   if(MSVC)
     # tests/FlowDslTests.cpp outgrew the default COFF section limit (C1128).

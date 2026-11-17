@@ -190,6 +190,9 @@ namespace loka
             presentation resources and park the body. Preserve body, selection, undo and marks.
             No kernel reentry. Retired native resources are silent, including at drain. */
         virtual void detachTextView(TextStoreRow &) {}
+        /** Once per row retirement, after view detach and before link cuts; O(1), this row only.
+            No allocation, no failure, no kernel reentry: marks only. Default does nothing. */
+        virtual void retireTextStore(TextStoreRow &) {}
         /** Once after attach or compatible props apply, only this row. No kernel reentry.
             Cosmetic preparation failure uses defaults; behavioral settings must be honored. */
         virtual void applyTextViewPresentation(TextStoreRow &, const TextViewPresentation &) {}

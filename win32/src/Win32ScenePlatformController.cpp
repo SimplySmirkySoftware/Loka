@@ -1,3 +1,4 @@
+#include "text/Win32TextStore.hpp"
 #include "app/nodes/nestable/ScrollViewSettlement.hpp"
 #include "context/Win32ZStackContext.hpp"
 #include "context/Win32ClipBoxContext.hpp"
@@ -464,6 +465,7 @@ Win32ScenePlatformController::~Win32ScenePlatformController()
     }
   }
   clearContexts();
+  this->textParking_.destroy();
   this->drainNativeRetirements();
 }
 
@@ -854,12 +856,13 @@ void Win32ScenePlatformController::drainNativeRetirements()
 #ifdef LOKA_LIFECYCLE_AUDIT
     assert(!this->borrowPhase().open());
 #endif
-  for (size_t i = 0; i < this->retiredWindows_.size(); ++i)
-  {
-    if (this->retiredWindows_[i])
+    this->textParking_.drain();
+    for (size_t i = 0; i < this->retiredWindows_.size(); ++i)
     {
-      DestroyWindow(this->retiredWindows_[i]);
-    }
+      if (this->retiredWindows_[i])
+      {
+        DestroyWindow(this->retiredWindows_[i]);
+      }
   }
   this->retiredWindows_.clear();
 }
@@ -871,6 +874,7 @@ void Win32ScenePlatformController::destroy()
 #endif
   pendingInvalidations_.clear();
   clearContexts();
+  this->textParking_.destroy();
   this->drainNativeRetirements();
   rootNode_ = 0;
   clientWidth_ = 0;
@@ -2007,4 +2011,41 @@ void Win32ScenePlatformController::releaseMenu()
   Win32Window *window = Win32Window::FromHwnd(this->rootHwnd_);
   if (window)
     window->menuAttachment().releaseFrom(window->scene());
+}
+
+// Store doors parallel the Null rail; each touches only its argument row.
+loka::app::scene::TextStoreBirth
+Win32ScenePlatformController::createTextStore(loka::app::TextStoreSource &source,
+                                              loka::app::scene::TextStoreRow *old,
+                                              loka::app::scene::TextStoreRow *&fresh,
+                                              loka::app::scene::TextStoreReading &reading)
+{
+  (void)old; // No view exists in this slice; replacement prepares an independent row.
+  return Win32TextStore::create(this->textParking_, *this, source, fresh, reading);
+}
+void Win32ScenePlatformController::retireTextStore(loka::app::scene::TextStoreRow &row)
+{
+  static_cast<Win32TextStore &>(row).stopMarks();
+}
+bool Win32ScenePlatformController::readTextStore(loka::app::scene::TextStoreRow &row,
+                                                 loka::app::scene::TextStoreReading &out)
+{
+  return static_cast<Win32TextStore &>(row).read(out);
+}
+bool Win32ScenePlatformController::peekTextStore(loka::app::scene::TextStoreRow &row)
+{
+  return static_cast<Win32TextStore &>(row).pending();
+}
+bool Win32ScenePlatformController::applyTextRequest(loka::app::scene::TextStoreRow &row, unsigned long target)
+{
+  return static_cast<Win32TextStore &>(row).apply(target);
+}
+loka::app::scene::TextChunkResult Win32ScenePlatformController::readTextChunk(loka::app::scene::TextStoreRow &row,
+                                                                              unsigned long &offset,
+                                                                              unsigned long end,
+                                                                              char *out,
+                                                                              unsigned long capacity,
+                                                                              unsigned long &written)
+{
+  return static_cast<Win32TextStore &>(row).chunk(offset, end, out, capacity, written);
 }
