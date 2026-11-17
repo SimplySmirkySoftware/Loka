@@ -1140,6 +1140,7 @@ namespace loka
 #endif
 
 #if defined(TEST_BUILD) && defined(_WIN32)
+#include "text/Win32TextStore.hpp"
 namespace loka
 {
   namespace win32
@@ -1148,6 +1149,7 @@ namespace loka
     {
       namespace
       {
+        unsigned viewPreparationFailures[TEXT_VIEW_PREPARATION_COUNT] = {};
         unsigned parkingFailures = 0, localFailures = 0, editFailures = 0, dpiFailures = 0;
         bool consume(unsigned &count)
         {
@@ -1157,6 +1159,14 @@ namespace loka
           return true;
         }
       } // namespace
+      void failTextViewPreparations(TextViewPreparation stage, unsigned count)
+      {
+        viewPreparationFailures[stage] = count;
+      }
+      bool refuseTextViewPreparation(TextViewPreparation stage)
+      {
+        return consume(viewPreparationFailures[stage]);
+      }
       void failTextParkingCreations(unsigned count)
       {
         parkingFailures = count;

@@ -471,9 +471,9 @@ P4-2a), so wrap changes are incompatible on every rail and the Win32 view, page 
 refuses `wrap=false` (native view implementation in 4w-2b).
 Other presentation and focus-binding changes remain compatible and update the
 retained context. The kernel and Null pins
-are in `tests/TextDocumentViewTests.cpp`. Win32, macOS, and Toolbox keep the
-refusing/default view doors; their native implementations and runtime evidence
-belong to the respective rail pages.
+are in `tests/TextDocumentViewTests.cpp`. macOS and Toolbox keep the refusing/default
+view doors; their native implementations and runtime evidence belong to their rail pages.
+The Win32 implementation is described below.
 
 
 ### Win32 store row and parking (4w-1)
@@ -525,3 +525,64 @@ and notification probes). `Win32TextStoreTests.cpp` pins the rail contracts;
 `TextDocumentKernelTests.cpp` and `TextDocumentViewTests.cpp` pin the retirement
 door. Win32 build/runtime verification remains the VM handoff's responsibility;
 Linux suite results do not establish native behavior.
+
+
+### Win32 document view (4w-2b)
+
+`Win32TextDocumentViewContext` borrows its constructor's projection parent HWND;
+its claimed `Win32TextStore` owns the EDIT. Attachment is derived from the common
+claim link, never from visibility or native parentage. The focus-participant
+property recognizes a typed view context; focus resolution additionally requires
+the claimed store's EDIT identity. During replacement preparation both HWNDs can
+carry the same context property, but only the claimed one is a focus target.
+
+Attachment refuses `wrap=false` and, when the awareness APIs are available, unequal
+EDIT/view DPI awareness. It installs the focus property, reparents the hidden
+EDIT, and requests layout. The kernel applies presentation once after successful
+attachment. Presentation borrows the controller's styled fallback font, applies
+read-only and scaled left/right margins, and does not change birth-time wrapping.
+EDIT is born with WS_VSCROLL and without ES_AUTOHSCROLL. v1 uses native default
+text/background colors; TextStyle colors are not projected. Read-only stops user
+input, not document requests. Root and container WM_CTLCOLORSTATIC paths delegate
+recognized document EDITs to DefWindowProcW, preserving opaque native ground.
+
+Every layout visit positions the claimed EDIT. Its own WS_VISIBLE bit determines
+whether positioning also shows it: SWP_SHOWWINDOW, SWP_NOACTIVATE, SWP_NOZORDER,
+and SWP_NOREDRAW only during a native layout pass. The pass's existing final
+redraw then paints the final frame. Outside that pass, normal native redraw is
+allowed. Attached views answer exact empty framework paint damage because EDIT
+paints itself; detached/refused views answer PAINT_REFUSED_NO_CONTEXT.
+
+Detach synchronously removes the property, hides EDIT, returns it to parking,
+and clears its borrowed font. The same function rolls back a partially prepared
+replacement. The SetParent return is asserted in lifecycle-audit builds. Release
+has no recovery branch: the frozen qualification relies on live same-controller
+windows and equal birth awareness, rather than introducing a partially detached
+state. Earlier Windows versions without awareness queries retain the process-wide
+awareness limitation described for birth above. DPI font replacement visits attached
+EDITs and selects the node's presentation style; parked EDITs hold no cached font.
+
+Replacement branches on the old row's claim. An audit assertion checks agreement
+with native parentage. Preparation qualifies DPI, copies the property, reparents
+fresh hidden, copies font/read-only/margins from old, and positions fresh immediately
+above old at the same native frame. The controller's native replacement geometry
+door uses the preceding sibling (or HWND_TOP), not old as the insert-after target.
+Any refusal detaches fresh before partial-birth retirement; no view child or context
+property remains while waiting for drain. Commit transfers the claim, shows fresh
+without activation only if old's own WS_VISIBLE was set, detaches old, and restores
+focus to fresh only if old held focus. The kernel subsequently retires old. No
+message pump, body copy, or extra HWND retirement owner is introduced.
+
+Lifecycle delivery parks EDIT before deferred container destruction. Scene teardown
+releases contexts before platform/root destruction, including external WM_DESTROY
+and retained descendants. EDIT destruction remains on the parking ledger's clock.
+The existing dialog Tab path includes attached EDITs and excludes parked ones.
+IME reads remain focus-gated and commit remains a no-op (page 1d); v1 does not
+promise synchronous delivery of IME's posted characters.
+
+Sources: page 4w v1.0 (precedence §0.4 > §0.3 > §0.2 > §0.1), 4w-2 Gate 1 v1.0
+(§0.1 overrides the body), owner ruling W / probe P4-2a, and page 1d v0.4.
+`Win32TextDocumentViewTests.cpp` contains the VM pins; the 4w-1 store pins still
+apply. These additions are not Win32 build-verified or runtime-verified by Linux
+checks. Real-IME and mixed-awareness branches print explicit skip reasons when
+the fixture cannot exercise them; the VM handoff must supply those results.
