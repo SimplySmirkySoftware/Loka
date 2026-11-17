@@ -1211,14 +1211,25 @@ void testMacClipBoxPopupMenuOpensLikeTwin()
     LokaClipTestMenuProbe *probe = [[[LokaClipTestMenuProbe alloc] init] autorelease];
     [probe setMenu:[popup menu]];
     [probe setPick:5];
-    NSTimer *timer = [NSTimer timerWithTimeInterval:0.3
-                                             target:probe
-                                           selector:@selector(tracking:)
-                                           userInfo:nil
-                                            repeats:NO];
-    [[NSRunLoop currentRunLoop] addTimer:timer forMode:NSEventTrackingRunLoopMode];
-    [popup performClick:nil];
-    [timer invalidate];
+    // On 10.9 the window server occasionally returns from performClick: without
+    // starting the menu (seen once in about 19 runs, in the unclipped twin).
+    // Each miss is printed; a menu that never opens stays red.
+    for (int attempt = 0; attempt != 3 && ![probe fired]; ++attempt)
+    {
+      if (attempt != 0)
+      {
+        std::printf("[retry] clip popup menu %d: the menu did not open (attempt %d)\n", clipped, attempt);
+        settleClipWindow(f.host);
+      }
+      NSTimer *timer = [NSTimer timerWithTimeInterval:0.3
+                                               target:probe
+                                             selector:@selector(tracking:)
+                                             userInfo:nil
+                                              repeats:NO];
+      [[NSRunLoop currentRunLoop] addTimer:timer forMode:NSEventTrackingRunLoopMode];
+      [popup performClick:nil];
+      [timer invalidate];
+    }
     LOKA_VERIFY([probe fired]);
     presented[clipped] = [probe presented];
     selected[clipped] = [popup indexOfSelectedItem];
