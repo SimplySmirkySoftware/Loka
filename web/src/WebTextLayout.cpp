@@ -206,6 +206,7 @@ public:
   {
     return this->memo_.width(start, end, this->snapshot_.constraint_.fontKey, out);
   }
+
 private:
   const WebTextSnapshot &snapshot_;
   WebRangeWidthMemo memo_;
