@@ -87,6 +87,12 @@ namespace webtest
   extern bool geometryMeasurable, textService;
   extern int skinSelection;
   extern unsigned skinPulls;
+  /** Opt-in oracle rows owned by the fake; reset removes all overrides.
+      Cost: test setup writes one row; each measurement does one keyed lookup. */
+  typedef std::vector<int> MetricKey;
+  typedef std::pair<MetricKey, std::string> RangeKey;
+  extern std::map<MetricKey, std::pair<int, int> > descriptorMetrics;
+  extern std::map<RangeKey, int> rangeWidths;
   void reset();
   void fire(unsigned handle, double now);
   unsigned task(int kind);
