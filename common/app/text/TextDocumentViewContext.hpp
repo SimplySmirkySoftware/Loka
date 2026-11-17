@@ -24,6 +24,12 @@ namespace loka
 
       protected:
         TextDocumentViewContext(IPlatformController &, SceneTextDocuments &, TextDocumentEditorNode &);
+        /** Rail-only borrowed read: the claim link is attachment authority, never the native place.
+            O(1), no callbacks; the returned row is not retained. */
+        TextStoreRow *attachedStore() const
+        {
+          return this->link_.remote();
+        }
 
       private:
         IPlatformController &controller_;

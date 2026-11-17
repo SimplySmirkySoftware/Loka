@@ -17,6 +17,10 @@ namespace loka
         {
           return (row.link_.row() ? 1u : 0u) | (row.view_.remote() ? 2u : 0u);
         }
+        static bool viewAttached(const scene::TextStoreRow &row)
+        {
+          return row.viewAttached();
+        }
         static bool retired(const scene::TextStoreRow &row)
         {
           return row.phase_ == scene::TextStoreRow::RETIRED;
