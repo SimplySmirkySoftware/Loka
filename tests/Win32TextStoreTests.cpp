@@ -402,7 +402,10 @@ namespace
     virtual ~StoreRoot()
     {
       // Scene destroys the platform before reclaiming the logical root.
-      LOKA_VERIFY(!loka::app::testing::TextDocumentAccess::registration(this->text)->store());
+      // The declaration may already have withdrawn its registration; either way no store link survives.
+      const loka::app::scene::TextDocumentRegistration *registration =
+          loka::app::testing::TextDocumentAccess::registration(this->text);
+      LOKA_VERIFY(!registration || !registration->store());
       ++rootDeaths;
     }
     virtual void composeNode(NodeComposition &) {}
