@@ -33,7 +33,8 @@ namespace loka
           const unsigned long editEnd = range->start() + range->length();
           const unsigned long tail = editEnd > newEnd ? editEnd - newEnd : 0;
           const unsigned long oldLength = oldEnd + tail - start;
-          const unsigned long newLength = (std::max)(newEnd, editEnd) - start - range->length() + range->insertedLength();
+          const unsigned long newLength =
+              (std::max)(newEnd, editEnd) - start - range->length() + range->insertedLength();
           const TextChangedRange combined(start, oldLength, newLength);
           this->reading_ = TextStoreReading(true, &combined, 0, 0, this->reading_.marked());
         }
