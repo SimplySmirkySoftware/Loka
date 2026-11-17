@@ -167,6 +167,9 @@ namespace
       return GetActiveWindow() == this->window.hwnd();
     }
   };
+  // A child EDIT refuses PrintWindow with PW_CLIENTONLY or 0 (VM probe 2026-11-17: ok=0, sentinel kept);
+  // PW_RENDERFULLCONTENT captures it and distinguishes COLOR_WINDOW from the read-only COLOR_3DFACE ground.
+  const UINT kPrintFullContent = 0x00000002;
   COLORREF printedGround(HWND edit)
   {
     HDC dc = GetDC(edit);
@@ -181,7 +184,7 @@ namespace
     const COLORREF expected = GetSysColor(COLOR_WINDOW);
     HBRUSH sentinel = CreateSolidBrush(expected ^ 0x00ffffff);
     FillRect(memory, &client, sentinel);
-    LOKA_VERIFY(PrintWindow(edit, memory, PW_CLIENTONLY));
+    LOKA_VERIFY(PrintWindow(edit, memory, kPrintFullContent));
     const COLORREF pixel = GetPixel(memory, client.right / 2, client.bottom - 4);
     SelectObject(memory, previous);
     DeleteObject(sentinel);
@@ -511,6 +514,9 @@ void testWin32TextViewReplacement()
     GetWindowRect(edit, &freshFrame);
     LOKA_VERIFY(EqualRect(&oldFrame, &freshFrame));
     LOKA_VERIFY(GetWindow(edit, GW_HWNDPREV) == above);
+    if (!(parent.erases == 0 && oldPaint.paints == 0 && siblingPaint.paints == 0 && freshPaints == 0))
+      std::printf("replacement case %u: parent erases=%u paints=%u old paints=%u sibling paints=%u fresh paints=%u\n",
+                  focusCase, parent.erases, parent.paints, oldPaint.paints, siblingPaint.paints, freshPaints);
     LOKA_VERIFY(parent.erases == 0 && oldPaint.paints == 0 && siblingPaint.paints == 0 && freshPaints == 0);
     LOKA_VERIFY(GetFocus() == (focus == old ? edit : focus));
     if (!active && focusCase != 2)
@@ -556,6 +562,8 @@ void testWin32TextViewReplacementRollback()
       LOKA_VERIFY(!GetWindowLongPtrW(child, GWLP_USERDATA));
       ++parked;
     }
+    if (parked != 1)
+      std::printf("rollback stage %u: parked children=%u\n", stage, parked);
     LOKA_VERIFY(parked == 1);
     for (HWND child = GetWindow(parent, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT))
       LOKA_VERIFY(child == old || Win32TextDocumentViewContext::fromWindow(child) != &f.view());
@@ -617,7 +625,7 @@ namespace
     // Sentinel distinguishes an unpainted transparent ground from the native default.
     HBRUSH sentinel = CreateSolidBrush(RGB(255, 0, 255));
     FillRect(memory, &client, sentinel);
-    LOKA_VERIFY(PrintWindow(edit, memory, PW_CLIENTONLY));
+    LOKA_VERIFY(PrintWindow(edit, memory, kPrintFullContent));
     LOKA_VERIFY(GetPixel(memory, client.right / 2, client.bottom - 4) == expected);
     DeleteObject(sentinel);
     SelectObject(memory, previous);
@@ -679,6 +687,11 @@ void testWin32TextViewDpi()
   attach(f.view());
   LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(edit, WM_GETFONT, 0, 0))
               == f.rail().fallbackFont(f.node().props.presentation_.style()));
+  {
+    const LRESULT margins = SendMessageW(edit, EM_GETMARGINS, 0, 0);
+    if (margins != MAKELPARAM(10, 10))
+      std::printf("dpi margins: left=%u right=%u expected 10,10\n", LOWORD(margins), HIWORD(margins));
+  }
   LOKA_VERIFY(SendMessageW(edit, EM_GETMARGINS, 0, 0) == MAKELPARAM(10, 10));
   detach(f.view());
   typedef HANDLE(WINAPI * GetContext)(HWND);
