@@ -1,5 +1,9 @@
 #ifndef LOKA_TESTS_TEXT_DOCUMENT_VIEW_TESTS_HPP
 #define LOKA_TESTS_TEXT_DOCUMENT_VIEW_TESTS_HPP
+void testTextViewWrapParkedRootRefuses();
+void testTextViewWrapChildReplacement();
+void testTextViewWrapReturningBranch();
+void testTextViewClaimDerivedReads();
 void testTextViewParkedRootRefuses();
 void testTextViewParkedNestedReplacement();
 void testTextViewCompletionSnapshot();

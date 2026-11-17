@@ -294,6 +294,7 @@ LOKA_TEST(testMacClipBoxChannelRefusalKeepsHostRect)
 LOKA_TEST(testMacClipBoxClickReachesSiblingBelow)
 LOKA_TEST(testMacClipBoxDragTracksLikeTwin)
 LOKA_TEST(testMacClipBoxPopupAnchorMatchesTwin)
+LOKA_TEST(testMacClipBoxPopupMenuOpensLikeTwin)
 LOKA_TEST(testMacClipBoxGroundCapturesInBothBlurPaths)
 LOKA_TEST(testMacClipBoxUnresolvedWidthLayerBackedRssIsFlat)
 

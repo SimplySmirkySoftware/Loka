@@ -8,6 +8,7 @@
 #include "platform/null/NullScenePlatformController.hpp"
 #include "platform/null/context/NullTextDocumentViewContext.hpp"
 #include "support/TextDocumentAccess.hpp"
+#include "support/TextStoreConformance.hpp"
 #include "support/TestVerify.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include "core/util/StateTrackerGuard.hpp"
@@ -24,6 +25,7 @@ namespace
   using namespace loka::app::testing;
   typedef loka::dsl::testing::SceneTestAccess SceneAccess;
   unsigned refusedViewCreations = 0;
+  unsigned viewMaterializations = 0;
   /** A fixture definition that refuses both materialization doors while armed. */
   class ViewDefinition : public TextDocumentEditor
   {
@@ -43,6 +45,7 @@ namespace
         --refusedViewCreations;
         return 0;
       }
+      ++viewMaterializations;
       return TextDocumentEditor::create();
     }
     virtual Node *createInPlace(void *memory) const
@@ -52,6 +55,7 @@ namespace
         --refusedViewCreations;
         return 0;
       }
+      ++viewMaterializations;
       return TextDocumentEditor::createInPlace(memory);
     }
   };
@@ -130,23 +134,45 @@ namespace
         ++count;
     return count;
   }
-  struct Fixture
+  class DirectViewRoot : public BoundaryNodeFor<DirectViewRoot>
+  {
+  public:
+    TextDocument first;
+    NodeState<TextViewAttachment> result;
+    NodeState<bool> shown;
+    explicit DirectViewRoot(const BoundaryPropsFor<DirectViewRoot> &props)
+        : BoundaryNodeFor<DirectViewRoot>(props)
+    {
+      this->document(this->first);
+      this->state(this->result, TextViewAttachment());
+      this->state(this->shown, true);
+    }
+    virtual void composeNode(NodeComposition &composition)
+    {
+      composition.declare(Show(*this->shown.state()) << ViewDefinition(this->first).attachment(this->result));
+    }
+    NodeDefinitionBase *definition()
+    {
+      return this->composition().root();
+    }
+  };
+  template <class Root> struct ViewFixture
   {
     NullScenePlatformController controller;
     Scene scene;
-    Fixture()
-        : scene(Boundary<ViewRoot>())
+    ViewFixture()
+        : scene(Boundary<Root>())
     {
       LOKA_VERIFY(this->scene.mount(&this->controller));
       SceneAccess::updateAttached(this->scene, true);
     }
-    ~Fixture()
+    ~ViewFixture()
     {
       SceneAccess::unmount(this->scene);
     }
-    ViewRoot &root()
+    Root &root()
     {
-      return *static_cast<ViewRoot *>(SceneAccess::rootBoundary(this->scene));
+      return *static_cast<Root *>(SceneAccess::rootBoundary(this->scene));
     }
     void complete()
     {
@@ -161,6 +187,7 @@ namespace
       this->scene.flushInvalidation();
     }
   };
+  typedef ViewFixture<ViewRoot> Fixture;
   TextDocumentEditorProps *editorProps(NodeDefinitionBase *definition)
   {
     if (!definition)
@@ -223,6 +250,102 @@ void testTextViewParkedRootRefuses()
   LOKA_VERIFY(store == TextDocumentAccess::store(root.first) && !store->view.place);
   LOKA_VERIFY(TextDocumentAccess::committedText(root.first) == "preserved");
   LOKA_VERIFY(calls(f.controller, NullScenePlatformController::TextViewCall::ATTACH) == attaches);
+}
+void testTextViewWrapParkedRootRefuses()
+{
+  Fixture f;
+  ViewRoot &root = f.root();
+  TextDocumentEditorNode *node = editor(&root);
+  NodeContext *context = node->getContext();
+  NullTextStore *store = TextDocumentAccess::store(root.first);
+  TextDocumentAccess::body(root.first, "wrap body");
+  f.show(false);
+  TextDocumentEditor next(
+      TextDocumentEditorProps(node->props).presentation(TextViewPresentation(TextStyle(), 0, false, false)));
+  LOKA_VERIFY(!root.reconcile(node, next, f.scene, f.controller));
+  f.complete();
+  LOKA_VERIFY(node->getContext() == context && node->props.presentation_.wrap());
+  LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_DETACHED);
+  LOKA_VERIFY(!store->view.place && TextDocumentAccess::store(root.first) == store);
+  LOKA_VERIFY(TextDocumentAccess::committedText(root.first) == "wrap body");
+  f.show(true);
+  f.complete();
+  LOKA_VERIFY(editor(&root) == node && node->getContext() == context);
+  LOKA_VERIFY(store->view.place == context && TextStoreTestAccess::viewAttached(*store));
+  LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_ATTACHED);
+  LOKA_VERIFY(TextDocumentAccess::committedText(root.first) == "wrap body");
+}
+void testTextViewWrapChildReplacement()
+{
+  for (unsigned parked = 0; parked != 2; ++parked)
+  {
+    Fixture f;
+    ViewRoot &root = f.root();
+    NullTextStore *store = TextDocumentAccess::store(root.first);
+    TextDocumentAccess::body(root.first, "wrap body");
+    for (unsigned wrap = 0; wrap != 2; ++wrap)
+    {
+      Node *parent = box(&root);
+      TextDocumentEditorNode *old = editor(parent);
+      if (parked)
+      {
+        f.show(false);
+        f.complete();
+      }
+      const TextDocumentEditorProps props =
+          TextDocumentEditorProps(old->props).presentation(TextViewPresentation(TextStyle(), 0, false, wrap != 0));
+      Box next;
+      next << TextDocumentEditor(props);
+      *editorProps(root.definition()) = props;
+      LOKA_VERIFY(root.reconcile(parent, next, f.scene, f.controller));
+      TextDocumentEditorNode *fresh = editor(parent);
+      LOKA_VERIFY(fresh && fresh != old && fresh->props.presentation_.wrap() == (wrap != 0));
+      LOKA_VERIFY(old->lifecycleFact() == NODE_FACT_RETIRED && !old->getContext());
+      LOKA_VERIFY(!store->view.place && !TextStoreTestAccess::viewAttached(*store));
+      if (parked)
+      {
+        LOKA_VERIFY(!fresh->getContext());
+        f.complete();
+        LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_DETACHED);
+        f.show(true);
+      }
+      else
+        f.controller.onChange(&root, NODE_DIRTY_INITIAL, true);
+      f.complete();
+      LOKA_VERIFY(editor(&root) == fresh && fresh->getContext());
+      LOKA_VERIFY(store == TextDocumentAccess::store(root.first) && store->view.place == fresh->getContext());
+      LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_ATTACHED);
+      LOKA_VERIFY(TextDocumentAccess::committedText(root.first) == "wrap body");
+    }
+  }
+}
+void testTextViewWrapReturningBranch()
+{
+  ViewFixture<DirectViewRoot> f;
+  DirectViewRoot &root = f.root();
+  NullTextStore *store = TextDocumentAccess::store(root.first);
+  TextDocumentAccess::body(root.first, "wrap body");
+  for (unsigned wrap = 0; wrap != 2; ++wrap)
+  {
+    const unsigned attaches = calls(f.controller, NullScenePlatformController::TextViewCall::ATTACH);
+    const unsigned detaches = calls(f.controller, NullScenePlatformController::TextViewCall::DETACH);
+    f.show(false);
+    f.complete();
+    LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_DETACHED);
+    TextDocumentEditorProps *props = editorProps(root.definition());
+    props->presentation(TextViewPresentation(TextStyle(), 0, false, wrap != 0));
+    const unsigned materializations = viewMaterializations;
+    f.show(true);
+    LOKA_VERIFY(viewMaterializations == materializations + 1);
+    f.complete();
+    TextDocumentEditorNode *fresh = editor(&root);
+    LOKA_VERIFY(fresh && fresh->props.presentation_.wrap() == (wrap != 0));
+    LOKA_VERIFY(calls(f.controller, NullScenePlatformController::TextViewCall::ATTACH) == attaches + 1);
+    LOKA_VERIFY(calls(f.controller, NullScenePlatformController::TextViewCall::DETACH) == detaches + 1);
+    LOKA_VERIFY(store == TextDocumentAccess::store(root.first) && store->view.place == fresh->getContext());
+    LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_ATTACHED);
+    LOKA_VERIFY(TextDocumentAccess::committedText(root.first) == "wrap body");
+  }
 }
 void testTextViewParkedNestedReplacement()
 {
@@ -390,14 +513,15 @@ void testTextViewUnsupportedAndPresentation()
   Fixture f;
   TextDocumentEditorNode *node = editor(&f.root());
   NodeContext *context = node->getContext();
-  TextViewPresentation value(TextStyle(TextSizeValue::points(18)), 4, true, false);
+  TextViewPresentation value(TextStyle(TextSizeValue::points(18)), 4, true, true);
   TextDocumentEditor next(TextDocumentEditorProps(f.root().first).attachment(f.root().result).presentation(value));
   failTextViewPreparations(1);
   LOKA_VERIFY(next.applyPropsToNode(node));
   const TextViewPresentation fallback = TextDocumentAccess::store(f.root().first)->view.presentation;
-  LOKA_VERIFY(fallback.style() == TextStyle() && fallback.readOnly() && !fallback.wrap());
+  LOKA_VERIFY(fallback.style() == TextStyle() && fallback.readOnly() && fallback.wrap());
   LOKA_VERIFY(next.applyPropsToNode(node));
   LOKA_VERIFY(TextDocumentAccess::store(f.root().first)->view.presentation == value && node->getContext() == context);
+  LOKA_VERIFY(editor(&f.root()) == node);
   const unsigned attached = calls(f.controller, NullScenePlatformController::TextViewCall::ATTACH);
   f.scene.invalidate();
   f.scene.flushInvalidation();
@@ -591,12 +715,14 @@ void testTextViewFocusRebind()
 {
   WindowFixture f;
   TextDocumentEditorNode *node = editor(&f.root());
+  NodeContext *context = node->getContext();
   LOKA_VERIFY(f.controller.applyNativeFocus(*node->getContext()));
   f.app.reconcileAtCompletion();
   LOKA_VERIFY(f.root().focus.state()->get().is(1));
   TextDocumentEditor next(
       TextDocumentEditorProps(f.root().first).attachment(f.root().result).focusedAs(f.root().otherFocus, 2));
   LOKA_VERIFY(next.applyPropsToNode(node));
+  LOKA_VERIFY(editor(&f.root()) == node && node->getContext() == context);
   LOKA_VERIFY(!f.root().focus.state()->get().is(1));
   LOKA_VERIFY(f.root().otherFocus.state()->get().is(2));
   f.root().shown.set(false);
@@ -657,7 +783,9 @@ namespace
     }
     void arm(NodeComposition &c)
     {
-      c.declare(TextDocumentEditor(this->documentValue).attachment(this->result));
+      c.declare(TextDocumentEditor(this->documentValue)
+                    .attachment(this->result)
+                    .presentation(TextViewPresentation(TextStyle(), 0, false, this->key.get() != 1)));
     }
     virtual void composeNode(NodeComposition &c)
     {
@@ -705,13 +833,28 @@ void testTextViewKeyedReplacement()
   SceneAccess::updateAttached(scene, true);
   KeyedViewRoot &root = *static_cast<KeyedViewRoot *>(SceneAccess::rootBoundary(scene));
   TextDocumentAccess::body(root.documentValue, "resident");
+  NullTextStore *store = TextDocumentAccess::store(root.documentValue);
+  LOKA_VERIFY(editor(&root)->props.presentation_.wrap());
   const unsigned before = calls(controller, NullScenePlatformController::TextViewCall::ATTACH);
   root.key.set(1);
   scene.flushInvalidation();
+  LOKA_VERIFY(!editor(&root)->props.presentation_.wrap());
   TextDocumentAccess::complete(scene.textDocuments(), controller);
   LOKA_VERIFY(calls(controller, NullScenePlatformController::TextViewCall::ATTACH) == before + 1);
   LOKA_VERIFY(calls(controller, NullScenePlatformController::TextViewCall::DETACH) == 1);
   LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_ATTACHED);
+  LOKA_VERIFY(TextDocumentAccess::committedText(root.documentValue) == "resident");
+  LOKA_VERIFY(TextDocumentAccess::store(root.documentValue) == store
+              && store->view.place == editor(&root)->getContext());
+  root.key.set(2);
+  scene.flushInvalidation();
+  TextDocumentAccess::complete(scene.textDocuments(), controller);
+  LOKA_VERIFY(editor(&root)->props.presentation_.wrap());
+  LOKA_VERIFY(calls(controller, NullScenePlatformController::TextViewCall::ATTACH) == before + 2);
+  LOKA_VERIFY(calls(controller, NullScenePlatformController::TextViewCall::DETACH) == 2);
+  LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_ATTACHED);
+  LOKA_VERIFY(TextDocumentAccess::store(root.documentValue) == store
+              && store->view.place == editor(&root)->getContext());
   LOKA_VERIFY(TextDocumentAccess::committedText(root.documentValue) == "resident");
   SceneAccess::unmount(scene);
 }
@@ -876,4 +1019,64 @@ void testTextViewStoreRetirementDoor()
   LOKA_VERIFY(retire.kind == NullScenePlatformController::TextViewCall::RETIRE && !retire.borrowed);
   LOKA_VERIFY(detach.row == row && retire.row == row && retire.links == 2);
   LOKA_VERIFY(!row->view.place && !TextDocumentAccess::store(f.root().first));
+}
+
+namespace
+{
+  class ClaimReadContext : public NullTextDocumentViewContext
+  {
+  public:
+    ClaimReadContext(IPlatformController &controller, SceneTextDocuments &documents, TextDocumentEditorNode &node)
+        : NullTextDocumentViewContext(controller, documents, node)
+    {
+    }
+    TextStoreRow *store() const
+    {
+      return this->attachedStore();
+    }
+  };
+} // namespace
+void testTextViewClaimDerivedReads()
+{
+  Fixture f;
+  ViewRoot &root = f.root();
+  TextDocumentEditorNode *node = editor(&root);
+  node->setContext(0);
+  ClaimReadContext *context = new ClaimReadContext(f.controller, f.scene.textDocuments(), *node);
+  LOKA_VERIFY(node->adoptContext(context));
+  NullTextStore *old = TextDocumentAccess::store(root.first);
+  LOKA_VERIFY(!context->store() && !TextStoreTestAccess::viewAttached(*old));
+  context->readLifecycleFactOnAttach();
+  f.complete();
+  LOKA_VERIFY(context->store() == old && TextStoreTestAccess::viewAttached(*old));
+  LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_ATTACHED);
+  // Native place is not attachment authority: temporarily disagree without calling lifecycle doors.
+  old->view.place = 0;
+  LOKA_VERIFY(context->store() == old && TextStoreTestAccess::viewAttached(*old));
+  old->view.place = context;
+  f.show(false);
+  f.complete();
+  LOKA_VERIFY(!context->store() && !TextStoreTestAccess::viewAttached(*old));
+  LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_DETACHED);
+  old->view.place = context;
+  LOKA_VERIFY(!context->store() && !TextStoreTestAccess::viewAttached(*old));
+  old->view.place = 0;
+  f.show(true);
+  f.complete();
+  LOKA_VERIFY(context->store() == old && TextStoreTestAccess::viewAttached(*old));
+  LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_ATTACHED);
+  LOKA_VERIFY(root.first.replace(replacement("transferred")) == POST_ACCEPTED);
+  f.complete();
+  NullTextStore *fresh = TextDocumentAccess::store(root.first);
+  LOKA_VERIFY(fresh != old && context->store() == fresh);
+  LOKA_VERIFY(!TextStoreTestAccess::viewAttached(*old) && TextStoreTestAccess::viewAttached(*fresh));
+  LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_ATTACHED);
+  LOKA_VERIFY(TextDocumentAccess::committedText(root.first) == "transferred");
+  fresh->retire();
+  f.complete();
+  LOKA_VERIFY(!context->store() && !TextStoreTestAccess::viewAttached(*fresh));
+  LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_DETACHED);
+  const std::size_t callsBeforeDrain = f.controller.textViewCalls.size();
+  f.controller.drainNativeRetirements();
+  LOKA_VERIFY(!context->store() && f.controller.textViewCalls.size() == callsBeforeDrain);
 }
