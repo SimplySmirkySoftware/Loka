@@ -215,6 +215,7 @@ namespace
     WNDPROC previous;
     unsigned paints, erases, fonts, shows, destroys, commands;
     UINT showFlags;
+    HWND killFocusTo;
     RECT firstPaint;
     HWND mustBeParked, parking;
     explicit Witness(HWND hwnd)
@@ -227,6 +228,7 @@ namespace
           destroys(0),
           commands(0),
           showFlags(0),
+          killFocusTo(0),
           mustBeParked(0),
           parking(0)
     {
@@ -259,6 +261,8 @@ namespace
         ++self.fonts;
       if (msg == WM_COMMAND)
         ++self.commands;
+      if (msg == WM_KILLFOCUS)
+        self.killFocusTo = reinterpret_cast<HWND>(wp);
       if (msg == WM_WINDOWPOSCHANGING)
       {
         const WINDOWPOS &position = *reinterpret_cast<WINDOWPOS *>(lp);
@@ -537,6 +541,9 @@ void testWin32TextViewReplacement()
     RECT pending;
     LOKA_VERIFY(GetUpdateRect(edit, &pending, FALSE) == (wasVisible ? TRUE : FALSE));
     LOKA_VERIFY(GetFocus() == (focus == old ? edit : focus));
+    // Focus moves from old straight to fresh: a hidden window keeps focus, so reparenting old first
+    // would drop focus on the view window in between.
+    LOKA_VERIFY(focus != old || oldPaint.killFocusTo == edit);
     if (!active && focusCase != 2)
       std::printf("[skip] replacement focused case: activation refused\n");
     fresh->retire(); // Cuts the transferred claim before this isolated birth is reclaimed.
