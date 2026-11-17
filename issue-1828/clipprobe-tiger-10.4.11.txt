@@ -1,0 +1,18 @@
+AppKit 824.44
+PASS no setClipsToBounds: (the default-clipping branch is the one under test)
+PASS clipped: a LokaClipHostView exists
+host frame (16,16 100x60) bounds origin (16,16)
+PASS clipped: host is the box's 100x60
+PASS clipped: bounds origin equals frame origin
+clipped: view cache red in=1800 out=0; backing store red in=1800 out=0
+PASS clipped: ink drawn inside the box
+PASS clipped: no ink outside the box (cache and backing store)
+PASS clipped: inside point hits the ink
+PASS clipped: point below the box does not hit the ink
+PASS twin: no clip host
+twin: view cache red in=1800 out=7800; backing store red in=1800 out=7800
+PASS twin: ink drawn inside the box
+PASS twin: ink outside the box (the sample can see a missing clip)
+PASS twin: inside point hits the ink
+PASS twin: point below the box hits the ink
+RESULT PASS failures=0
