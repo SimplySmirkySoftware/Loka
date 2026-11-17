@@ -170,6 +170,18 @@ namespace
   // A child EDIT refuses PrintWindow with PW_CLIENTONLY or 0 (VM probe 2026-11-17: ok=0, sentinel kept);
   // PW_RENDERFULLCONTENT captures it and distinguishes COLOR_WINDOW from the read-only COLOR_3DFACE ground.
   const UINT kPrintFullContent = 0x00000002;
+  /** PW_RENDERFULLCONTENT reads the composed surface: paint synchronously, then wait for one DWM frame. */
+  void settleForCapture(HWND edit)
+  {
+    RedrawWindow(edit, 0, 0, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
+    typedef HRESULT(WINAPI * DwmFlushProc)();
+    HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
+    DwmFlushProc flush = dwm ? reinterpret_cast<DwmFlushProc>(GetProcAddress(dwm, "DwmFlush")) : 0;
+    if (flush)
+      flush();
+    if (dwm)
+      FreeLibrary(dwm);
+  }
   COLORREF printedGround(HWND edit)
   {
     HDC dc = GetDC(edit);
@@ -644,6 +656,7 @@ namespace
     // Sentinel distinguishes an unpainted transparent ground from the native default.
     HBRUSH sentinel = CreateSolidBrush(RGB(255, 0, 255));
     FillRect(memory, &client, sentinel);
+    settleForCapture(edit);
     const BOOL printed = PrintWindow(edit, memory, kPrintFullContent);
     if (!printed)
       std::printf("defaultGround: PrintWindow refused client=%ldx%ld visible=%d parentVisible=%d error=%lu\n",
