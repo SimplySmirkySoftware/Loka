@@ -541,8 +541,8 @@ void testWin32TextViewReplacement()
     RECT pending;
     LOKA_VERIFY(GetUpdateRect(edit, &pending, FALSE) == (wasVisible ? TRUE : FALSE));
     LOKA_VERIFY(GetFocus() == (focus == old ? edit : focus));
-    // Focus moves from old straight to fresh: a hidden window keeps focus, so reparenting old first
-    // would drop focus on the view window in between.
+    // Focus moves from old straight to fresh: old is hidden without redraw, and a hidden window keeps
+    // focus through parking until SetFocus moves it (VM mutation 2026-11-17).
     LOKA_VERIFY(focus != old || oldPaint.killFocusTo == edit);
     if (!active && focusCase != 2)
       std::printf("[skip] replacement focused case: activation refused\n");

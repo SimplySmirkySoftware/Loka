@@ -241,10 +241,9 @@ TextStoreBirth Win32TextStore::create(Win32TextParking &parking,
     transferView(*previousRow, *row);
     if (GetWindowLongW(previousRow->edit_, GWL_STYLE) & WS_VISIBLE)
       Win32ScenePlatformController::swapNativeReplacement(edit, previousRow->edit_);
-    // A hidden window keeps focus until it moves, so focus reaches fresh before old is reparented.
+    previousRow->detach(parking.window());
     if (hadFocus)
       SetFocus(edit);
-    previousRow->detach(parking.window());
   }
   row->changes_.take();
   const TextChangedRange range(0, 0, buffer.size());
