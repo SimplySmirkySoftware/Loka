@@ -1351,3 +1351,75 @@ Explicit shared-contract exception: the Web rail does not report `laidOutExtent`
 It leaves a supplied State unchanged, including on refusal, park and retirement;
 it does not publish zero or transient geometry. An unchanged State is not a
 refusal signal. Other rails' extent publication contracts remain unchanged.
+
+## AttributedText projection
+
+The Web rail consumes the completed `WebAttributedSnapshot` from the attributed
+builder through one context-owned `WebAttributedSlot`. This is the typed twin of
+Text's slot, not a second layout engine. Kind 7 is a positioned, zero-chrome,
+clipped div with no listener. No activation result is written. Park hides and
+retains the slot; retire clears it before the existing resource retirement path.
+
+PER_RUN shaping makes each completed fragment an independent absolute span.
+Style and link boundaries can break kerning, ligatures, combining sequences and
+Arabic joining. Wrapping follows the combined scalar stream. Fragment integer
+positions, widths and heights come from the snapshot. Each child receives the
+full Env, then color/underline, then numeric line-height. Child overflow is
+visible (including nonempty zero-advance fragments); the resource clips it.
+The conditional baseline tolerance described for Text also applies per fragment:
+less than 0.5 CSS px from its allocated baseline, so two runs can differ by
+nearly 1 px. Font fallback ink overflow remains outside the contract.
+
+Source segmentation, link, paint, block style and available width participate in
+reuse. Paint-only changes rebuild, unlike Text's current-paint overlay. ELLIPSIS
+ignores wrapping and displays the prefix strictly before the first CR or LF,
+clipped without an ellipsis glyph. Empty and break-only successful snapshots
+still publish runs; their height travels through the resource rectangle.
+AttributedText has no natural-size query. Fixed Grid cells can overflow and
+aligned Rows retain their default single-line H estimate for taller children.
+
+Before writing height or rectangle, layout computes the absolute bottom in int.
+A bottom of 32767 is exact. A larger bottom refuses placement inside and outside
+viewports: return the incoming y, preserve the offered height and old rectangle,
+and request no retry. Inside a viewport, the existing coordinate check also
+refuses its measurement channel. A later independent fitting offer reevaluates
+placement even on a memo hit. Text, Button and Cell retain their existing
+outside-viewport saturating return. A newly built attributed snapshot may render
+in the old rectangle after placement refusal, and following siblings consume
+zero height for that refused placement; retained pixels can overlap them.
+
+`web_set_runs` borrows Wasm32 addresses synchronously. Its version-1 header is
+`[1, fragmentCount, descriptorCount]`, followed by seven words per fragment
+(descriptor, left, top, width, height, byteStart, byteEnd) and nine words per
+descriptor. Counts and lengths are bounded nonnegative signed integers;
+addresses use unsigned i32 bits. Validation precedes all table reads, comparison
+and DOM mutation: heap bounds/alignment, exact aggregate length, both local
+extent sums, contiguous ranges, strict UTF-8 scalar boundaries, no CR/LF, and
+existing descriptor validation. The receiver intentionally accepts unused
+descriptors, empty ranges, NUL/tab/form feed and unsnapped sizes. It does not
+remeasure geometry or require canonical builder output.
+
+The generated `WebRunsStatus` names APPLIED=0, REFUSED=1 and PROTOCOL=2 separately
+from scroll statuses. Payload and service validation precede absent-token
+success; a wrong live kind is protocol failure. Equal owned payload arrays retain
+all child identities. Otherwise the import copies the payload, decodes each range
+with fatal UTF-8 and BOM preservation, and builds every child in a detached
+DocumentFragment before one `replaceChildren` call. No allocation follows that
+commit; only the prepared payload reference is published. Protocol refusal
+preserves children and cache. Recoverable validation/preparation failure preserves
+children but clears the applied cache, including failures before comparison.
+
+Build refusal retains the prior snapshot's geometry and paint, restores dirty
+inputs and requests after-run layout. DOM REFUSED requests after-run layout
+without restoring already-consumed leaf inputs; persistent failure costs one
+attempt per flush and recovery needs no app mutation. PROTOCOL asserts in debug
+and requests no retry in release. A first build failure only hides projection,
+without a runs import. Atomicity covers child replacement only: the rectangle
+and C++ snapshot may already have changed before DOM refusal.
+
+DOM children preserve fragment/source order, but textContent omits hard/soft
+breaks, empty lines and truncated suffixes. Copy/selection and accessibility are
+visual-DOM behavior, not a source-text contract. Browser driver cells report the
+actual selection and accessibility text for the delegator to inspect; those
+observations require Chromium and are not established by native or mocked DOM
+checks. The driver also captures `build/web-attributed.png`.

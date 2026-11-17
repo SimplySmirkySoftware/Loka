@@ -7,6 +7,7 @@
 #include "CellFixture.hpp"
 #include "PopupFixture.hpp"
 #include "RectSurfaceFixture.hpp"
+#include "AttributedFixture.hpp"
 #include "WebTestHooks.hpp"
 #include "WebTestAccess.hpp"
 #include "WebWindow.hpp"
@@ -42,6 +43,8 @@ namespace loka
       vehicle.roots = webtest::staged.roots;
       vehicle.destroy = webtest::staged.destroy;
       session = &testing::Access::session(static_cast<WebPlatformContext &>(*platform));
+      if (webtest::staged.roots == -600)
+        return webtest::CreateAttributed(platform);
       if (webtest::staged.roots == -500)
       {
         webtest::surfaceSetup().parent = webtest::SURFACE_DIRECT;
@@ -92,6 +95,23 @@ namespace loka
 extern "C" int web_wake(int kind, double now);
 extern "C"
 {
+  /** Cost: driver command once; writes only the fixture's content, then one completion. */
+  EMSCRIPTEN_KEEPALIVE void fixture_attributed_value(int kind)
+  {
+    using namespace loka::app;
+    {
+      loka::core::Operation turn;
+      AttributedString value;
+      if (kind == 0)
+        value = Styled("red", Red) + Styled("blue", Blue + Underline);
+      else if (kind == 1)
+        value = Styled("large", FontSize<24>() + Red) + Styled(" small\nnext", FontSize<9>() + Blue + Underline);
+      else if (kind == 2)
+        value = Styled("\n", Bold);
+      webtest::attributedFixture()->content.set(value);
+    }
+    session->wake(loka::web::IMMEDIATE, 0);
+  }
   /** Cost: driver observation once; fixture walks its own composition, reads one context token. */
   EMSCRIPTEN_KEEPALIVE uint32_t fixture_surface_token()
   {

@@ -9,6 +9,7 @@ const driverDir=fileURLToPath(new URL('.',import.meta.url));
 import assert from 'node:assert/strict';
 import {runStackCells, runHelloRoundTrip} from './stack-cells.mjs';
 import {runSkinCells} from './skin-cells.mjs';
+import {runAttributedCells} from './attributed-cells.mjs';
 import {runRectSurfaceCells} from './rect-surface-cells.mjs';
 import {runPopupCells} from './popup-cells.mjs';
 import {runCellCells} from './cell-cells.mjs';
@@ -114,6 +115,8 @@ const server=createServer(async(req,res)=>{
       data=await readFile(file === 'LokaTutorialWeb.js' ? join(tutorialBuild,file) : (file === 'LokaMineWeb.js' || file === 'preview-mine.js') ? join(mineBuild,'LokaMineWeb.js') : (file === 'LokaHelloWeb.js' || file === 'preview-module.js') ? join(helloBuild,'LokaHelloWeb.js') : join(build,'LokaWebCounter.js'),'utf8');
       // Driver-only closure access, never a production export or a C++ test-shaped door.
       const hook=`Module['textTest']={
+        runsRow:token=>WebDOM.row(token),
+        fragmentBox:(...args)=>WebDOM.fragmentBox(...args),
         service:()=>WebDOM.text,
         replaceService:service=>{WebDOM.text=service},
         resources:()=>WebDOM.resources.size,
@@ -315,6 +318,7 @@ try {
   await client.evaluate('web.dispose();web.completed.then(()=>true)');
   await runGridCells(client, navigate);
   await runRectSurfaceCells(client, navigate);
+  await runAttributedCells(client, navigate);
   await runPopupCells(client, navigate);
   await runCellCells(client, navigate);
   await runSkinCells(client, navigate);
