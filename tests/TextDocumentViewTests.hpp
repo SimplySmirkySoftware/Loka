@@ -19,4 +19,5 @@ void testTextViewFocusObserverDetach();
 void testTextViewReentryIdentityAndRefusal();
 void testTextViewDetachPreservesNativeFacts();
 void testTextViewInitialObserverAndOtherClaim();
+void testTextViewStoreRetirementDoor();
 #endif

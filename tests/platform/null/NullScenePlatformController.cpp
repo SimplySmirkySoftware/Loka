@@ -1,3 +1,4 @@
+#include "support/TextStoreConformance.hpp"
 #include "support/TextDocumentAccess.hpp"
 #include "app/nodes/nestable/ScrollViewSettlement.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
@@ -1377,4 +1378,10 @@ void NullScenePlatformController::applyTextViewPresentation(loka::app::scene::Te
           ? loka::app::TextViewPresentation(
                 loka::app::TextStyle(), presentation.margin(), presentation.readOnly(), presentation.wrap())
           : presentation;
+}
+
+void NullScenePlatformController::retireTextStore(loka::app::scene::TextStoreRow &row)
+{
+  this->textViewCalls.push_back(TextViewCall(
+      TextViewCall::RETIRE, row, this->borrowPhase().open(), loka::app::testing::TextStoreTestAccess::links(row)));
 }

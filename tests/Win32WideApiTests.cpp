@@ -1,3 +1,4 @@
+#include "text/Win32TextParking.hpp"
 #include "context/Win32ClipBoxContext.hpp"
 #include "context/Win32ZStackContext.hpp"
 #include "Win32WideApiTests.hpp"
@@ -74,6 +75,15 @@ void testWin32CustomWindowClassesUseWideApiFamily()
   assert(root);
   {
     Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
+
+    Win32TextParking parking;
+    LOKA_VERIFY(parking.ensure());
+    LOKA_VERIFY(IsWindowUnicode(parking.window()));
+    const wchar_t parkingTitle[] = {0xff21, 0xd83d, 0xde00, 0};
+    wchar_t parkingRoundTrip[8];
+    LOKA_VERIFY(SetWindowTextW(parking.window(), parkingTitle));
+    LOKA_VERIFY(GetWindowTextW(parking.window(), parkingRoundTrip, 8) == 3);
+    LOKA_VERIFY(std::wcscmp(parkingRoundTrip, parkingTitle) == 0);
 
     loka::app::CellProps cellProps;
     loka::app::CellNode cellNode(cellProps);

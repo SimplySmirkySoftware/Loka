@@ -1138,3 +1138,58 @@ namespace loka
   } // namespace app
 } // namespace loka
 #endif
+
+#if defined(TEST_BUILD) && defined(_WIN32)
+namespace loka
+{
+  namespace win32
+  {
+    namespace testing
+    {
+      namespace
+      {
+        unsigned parkingFailures = 0, localFailures = 0, editFailures = 0, dpiFailures = 0;
+        bool consume(unsigned &count)
+        {
+          if (!count)
+            return false;
+          --count;
+          return true;
+        }
+      } // namespace
+      void failTextParkingCreations(unsigned count)
+      {
+        parkingFailures = count;
+      }
+      void failTextLocalAllocations(unsigned count)
+      {
+        localFailures = count;
+      }
+      void failTextEditCreations(unsigned count)
+      {
+        editFailures = count;
+      }
+      void failTextDpiQualifications(unsigned count)
+      {
+        dpiFailures = count;
+      }
+      bool refuseTextParkingCreation()
+      {
+        return consume(parkingFailures);
+      }
+      bool refuseTextLocalAllocation()
+      {
+        return consume(localFailures);
+      }
+      bool refuseTextEditCreation()
+      {
+        return consume(editFailures);
+      }
+      bool refuseTextDpiQualification()
+      {
+        return consume(dpiFailures);
+      }
+    } // namespace testing
+  } // namespace win32
+} // namespace loka
+#endif

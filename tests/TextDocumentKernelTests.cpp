@@ -69,6 +69,12 @@ namespace
     {
       this->document(this->text);
     }
+    virtual ~Root()
+    {
+      TextDocumentRegistration *registration = TextDocumentAccess::registration(this->text);
+      if (registration)
+        LOKA_VERIFY(!registration->store());
+    }
     virtual void composeNode(NodeComposition &)
     {
       if (refuseCandidate)
@@ -354,22 +360,40 @@ void testTextKernelReclaim()
   Fixture f;
   unsigned writes = 0;
   f.text().fact()->bind(&count, &writes, false);
+  const std::size_t beforeRetire = f.controller.textViewCalls.size();
   f.controller.destroy();
+  LOKA_VERIFY(f.controller.textViewCalls.size() == beforeRetire + 1);
+  const NullScenePlatformController::TextViewCall &retired = f.controller.textViewCalls[beforeRetire];
+  LOKA_VERIFY(retired.kind == NullScenePlatformController::TextViewCall::RETIRE);
+  LOKA_VERIFY(retired.links == 0 && !retired.borrowed);
   LOKA_VERIFY(!TextDocumentAccess::store(f.text()));
   f.controller.drainNativeRetirements();
   LOKA_VERIFY(writes == 0);
   unsigned long length = 99;
   LOKA_VERIFY(!f.text().queryLength(length));
   f.text().fact()->unbind(&count, &writes);
+  const std::size_t beforeFailure = f.controller.textViewCalls.size();
+  failTextStoreCreations(1);
+  TextStoreSource source(TextReplacement::Empty());
+  TextStoreRow *fresh = 0;
+  TextStoreReading reading;
+  LOKA_VERIFY(f.controller.createTextStore(source, 0, fresh, reading) == TEXT_STORE_REFUSED_ALLOCATION);
+  LOKA_VERIFY(!fresh && f.controller.textViewCalls.size() == beforeFailure);
   // Both endpoint destruction orders and repeated cuts are callback-free.
   TextStoreLink link;
   {
     TextStoreLedger ledger;
     NullTextStore *row = new NullTextStore(ledger, f.controller);
     row->connect(link);
+    TextStoreLink witness(row);
+    row->connect(witness);
+    const std::size_t before = f.controller.textViewCalls.size();
     row->retire();
     row->retire();
-    LOKA_VERIFY(!link.row());
+    LOKA_VERIFY(f.controller.textViewCalls.size() == before + 1);
+    LOKA_VERIFY(f.controller.textViewCalls[before].kind == NullScenePlatformController::TextViewCall::RETIRE);
+    LOKA_VERIFY(f.controller.textViewCalls[before].links == 1 && !f.controller.textViewCalls[before].borrowed);
+    LOKA_VERIFY(!link.row() && !witness.row());
     ledger.drain();
   }
   {
@@ -1133,6 +1157,7 @@ namespace
       for (unsigned repeat = 0; repeat < 2; ++repeat)
       {
         const unsigned retired = TextStoreTestAccess::retiredCount(*old);
+        const std::size_t beforeRetire = f.controller.textViewCalls.size();
         LOKA_VERIFY(doc.replace(TextReplacement::Empty()) == POST_ACCEPTED);
         f.app.reconcileAtCompletion();
         LOKA_VERIFY(doc.replaceReply()->get().kind() == Reply<TextReplacement>::REFUSED);
@@ -1141,6 +1166,9 @@ namespace
         LOKA_VERIFY(TextDocumentAccess::store(doc) == old && TextDocumentAccess::committedText(doc) == "body");
         LOKA_VERIFY(!TextStoreTestAccess::retired(*old));
         LOKA_VERIFY(TextStoreTestAccess::retiredCount(*old) == retired + 1);
+        LOKA_VERIFY(f.controller.textViewCalls.size() == beforeRetire + 1);
+        LOKA_VERIFY(f.controller.textViewCalls[beforeRetire].kind == NullScenePlatformController::TextViewCall::RETIRE);
+        LOKA_VERIFY(f.controller.textViewCalls[beforeRetire].links == 0);
       }
     }
     LOKA_VERIFY(replies == 8);

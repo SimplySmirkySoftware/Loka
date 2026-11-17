@@ -5,6 +5,7 @@
 
 #include <windows.h>
 #include "Win32TextEnvironment.hpp"
+#include "text/Win32TextParking.hpp"
 #include "app/layout/TextShaping.hpp"
 #include "app/layout/NaturalSizeSource.hpp"
 #include <vector>
@@ -88,16 +89,16 @@ class Win32ScenePlatformController : public loka::app::scene::IPlatformControlle
                                      public loka::app::layout::INaturalSizeSource
 {
 public:
-  /** Refuse until text body page 1d is frozen and implemented: committed IME text
-      reaches the body later through the message queue. */
   virtual loka::app::scene::TextStoreBirth createTextStore(loka::app::TextStoreSource &,
                                                            loka::app::scene::TextStoreRow *,
-                                                           loka::app::scene::TextStoreRow *&fresh,
-                                                           loka::app::scene::TextStoreReading &)
-  {
-    fresh = 0;
-    return loka::app::scene::TEXT_STORE_REFUSED_UNSUPPORTED;
-  }
+                                                           loka::app::scene::TextStoreRow *&,
+                                                           loka::app::scene::TextStoreReading &);
+  virtual void retireTextStore(loka::app::scene::TextStoreRow &);
+  virtual bool readTextStore(loka::app::scene::TextStoreRow &, loka::app::scene::TextStoreReading &);
+  virtual bool peekTextStore(loka::app::scene::TextStoreRow &);
+  virtual bool applyTextRequest(loka::app::scene::TextStoreRow &, unsigned long);
+  virtual loka::app::scene::TextChunkResult readTextChunk(
+      loka::app::scene::TextStoreRow &, unsigned long &, unsigned long, char *, unsigned long, unsigned long &);
   virtual bool queryNaturalHeight(loka::app::scene::Node *child, short &height) const;
   virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const;
   /** Retire door for a RectSurface context: takes back that surface's pending
@@ -256,6 +257,7 @@ public:
   void queueNativeRetirement(HWND hwnd);
 
 private:
+  Win32TextParking textParking_;
   /** Display-font text extent plus title insets, returned in logical layout units. */
   bool measurePushButtonNaturalWidth(const loka::core::String &label, short &width) const;
 
