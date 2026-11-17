@@ -1487,10 +1487,10 @@ ASCII spaces and tabs through the shared breaker (also used by Web), while macOS
 choose its word breaks, so hyphens and non-Latin scripts can wrap differently
 across rails.
 
-Web uses PER_RUN shaping: style or link boundaries can break kerning, ligatures,
+Web shapes each run separately: style or link boundaries can break kerning, ligatures,
 combining sequences and Arabic joining. Wrapping still follows the combined
-text. ELLIPSIS displays only the first logical line, clipped at the resource
-edge, without drawing an ellipsis glyph. Links do not activate. Fixed Grid cells
+text. ELLIPSIS displays only the first logical line, clipped at the edge of
+the text, without drawing an ellipsis glyph. Links do not activate. Fixed Grid cells
 can be overrun by tall content; aligned Rows use a default single-line height
 estimate and cannot reliably center taller attributed content. The DOM is a
 visual projection: hard/soft breaks, empty lines and truncated suffixes are not

@@ -1419,7 +1419,8 @@ and C++ snapshot may already have changed before DOM refusal.
 
 DOM children preserve fragment/source order, but textContent omits hard/soft
 breaks, empty lines and truncated suffixes. Copy/selection and accessibility are
-visual-DOM behavior, not a source-text contract. Browser driver cells report the
-actual selection and accessibility text for the delegator to inspect; those
-observations require Chromium and are not established by native or mocked DOM
-checks. The driver also captures `build/web-attributed.png`.
+visual-DOM behavior, not a source-text contract. The browser driver cells print
+the actual selection and accessibility text as observations, not verdicts: in
+Chromium 157 on Linux, selecting the two-line fixture (`large small` / `next`)
+yields `large smallnext` with no line break. The driver also captures
+`build/web-attributed.png`.
