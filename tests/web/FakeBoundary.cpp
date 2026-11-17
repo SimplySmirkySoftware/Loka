@@ -14,8 +14,12 @@ namespace webtest
   int skinSelection = 0;
   unsigned skinPulls = 0;
   static unsigned nextHandle = 1;
+  std::map<MetricKey, std::pair<int, int> > descriptorMetrics;
+  std::map<RangeKey, int> rangeWidths;
   void reset()
   {
+    descriptorMetrics.clear();
+    rangeWidths.clear();
     textService = false;
     skinSelection = 0;
     skinPulls = 0;
@@ -347,7 +351,13 @@ extern "C" int web_measure(const int *descriptor, const char *text, unsigned len
   const int status =
       webtest::ScheduledFailure(webtest::failAdvance) ? webtest::measureStatus : webtest::MeasureStatus();
   if (status == WEB_MEASURE_OK)
-    *out = webtest::measuredWidth >= 0 ? webtest::measuredWidth : static_cast<int>(len * 7);
+  {
+    const webtest::RangeKey key(webtest::MetricKey(descriptor, descriptor + 9), std::string(text, len));
+    const std::map<webtest::RangeKey, int>::const_iterator found = webtest::rangeWidths.find(key);
+    *out = found != webtest::rangeWidths.end() ? found->second
+           : webtest::measuredWidth >= 0       ? webtest::measuredWidth
+                                               : static_cast<int>(len * 7);
+  }
   return status;
 }
 extern "C" int web_metrics(const int *descriptor, int *ascent, int *descent)
@@ -359,8 +369,11 @@ extern "C" int web_metrics(const int *descriptor, int *ascent, int *descent)
       webtest::ScheduledFailure(webtest::failMetrics) ? webtest::measureStatus : webtest::MeasureStatus();
   if (status == WEB_MEASURE_OK)
   {
-    *ascent = webtest::metricAscent;
-    *descent = webtest::metricDescent;
+    const webtest::MetricKey key(descriptor, descriptor + 9);
+    const std::map<webtest::MetricKey, std::pair<int, int> >::const_iterator found =
+        webtest::descriptorMetrics.find(key);
+    *ascent = found == webtest::descriptorMetrics.end() ? webtest::metricAscent : found->second.first;
+    *descent = found == webtest::descriptorMetrics.end() ? webtest::metricDescent : found->second.second;
   }
   return status;
 }

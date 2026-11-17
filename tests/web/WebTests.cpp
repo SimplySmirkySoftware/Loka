@@ -1227,6 +1227,8 @@ namespace
     LOKA_VERIFY(session.resize(roots[0], 10, 10, 3) == WebSession::REFUSED_CLOSED);
   }
 } // namespace
+void WebAttributedBuildTests();
+void WebAttributedProtocolDeath(bool advance);
 void WebTextProjectionTests();
 void WebStackLayoutTests();
 void WebGridLayoutTests();
@@ -1239,6 +1241,19 @@ void WebCellTests();
 void WebCellProtocolDeath();
 int main(int argc, char **argv)
 {
+  if (argc == 2 && std::strcmp(argv[1], "attributed-only") == 0)
+  {
+    WebAttributedBuildTests();
+    return 0;
+  }
+  if (argc == 2
+      && (std::strcmp(argv[1], "attributed-protocol-death") == 0
+          || std::strcmp(argv[1], "attributed-advance-protocol-death") == 0))
+  {
+    WebAttributedProtocolDeath(std::strcmp(argv[1], "attributed-advance-protocol-death") == 0);
+    return 0;
+  }
+
   if (argc == 2 && std::strcmp(argv[1], "natural-protocol-death") == 0)
   {
     WebNaturalProtocolDeath();
@@ -1308,6 +1323,7 @@ int main(int argc, char **argv)
   RUN(WebGridLayoutTests);
   RUN(WebStackLayoutTests);
   RUN(WebTextProjectionTests);
+  RUN(WebAttributedBuildTests);
   RUN(CounterTest);
   RUN(ScrollTest);
   RUN(ParkTest);
@@ -1331,7 +1347,7 @@ int main(int argc, char **argv)
   RUN(RootVisibilityTest);
   RUN(TwoRootTest);
 #undef RUN
-  std::puts("33 Web test groups passed (20 legacy, 6 projection, 1 scroll, 1 stack, 1 grid, 1 Cell, 1 skin, 1 root "
-            "margin, 1 RectSurface)");
+  std::puts("34 Web test groups passed (20 legacy, 6 projection, 1 scroll, 1 stack, 1 grid, 1 Cell, 1 skin, 1 root "
+            "margin, 1 RectSurface, 1 attributed build)");
   return 0;
 }
