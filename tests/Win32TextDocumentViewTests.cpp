@@ -169,6 +169,8 @@ namespace
   };
   // A child EDIT refuses PrintWindow with PW_CLIENTONLY or 0 (VM probe 2026-11-17: ok=0, sentinel kept);
   // PW_RENDERFULLCONTENT captures it and distinguishes COLOR_WINDOW from the read-only COLOR_3DFACE ground.
+  // It reads the composed surface, which is not reliable inside WM_PAINT (VM suite runs 2026-11-17), so the
+  // first paint is pinned by its frame and the ground is captured after painting settles.
   const UINT kPrintFullContent = 0x00000002;
   /** PW_RENDERFULLCONTENT reads the composed surface: paint synchronously, then wait for one DWM frame. */
   void settleForCapture(HWND edit)
@@ -196,6 +198,7 @@ namespace
     const COLORREF expected = GetSysColor(COLOR_WINDOW);
     HBRUSH sentinel = CreateSolidBrush(expected ^ 0x00ffffff);
     FillRect(memory, &client, sentinel);
+    settleForCapture(edit);
     LOKA_VERIFY(PrintWindow(edit, memory, kPrintFullContent));
     const COLORREF pixel = GetPixel(memory, client.right / 2, client.bottom - 4);
     SelectObject(memory, previous);
@@ -213,8 +216,6 @@ namespace
     unsigned paints, erases, fonts, shows, destroys, commands;
     UINT showFlags;
     RECT firstPaint;
-    bool capturePixels;
-    COLORREF firstPixel;
     HWND mustBeParked, parking;
     explicit Witness(HWND hwnd)
         : window(hwnd),
@@ -226,8 +227,6 @@ namespace
           destroys(0),
           commands(0),
           showFlags(0),
-          capturePixels(false),
-          firstPixel(CLR_INVALID),
           mustBeParked(0),
           parking(0)
     {
@@ -273,8 +272,6 @@ namespace
       if (msg == WM_DESTROY)
         ++self.destroys;
       const LRESULT result = CallWindowProcW(previous, hwnd, msg, wp, lp);
-      if (msg == WM_PAINT && self.paints == 1 && self.capturePixels)
-        self.firstPixel = printedGround(hwnd);
       // WM_DESTROY enters Loka teardown before user32 destroys child windows.
       if (msg == WM_DESTROY && self.mustBeParked)
         LOKA_VERIFY(!IsWindow(self.mustBeParked) || GetParent(self.mustBeParked) == self.parking);
@@ -357,7 +354,6 @@ void testWin32TextViewLayoutShow()
   PaintAnswer answer = view.queryPaintDamage(query);
   LOKA_VERIFY(answer.kind == PAINT_ANSWER_EXACT && !answer.damage.width && !answer.damage.height);
   Witness witness(edit);
-  witness.capturePixels = true;
   detach(view);
   answer = view.queryPaintDamage(query);
   LOKA_VERIFY(answer.kind == PAINT_ANSWER_REFUSED && answer.reason == PAINT_REFUSED_NO_CONTEXT);
@@ -377,20 +373,18 @@ void testWin32TextViewLayoutShow()
   RECT frame;
   GetWindowRect(edit, &frame);
   LOKA_VERIFY(EqualRect(&frame, &witness.firstPaint));
-  LOKA_VERIFY(witness.firstPixel == GetSysColor(COLOR_WINDOW));
+  LOKA_VERIFY(printedGround(edit) == GetSysColor(COLOR_WINDOW));
   detach(view);
   attach(view);
   witness.paints = 0;
-  witness.firstPixel = CLR_INVALID;
   f.rail().relayout(300, 200);
   LOKA_VERIFY(witness.shows == 2 && (witness.showFlags & SWP_NOREDRAW));
-  LOKA_VERIFY(witness.paints > 0 && witness.firstPixel == GetSysColor(COLOR_WINDOW));
+  LOKA_VERIFY(witness.paints > 0 && printedGround(edit) == GetSysColor(COLOR_WINDOW));
   GetWindowRect(edit, &frame);
   LOKA_VERIFY(EqualRect(&frame, &witness.firstPaint));
   // A real retained return must never paint its stale 200-unit frame.
   f.show(false);
   witness.paints = 0;
-  witness.firstPixel = CLR_INVALID;
   {
     loka::core::StateTrackerGuard guard(f.root().tracker());
     f.root().width.set(140);
@@ -400,7 +394,7 @@ void testWin32TextViewLayoutShow()
   GetWindowRect(edit, &frame);
   LOKA_VERIFY(witness.paints > 0 && EqualRect(&frame, &witness.firstPaint));
   LOKA_VERIFY(frame.right - frame.left == f.rail().displayScale().nativeLength(0, 140).px);
-  LOKA_VERIFY(witness.firstPixel == GetSysColor(COLOR_WINDOW) && (witness.showFlags & SWP_NOREDRAW));
+  LOKA_VERIFY(printedGround(edit) == GetSysColor(COLOR_WINDOW) && (witness.showFlags & SWP_NOREDRAW));
   // The EDIT's own visibility governs first show even under a hidden ancestor.
   ShowWindow(f.window.hwnd(), SW_HIDE);
   detach(view);
