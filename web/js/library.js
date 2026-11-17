@@ -76,6 +76,15 @@ addToLibrary({
           row.listener = () => Module['_web_scroll'](token, Math.round(element.scrollLeft), Math.round(element.scrollTop));
           element.addEventListener(row.event = 'scroll', row.listener, {passive:true});
         }
+        /** Cost: creation once per surface resource; this element only, no listeners or row walk. */
+        if (kind === 6) {
+          Object.assign(element.style,{
+            background:'repeating-linear-gradient(45deg, rgba(128,128,128,.28) 0 2px, transparent 2px 10px)',
+            outline:'1px dashed rgba(128,128,128,.7)',outlineOffset:'-1px',border:'0',padding:'0',
+            font:'11px/1.4 ui-monospace, monospace',textIndent:'4px',textAlign:'left',
+            overflow:'hidden',pointerEvents:'none',userSelect:'none'});
+          element.textContent = 'RectSurface';
+        }
         if (kind === 5) {
           const g=LokaWebStyle.webButtonGeometry;
           Object.assign(element.style,{boxSizing:'border-box',

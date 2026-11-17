@@ -14,6 +14,7 @@ namespace loka
       SCROLL,
       CELL,
       POPUP,
+      RECT_SURFACE,
       KIND_COUNT
     };
     enum ScrollCommit

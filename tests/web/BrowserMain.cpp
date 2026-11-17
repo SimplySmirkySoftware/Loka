@@ -6,6 +6,7 @@
 #include "GridFixture.hpp"
 #include "CellFixture.hpp"
 #include "PopupFixture.hpp"
+#include "RectSurfaceFixture.hpp"
 #include "WebTestHooks.hpp"
 #include "WebTestAccess.hpp"
 #include "WebWindow.hpp"
@@ -41,6 +42,13 @@ namespace loka
       vehicle.roots = webtest::staged.roots;
       vehicle.destroy = webtest::staged.destroy;
       session = &testing::Access::session(static_cast<WebPlatformContext &>(*platform));
+      if (webtest::staged.roots == -500)
+      {
+        webtest::surfaceSetup().parent = webtest::SURFACE_DIRECT;
+        webtest::surfaceSetup().width = 1;
+        webtest::surfaceSetup().height = 1;
+        return webtest::CreateSurfaces(platform);
+      }
       if (webtest::staged.roots == -400)
         return webtest::CreatePopups(platform);
       if (webtest::staged.roots == -301)
@@ -84,6 +92,27 @@ namespace loka
 extern "C" int web_wake(int kind, double now);
 extern "C"
 {
+  /** Cost: driver observation once; fixture walks its own composition, reads one context token. */
+  EMSCRIPTEN_KEEPALIVE uint32_t fixture_surface_token()
+  {
+    loka::app::scene::Node *node = webtest::FindSurfaceNode(webtest::surfaceFixture());
+    return node && node->getContext() ? static_cast<WebResourceContext *>(node->getContext())->token() : 0;
+  }
+  /** Cost: driver command once; own fixture tree and props, one layout request. */
+  EMSCRIPTEN_KEEPALIVE void fixture_surface_size(int width, int height)
+  {
+    {
+      loka::core::Operation turn;
+      webtest::SurfaceFixture &f = *webtest::surfaceFixture();
+      loka::app::RectSurface()
+          .size(static_cast<short>(width), static_cast<short>(height))
+          .model(f.model.state())
+          .laidOutExtent(f.extent)
+          .applyPropsToNode(webtest::FindSurfaceNode(&f));
+      f.scene()->requestLayoutAfterRun();
+    }
+    web_wake(loka::web::IMMEDIATE, emscripten_get_now());
+  }
   /** Cost: driver command once; one fixture state or its Scene layout request, no rows. */
   EMSCRIPTEN_KEEPALIVE void fixture_popup_command(int command)
   {
