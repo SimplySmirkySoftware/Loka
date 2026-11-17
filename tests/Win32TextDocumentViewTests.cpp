@@ -678,8 +678,8 @@ namespace
     const BOOL printed = PrintWindow(edit, memory, kPrintFullContent);
     if (!printed)
       std::printf("defaultGround: PrintWindow refused client=%ldx%ld visible=%d parentVisible=%d error=%lu\n",
-                  client.right,
-                  client.bottom,
+                  static_cast<long>(client.right),
+                  static_cast<long>(client.bottom),
                   (GetWindowLongW(edit, GWL_STYLE) & WS_VISIBLE) != 0,
                   IsWindowVisible(parent) != 0,
                   GetLastError());
@@ -689,8 +689,8 @@ namespace
       std::printf("defaultGround: pixel=%06lx expected=%06lx client=%ldx%ld corner=%06lx foreground=%d\n",
                   static_cast<unsigned long>(ground),
                   static_cast<unsigned long>(expected),
-                  client.right,
-                  client.bottom,
+                  static_cast<long>(client.right),
+                  static_cast<long>(client.bottom),
                   static_cast<unsigned long>(GetPixel(memory, 1, 1)),
                   GetForegroundWindow() == GetAncestor(edit, GA_ROOT));
     LOKA_VERIFY(ground == expected);
