@@ -526,7 +526,12 @@ void testWin32TextViewReplacement()
     LOKA_VERIFY(GetWindow(edit, GW_HWNDPREV) == above);
     if (!(parent.erases == 0 && oldPaint.paints == 0 && siblingPaint.paints == 0 && freshPaints == 0))
       std::printf("replacement case %u: parent erases=%u paints=%u old paints=%u sibling paints=%u fresh paints=%u\n",
-                  focusCase, parent.erases, parent.paints, oldPaint.paints, siblingPaint.paints, freshPaints);
+                  focusCase,
+                  parent.erases,
+                  parent.paints,
+                  oldPaint.paints,
+                  siblingPaint.paints,
+                  freshPaints);
     LOKA_VERIFY(parent.erases == 0 && oldPaint.paints == 0 && siblingPaint.paints == 0 && freshPaints == 0);
     // The swap draws nothing itself; a visible fresh is left invalid so it paints once at the next pump.
     RECT pending;
@@ -654,14 +659,20 @@ namespace
     const BOOL printed = PrintWindow(edit, memory, kPrintFullContent);
     if (!printed)
       std::printf("defaultGround: PrintWindow refused client=%ldx%ld visible=%d parentVisible=%d error=%lu\n",
-                  client.right, client.bottom, (GetWindowLongW(edit, GWL_STYLE) & WS_VISIBLE) != 0,
-                  IsWindowVisible(parent) != 0, GetLastError());
+                  client.right,
+                  client.bottom,
+                  (GetWindowLongW(edit, GWL_STYLE) & WS_VISIBLE) != 0,
+                  IsWindowVisible(parent) != 0,
+                  GetLastError());
     LOKA_VERIFY(printed);
     const COLORREF ground = GetPixel(memory, client.right / 2, client.bottom - 4);
     if (ground != expected)
       std::printf("defaultGround: pixel=%06lx expected=%06lx client=%ldx%ld corner=%06lx foreground=%d\n",
-                  static_cast<unsigned long>(ground), static_cast<unsigned long>(expected), client.right,
-                  client.bottom, static_cast<unsigned long>(GetPixel(memory, 1, 1)),
+                  static_cast<unsigned long>(ground),
+                  static_cast<unsigned long>(expected),
+                  client.right,
+                  client.bottom,
+                  static_cast<unsigned long>(GetPixel(memory, 1, 1)),
                   GetForegroundWindow() == GetAncestor(edit, GA_ROOT));
     LOKA_VERIFY(ground == expected);
     DeleteObject(sentinel);
