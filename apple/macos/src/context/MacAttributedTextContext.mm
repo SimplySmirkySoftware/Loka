@@ -167,127 +167,133 @@ bool MacAttributedTextContext::Projection::build(const loka::app::AttributedStri
                                                  const MacScenePlatformController &controller,
                                                  const loka::macos::MacLength &constraint)
 {
+  // One failure exit: fill's locals (bounds, byte buffers) are released when it
+  // returns, and a refused fill leaves no partial value, measurement or slots.
   this->clear();
-  // Keep all construction locals inside this scope so every refusal joins the
-  // same clear below, after the temporary bounds have released their storage.
-  {
-    if (!value.valid() || !this->sources_.reserve(value.segmentCount()))
-      goto refused;
-    loka::app::detail::TextMeasureTable<ByteBound> bounds;
-    if (!bounds.allocate(value.segmentCount()))
-      goto refused;
-    NSMutableAttributedString *result = [[[NSMutableAttributedString alloc] initWithString:@""] autorelease];
-    if (!result)
-      goto refused;
-    std::size_t index = 0;
-    for (; index < value.segmentCount();)
-    {
-      const std::size_t first = index;
-      const loka::app::TextStyle &style = value.segment(first).style;
-      std::string bytes;
-      do
-      {
-        bounds[index].begin = bytes.size();
-        std::string part;
-        if (!loka::platform::CollectUtf8(value.segment(index).text, part))
-          goto refused;
-        bytes.append(part);
-        bounds[index].end = bytes.size();
-        ++index;
-      } while (index < value.segmentCount() && value.segment(index).style == style);
-      NSString *run = [[[NSString alloc] initWithBytes:bytes.data() length:bytes.size()
-                                              encoding:NSUTF8StringEncoding] autorelease];
-      NSFont *font = (NSFont *)controller.textFont(style);
-      // Missing fonts refuse even a zero-length run, as in the original builder.
-      if (!run || !font)
-        goto refused;
-      const NSUInteger base = [result length];
-      NSColor *color = nil;
-      if (!loka::macos::QueryMacTextColor(style.color_, color))
-        color = loka::macos::MacLabelTextColor();
-      NSMutableDictionary *attributes = [NSMutableDictionary
-          dictionaryWithObjectsAndKeys:font, NSFontAttributeName, color, NSForegroundColorAttributeName, nil];
-      if (!attributes)
-        goto refused;
-      bool on = false;
-      // Twin: TextDraft in MacTextContext.mm uses the same underline attribute.
-      if (style.queryUnderline(on) && on)
-        [attributes setObject:[NSNumber numberWithInt:NSUnderlineStyleSingle] forKey:NSUnderlineStyleAttributeName];
-      NSAttributedString *part = [[[NSAttributedString alloc] initWithString:run attributes:attributes] autorelease];
-      if (!part)
-        goto refused;
-      [result appendAttributedString:part];
-      if (!AgreesWithUtf16(bytes, run))
-      {
-        for (std::size_t segment = first; segment < index; ++segment)
-          this->sources_.slot(segment).start = this->sources_.slot(segment).end = base;
-      }
-      else
-      {
-        std::size_t byte = 0;
-        NSUInteger unit = 0;
-        for (std::size_t segment = first; segment < index; ++segment)
-        {
-          MacTextSourceSlot &slot = this->sources_.slot(segment);
-          slot.start = slot.end = base + unit;
-          while (byte < bounds[segment].end)
-          {
-            const std::size_t begin = byte;
-            unsigned int scalar = 0;
-            if (!loka::core::detail::DecodeUtf8Codepoint(bytes.data(), bytes.size(), byte, scalar))
-              goto refused;
-            const NSUInteger count = scalar > 0xFFFF ? 2 : 1;
-            // A scalar crossing any segment edge has no owner (both surrogates).
-            if (begin >= bounds[segment].begin && byte <= bounds[segment].end)
-              slot.end = base + unit + count;
-            unit += count;
-          }
-        }
-      }
-      // The next base is result.length, including the native decoder's BOM rule.
-    }
-    NSMutableParagraphStyle *paragraph = [[[NSMutableParagraphStyle alloc] init] autorelease];
-    if (!paragraph)
-      goto refused;
-    [paragraph setLineBreakMode:LineBreakMode(block)];
-    // Twin: MacTextContext::applyStyle configures the plain label.
-    switch (block.hasAlign_ ? block.align_ : loka::app::TEXT_ALIGN_LEFT)
-    {
-    case loka::app::TEXT_ALIGN_LEFT:
-      [paragraph setAlignment:LOKA_MAC_TEXT_ALIGNMENT_LEFT];
-      break;
-    case loka::app::TEXT_ALIGN_CENTER:
-      [paragraph setAlignment:LOKA_MAC_TEXT_ALIGNMENT_CENTER];
-      break;
-    case loka::app::TEXT_ALIGN_RIGHT:
-      [paragraph setAlignment:LOKA_MAC_TEXT_ALIGNMENT_RIGHT];
-      break;
-    }
-    [result addAttribute:NSParagraphStyleAttributeName value:paragraph range:NSMakeRange(0, [result length])];
-    NSTextFieldCell *measure = [[[NSTextFieldCell alloc] initTextCell:@""] autorelease];
-    if (!measure)
-      goto refused;
-    [measure setAttributedStringValue:result];
-    ConfigureCell(measure, block);
-    const NSSize size = [measure cellSizeForBounds:loka::macos::MacMeasurementBounds(constraint)];
-#ifdef LOKA_LIFECYCLE_AUDIT
-    for (std::size_t segment = 0; segment < value.segmentCount(); ++segment)
-    {
-      const MacTextSourceSlot &slot = this->sources_.slot(segment);
-      assert(slot.start <= slot.end && slot.end <= [result length]);
-      if (segment)
-        assert(this->sources_.slot(segment - 1).end <= slot.start);
-    }
-#endif
-    this->value_ = (void *)[result copy];
-    if (!this->value_)
-      goto refused;
-    this->measurement_.commit(constraint.pt, controller.projection().measurementToLu(size.height));
+  if (this->fill(value, block, controller, constraint))
     return true;
-  }
-refused:
   this->clear();
   return false;
+}
+
+bool MacAttributedTextContext::Projection::fill(const loka::app::AttributedString &value,
+                                                const loka::app::BlockStyle &block,
+                                                const MacScenePlatformController &controller,
+                                                const loka::macos::MacLength &constraint)
+{
+  if (!value.valid() || !this->sources_.reserve(value.segmentCount()))
+    return false;
+  loka::app::detail::TextMeasureTable<ByteBound> bounds;
+  if (!bounds.allocate(value.segmentCount()))
+    return false;
+  NSMutableAttributedString *result = [[[NSMutableAttributedString alloc] initWithString:@""] autorelease];
+  if (!result)
+    return false;
+  std::size_t index = 0;
+  for (; index < value.segmentCount();)
+  {
+    const std::size_t first = index;
+    const loka::app::TextStyle &style = value.segment(first).style;
+    std::string bytes;
+    do
+    {
+      bounds[index].begin = bytes.size();
+      std::string part;
+      if (!loka::platform::CollectUtf8(value.segment(index).text, part))
+        return false;
+      bytes.append(part);
+      bounds[index].end = bytes.size();
+      ++index;
+    } while (index < value.segmentCount() && value.segment(index).style == style);
+    NSString *run = [[[NSString alloc] initWithBytes:bytes.data() length:bytes.size()
+                                            encoding:NSUTF8StringEncoding] autorelease];
+    NSFont *font = (NSFont *)controller.textFont(style);
+    // Missing fonts refuse even a zero-length run, as in the original builder.
+    if (!run || !font)
+      return false;
+    const NSUInteger base = [result length];
+    NSColor *color = nil;
+    if (!loka::macos::QueryMacTextColor(style.color_, color))
+      color = loka::macos::MacLabelTextColor();
+    NSMutableDictionary *attributes = [NSMutableDictionary
+        dictionaryWithObjectsAndKeys:font, NSFontAttributeName, color, NSForegroundColorAttributeName, nil];
+    if (!attributes)
+      return false;
+    bool on = false;
+    // Twin: TextDraft in MacTextContext.mm uses the same underline attribute.
+    if (style.queryUnderline(on) && on)
+      [attributes setObject:[NSNumber numberWithInt:NSUnderlineStyleSingle] forKey:NSUnderlineStyleAttributeName];
+    NSAttributedString *part = [[[NSAttributedString alloc] initWithString:run attributes:attributes] autorelease];
+    if (!part)
+      return false;
+    [result appendAttributedString:part];
+    if (!AgreesWithUtf16(bytes, run))
+    {
+      for (std::size_t segment = first; segment < index; ++segment)
+        this->sources_.slot(segment).start = this->sources_.slot(segment).end = base;
+    }
+    else
+    {
+      std::size_t byte = 0;
+      NSUInteger unit = 0;
+      for (std::size_t segment = first; segment < index; ++segment)
+      {
+        MacTextSourceSlot &slot = this->sources_.slot(segment);
+        slot.start = slot.end = base + unit;
+        while (byte < bounds[segment].end)
+        {
+          const std::size_t begin = byte;
+          unsigned int scalar = 0;
+          if (!loka::core::detail::DecodeUtf8Codepoint(bytes.data(), bytes.size(), byte, scalar))
+            return false;
+          const NSUInteger count = scalar > 0xFFFF ? 2 : 1;
+          // A scalar crossing any segment edge has no owner (both surrogates).
+          if (begin >= bounds[segment].begin && byte <= bounds[segment].end)
+            slot.end = base + unit + count;
+          unit += count;
+        }
+      }
+    }
+    // The next base is result.length, including the native decoder's BOM rule.
+  }
+  NSMutableParagraphStyle *paragraph = [[[NSMutableParagraphStyle alloc] init] autorelease];
+  if (!paragraph)
+    return false;
+  [paragraph setLineBreakMode:LineBreakMode(block)];
+  // Twin: MacTextContext::applyStyle configures the plain label.
+  switch (block.hasAlign_ ? block.align_ : loka::app::TEXT_ALIGN_LEFT)
+  {
+  case loka::app::TEXT_ALIGN_LEFT:
+    [paragraph setAlignment:LOKA_MAC_TEXT_ALIGNMENT_LEFT];
+    break;
+  case loka::app::TEXT_ALIGN_CENTER:
+    [paragraph setAlignment:LOKA_MAC_TEXT_ALIGNMENT_CENTER];
+    break;
+  case loka::app::TEXT_ALIGN_RIGHT:
+    [paragraph setAlignment:LOKA_MAC_TEXT_ALIGNMENT_RIGHT];
+    break;
+  }
+  [result addAttribute:NSParagraphStyleAttributeName value:paragraph range:NSMakeRange(0, [result length])];
+  NSTextFieldCell *measure = [[[NSTextFieldCell alloc] initTextCell:@""] autorelease];
+  if (!measure)
+    return false;
+  [measure setAttributedStringValue:result];
+  ConfigureCell(measure, block);
+  const NSSize size = [measure cellSizeForBounds:loka::macos::MacMeasurementBounds(constraint)];
+#ifdef LOKA_LIFECYCLE_AUDIT
+  for (std::size_t segment = 0; segment < value.segmentCount(); ++segment)
+  {
+    const MacTextSourceSlot &slot = this->sources_.slot(segment);
+    assert(slot.start <= slot.end && slot.end <= [result length]);
+    if (segment)
+      assert(this->sources_.slot(segment - 1).end <= slot.start);
+  }
+#endif
+  this->value_ = (void *)[result copy];
+  if (!this->value_)
+    return false;
+  this->measurement_.commit(constraint.pt, controller.projection().measurementToLu(size.height));
+  return true;
 }
 
 MacAttributedTextContext::MacAttributedTextContext(MacScenePlatformController *controller,

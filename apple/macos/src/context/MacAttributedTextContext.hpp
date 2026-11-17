@@ -97,6 +97,11 @@ private:
 
   private:
     friend class loka::dsl::testing::MacAttributedTextTestAccess;
+    /** Construction body of build; false leaves partial state for build to clear. */
+    bool fill(const loka::app::AttributedString &value,
+              const loka::app::BlockStyle &block,
+              const MacScenePlatformController &controller,
+              const loka::macos::MacLength &constraint);
     MacTextSourceTable sources_;
     // No backing-scale invalidation until a measurement effect is demonstrated (#970).
     loka::app::MeasurementResult<CGFloat, int> measurement_;
