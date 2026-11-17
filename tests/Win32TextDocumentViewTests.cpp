@@ -650,7 +650,13 @@ namespace
                   client.right, client.bottom, (GetWindowLongW(edit, GWL_STYLE) & WS_VISIBLE) != 0,
                   IsWindowVisible(parent) != 0, GetLastError());
     LOKA_VERIFY(printed);
-    LOKA_VERIFY(GetPixel(memory, client.right / 2, client.bottom - 4) == expected);
+    const COLORREF ground = GetPixel(memory, client.right / 2, client.bottom - 4);
+    if (ground != expected)
+      std::printf("defaultGround: pixel=%06lx expected=%06lx client=%ldx%ld corner=%06lx foreground=%d\n",
+                  static_cast<unsigned long>(ground), static_cast<unsigned long>(expected), client.right,
+                  client.bottom, static_cast<unsigned long>(GetPixel(memory, 1, 1)),
+                  GetForegroundWindow() == GetAncestor(edit, GA_ROOT));
+    LOKA_VERIFY(ground == expected);
     DeleteObject(sentinel);
     SelectObject(memory, previous);
     DeleteObject(bitmap);
