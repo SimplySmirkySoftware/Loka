@@ -5,6 +5,7 @@
 #include "WebRunsStatus.hpp"
 #include "FakeBoundary.hpp"
 #include "support/TestVerify.hpp"
+#include "support/LokaAllocFailure.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include <cstdio>
 using namespace loka::app;
@@ -21,6 +22,120 @@ namespace
         if (Node *found = FindAttributed(child))
           return found;
     return 0;
+  }
+  AttributedString InvalidValue()
+  {
+    const loka::core::String input("refused");
+    loka::core::testing::failLokaAllocRaw("AttributedString", "Segments", 1);
+    const AttributedString invalid = Styled(input, Bold);
+    loka::core::testing::allowLokaAllocRaw();
+    LOKA_VERIFY(!invalid.valid());
+    return invalid;
+  }
+  /** Mounted first-value refusal without an earlier successful snapshot. */
+  class InvalidFixture : public BoundaryNodeFor<InvalidFixture>
+  {
+  public:
+    explicit InvalidFixture(const BoundaryPropsFor<InvalidFixture> &props)
+        : BoundaryNodeFor<InvalidFixture>(props)
+    {
+    }
+    virtual void composeNode(NodeComposition &composition)
+    {
+      composition.declare(VStack().gap(0) << AttributedText(InvalidValue()) << Text("after"));
+    }
+  };
+  void MountedInvalidSource()
+  {
+    for (int mode = 0; mode < 3; ++mode)
+    {
+      webtest::reset();
+      webtest::attributedMode() = mode == 2 ? 1 : 0;
+      WebSession session;
+      WebElement root;
+      int width = 100, height = 100;
+      LOKA_VERIFY(root.create(session.routes(), session.tokens(), loka::web::ROOT, 0, width, height));
+      {
+        WebScenePlatformController controller(session, root.token(), width, height, 0);
+        NodeDefinitionBase *definition =
+            mode == 1 ? static_cast<NodeDefinitionBase *>(Boundary<InvalidFixture>().clone())
+                      : static_cast<NodeDefinitionBase *>(Boundary<webtest::AttributedFixture>().clone());
+        LOKA_VERIFY(definition);
+        Scene scene(definition);
+        LOKA_VERIFY(scene.mount(&controller));
+        SceneTestAccess::updateAttached(scene, true);
+        scene.flushInvalidation();
+        Node *boundary = SceneTestAccess::rootBoundary(scene);
+        Node *node = FindAttributed(boundary);
+        const uint32_t token = webtest::token(loka::web::ATTRIBUTED_TEXT);
+        LOKA_VERIFY(token && node);
+        webtest::Resource &row = webtest::resources[token];
+        unsigned calls = webtest::runsCalls;
+        unsigned measures = webtest::measureCalls;
+        if (mode != 1)
+        {
+          if (mode == 2)
+          {
+            loka::core::Operation turn;
+            static_cast<webtest::AttributedFixture *>(boundary)->content.set(Styled("before", Red));
+          }
+          else
+            LOKA_VERIFY(AttributedText(Styled("before", Red)).applyPropsToNode(node));
+          controller.requestRelayout();
+          scene.flushInvalidation();
+          LOKA_VERIFY(row.projected && row.text == "before");
+          if (mode == 2)
+          {
+            loka::core::Operation turn;
+            static_cast<webtest::AttributedFixture *>(boundary)->shown.set(false);
+          }
+          scene.flushInvalidation();
+          if (mode == 2)
+          {
+            LOKA_VERIFY(row.hidden);
+            loka::core::Operation turn;
+            static_cast<webtest::AttributedFixture *>(boundary)->content.set(InvalidValue());
+          }
+          else
+            LOKA_VERIFY(AttributedText(InvalidValue()).applyPropsToNode(node));
+          calls = webtest::runsCalls;
+          measures = webtest::measureCalls;
+          if (mode == 2)
+          {
+            loka::core::Operation turn;
+            static_cast<webtest::AttributedFixture *>(boundary)->shown.set(true);
+          }
+          controller.requestRelayout();
+          scene.flushInvalidation();
+        }
+        std::printf("attributed invalid mode=%d projected=%d height=%d runs=%u pending=%d\n",
+                    mode,
+                    row.projected,
+                    row.height,
+                    webtest::runsCalls - calls,
+                    scene.hasPendingInvalidation());
+        LOKA_VERIFY(!row.projected && row.height == 0);
+        LOKA_VERIFY(webtest::runsCalls == calls && webtest::measureCalls == measures);
+        LOKA_VERIFY(!scene.hasPendingInvalidation());
+        if (mode != 2)
+          LOKA_VERIFY(webtest::resources[webtest::token(loka::web::TEXT)].y == 0);
+        if (mode == 1)
+          LOKA_VERIFY(webtest::runsCalls == 0);
+        if (mode == 2)
+          LOKA_VERIFY(webtest::token(loka::web::ATTRIBUTED_TEXT) == token && !row.hidden);
+        LOKA_VERIFY(AttributedText(Styled("after invalid", Blue)).applyPropsToNode(node));
+        controller.requestRelayout();
+        scene.flushInvalidation();
+        LOKA_VERIFY(row.projected && row.text == "after invalid" && webtest::runsCalls == calls + 1);
+        LOKA_VERIFY(!scene.hasPendingInvalidation());
+        SceneTestAccess::unmount(scene);
+        controller.destroy();
+      }
+      WebResource *retired = root.revoke(session.routes());
+      LOKA_VERIFY(web_release(retired->token) == loka::web::CONSUMED);
+      delete retired;
+    }
+    webtest::attributedMode() = 0;
   }
   void MountedLifecycleAndBottom()
   {
@@ -158,6 +273,7 @@ namespace
 
 void WebAttributedDOMTests()
 {
+  MountedInvalidSource();
   MountedLifecycleAndBottom();
   webtest::reset();
   WebSession session;

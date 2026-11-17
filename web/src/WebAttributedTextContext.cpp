@@ -9,7 +9,12 @@ short WebAttributedTextContext::layout(IPlatformController *, LayoutState &state
   const AttributedTextProps &props = this->owner()->asAttributedTextNode()->props;
   const AttributedString value = props.text_ ? props.text_->get() : AttributedString();
   int status = WEB_MEASURE_OK;
-  if (!this->projection_.get() || !this->projection_.get()->matches(value, props.blockStyle_, state.width))
+  if (!value.valid())
+  {
+    this->projection_.clear();
+    this->controller_.refuseMeasurement();
+  }
+  else if (!this->projection_.get() || !this->projection_.get()->matches(value, props.blockStyle_, state.width))
   {
     WebAttributedSnapshot *built = 0;
     status = WebAttributedLayout::build(value, props.blockStyle_, state.width, built);

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Consumer mutations. Build failure is never a kill; restore bytes on every exit.
-All five mutations are native/JS-unit killable; Chromium also pins child identity.
+All six mutations are native/JS-unit killable; Chromium also pins child identity.
 """
 import argparse
 from pathlib import Path
@@ -9,6 +9,8 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[3]
 MUTATIONS = [
+    ('m', 'web/src/WebAttributedTextContext.cpp', 'if (!value.valid())',
+     'if (false && !value.valid())', 'keep the old snapshot for an invalid source', 'native'),
     ('a', 'web/src/WebScenePlatformController.cpp',
      '  if (node->asAttributedTextNode())\n    return AttributedTextHandler.ensureContext(node, this, state) != 0;',
      '', 'remove projected preparation', 'native'),

@@ -1476,9 +1476,7 @@ the combined text; splitting the same styled content into more segments does
 not change its layout.
 
 Fold character styles into the value before passing it to `AttributedText`;
-the node has no separate character-style input. An invalid value refuses
-projection. On Web, a first failure displays nothing; a later refusal retains
-the previous successful content. Other rails display an invalid value as empty.
+the node has no separate character-style input. An invalid value displays as empty on every rail.
 Every rail draws it: Toolbox, Win32 and Web run by run, macOS as one attributed
 line, and the Null rail deterministically for the
 headless suite. Every rail wraps the combined text, never one segment at a

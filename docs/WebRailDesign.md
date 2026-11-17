@@ -1409,8 +1409,11 @@ commit; only the prepared payload reference is published. Protocol refusal
 preserves children and cache. Recoverable validation/preparation failure preserves
 children but clears the applied cache, including failures before comparison.
 
-Build refusal retains the prior snapshot's geometry and paint, restores dirty
-inputs and requests after-run layout. DOM REFUSED requests after-run layout
+An invalid source value clears the slot and unprojects at height zero without
+building or requesting a retry; it still refuses the measurement channel. A later
+valid value builds and projects normally. A transient build refusal for a valid
+source retains the prior snapshot's geometry and paint, restores dirty inputs
+and requests after-run layout. DOM REFUSED requests after-run layout
 without restoring already-consumed leaf inputs; persistent failure costs one
 attempt per flush and recovery needs no app mutation. PROTOCOL asserts in debug
 and requests no retry in release. A first build failure only hides projection,
