@@ -577,7 +577,8 @@ void testTextStoreUnboundAdmission()
 
 void testTextStoreDoubleAdmissionBinding()
 {
-#if defined(__linux__) && defined(LOKA_LIFECYCLE_AUDIT) && !defined(NDEBUG) && !defined(LOKA_TEXT_STORE_BINDING_PIN_ASAN)
+#if defined(__linux__) && defined(LOKA_LIFECYCLE_AUDIT) && !defined(NDEBUG)                                            \
+    && !defined(LOKA_TEXT_STORE_BINDING_PIN_ASAN)
   const pid_t child = fork();
   LOKA_VERIFY(child >= 0);
   if (!child)
