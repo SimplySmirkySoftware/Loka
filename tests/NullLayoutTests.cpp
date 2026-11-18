@@ -21,6 +21,7 @@ namespace loka
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/nestable/Canvas.hpp"
 #include "NullLayoutTests.hpp"
+#include "support/ScrollViewSeat.hpp"
 #include "support/TestVerify.hpp"
 
 #include <cassert>
@@ -689,7 +690,8 @@ void testBoxHeightOnlyColumnAndScrollExtent()
   FixedLayoutProbeNode *after = new FixedLayoutProbeNode(7);
   column.addChild(after);
   const int columnY = platform.projectLayoutForTesting(&column, makeState(10, 20, 100, 15));
-  ScrollViewNode scroll((ScrollViewProps()));
+  loka::testing::ScrollViewSeat viewport;
+  ScrollViewNode scroll(ScrollViewProps(viewport.state()));
   scroll.addChild(new BoxNode(Box().height(40).props));
   const int scrollY = platform.projectLayoutForTesting(&scroll, makeState(10, 20, 100, 0));
   LOKA_VERIFY(after->geometry().y == 64);
@@ -779,7 +781,8 @@ void testSharedAlignedRowRefusesOverflowingChildBox()
   // a ScrollView. The sibling comes first so nothing but its own painted box
   // can refuse it: bottom-aligned under a SHRT_MAX measurement it would land
   // at a wrapped Y, and the row refuses that box before narrowing.
-  ScrollViewNode scroll((ScrollViewProps()));
+  loka::testing::ScrollViewSeat viewport;
+  ScrollViewNode scroll(ScrollViewProps(viewport.state()));
   StackNode *row = new StackNode(Row().alignVertical(VERTICAL_ALIGNMENT_BOTTOM).props);
   FixedLayoutProbeNode *sibling = new FixedLayoutProbeNode(7);
   row->addChild(sibling);
@@ -1108,8 +1111,9 @@ void testNullClipScrollAdmissionAndMeasurement()
 {
   using namespace loka::app;
   NullScenePlatformController platform;
+  loka::testing::ScrollViewSeat viewport;
   BoxNode box(Box().size(60, 50).clipChildren().props);
-  ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps());
+  ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(viewport.state()));
   ClipFrameProbe *probe = new ClipFrameProbe(2, true, false, loka::core::Frame(10, 20, 60, 50));
   scroll->addChild(probe);
   BoxNode *wide = new BoxNode(Box().size(100, 50).props);
@@ -1121,8 +1125,9 @@ void testNullClipScrollAdmissionAndMeasurement()
   LOKA_VERIFY(platform.scrollViewShortRangeRefusalCount() == 0);
   LOKA_VERIFY(platform.projectionParentScopeDepthForTesting() == 0);
   NullScenePlatformController measuredPlatform;
+  loka::testing::ScrollViewSeat measuredViewport;
   BoxNode measuredBox(Box().clipChildren().props);
-  ScrollViewNode *measuredScroll = new ScrollViewNode(ScrollViewProps());
+  ScrollViewNode *measuredScroll = new ScrollViewNode(ScrollViewProps(measuredViewport.state()));
   FixedLayoutProbeNode *measured = new FixedLayoutProbeNode(7);
   measuredScroll->addChild(measured);
   measuredBox.addChild(measuredScroll);
@@ -1136,8 +1141,10 @@ void testNullClipInsideViewportKeepsChannel()
   using namespace loka::app;
   for (int inset = 0; inset <= 12; inset += 12)
   {
+    // Content y -inset keeps the top gap visible (extent 0), the origin this pin measures.
+    loka::testing::ScrollViewSeat viewport(-inset);
     NullScenePlatformController platform;
-    ScrollViewNode scroll(ScrollViewProps().contentInsets(ScrollViewContentInsets::of(inset, 0)));
+    ScrollViewNode scroll(ScrollViewProps(viewport.state()).contentInsets(ScrollViewContentInsets::of(inset, 0)));
     BoxNode *box = new BoxNode(Box().height(40).clipChildren().props);
     ClipFrameProbe *inner = new ClipFrameProbe(2, true, false, loka::core::Frame(10, 20 + inset, 80, 40));
     box->addChild(inner);

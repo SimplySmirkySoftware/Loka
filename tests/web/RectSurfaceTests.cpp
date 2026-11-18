@@ -328,7 +328,8 @@ namespace
     {
       {
         loka::core::Operation turn;
-        LOKA_VERIFY(ScrollView().contentInsets(insets[i], 0).applyPropsToNode(scroll));
+        LOKA_VERIFY(
+            ScrollView(webtest::surfaceFixture()->viewport).contentInsets(insets[i], 0).applyPropsToNode(scroll));
         webtest::surfaceFixture()->scene()->requestLayoutAfterRun();
       }
       rig.flush();
