@@ -1,6 +1,7 @@
 #include "MacTextStoreTests.hpp"
 #include "MacScenePlatformController.hpp"
 #include "MacApp.hpp"
+#include "core/util/StateTrackerGuard.hpp"
 #include "MacWindow.hpp"
 #include "MacObjCCompat.hpp"
 #include "text/MacTextStore.hpp"
@@ -8,7 +9,7 @@
 #include "support/TestVerify.hpp"
 #include "support/TextDocumentAccess.hpp"
 #include "support/TextStoreConformance.hpp"
-#include "support/WindowAdmissionTestApp.hpp"
+#include "support/NativeTextStoreAdmission.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include "testing/app/AppTestAccess.hpp"
 #include "testing/MacWindowTestAccess.hpp"
@@ -705,11 +706,7 @@ void testMacTextStoreConformance()
   const std::string logical = "a\n\xf0\x9f\x98\x80";
   loka::app::testing::checkTextStoreConformance(
       controller, app, root.text, *controller.fresh, replacement(logical, TextPlacement::End()), 4, 4);
-  // Known gap, shared with the Win32 and Null ledgers: a replacement retires the old row at the
-  // outer completion, after this turn's drain, and no rail's hasPendingSync() counts retired rows,
-  // so an idle production window keeps it until other work admits the window. This fixture's
-  // window does not forward the pending query or the drain, so the pin cannot observe admission;
-  // it drains at the controller's safe point directly. The admission fix has its own design page.
+  // The borrowed fixture window does not forward the pending query or the drain.
   controller.drainNativeRetirements();
   LOKA_VERIFY(loka::app::testing::TextStoreTestAccess::retiredCount(*controller.fresh) == 0);
   const unsigned long revision = root.text.fact()->get().textRevision();
@@ -737,19 +734,75 @@ void testMacTextStoreWindowClose()
 {
   Pool pool;
   NullPlatformContext context;
-  CloseApp app;
-  const unsigned before = rootDeaths;
-  MacWindow *window = new MacWindow(&context, WindowProps().scene(new Scene(Boundary<StoreRoot>())));
-  app.install(window);
-  app.reconcileAtCompletion();
-  StoreRoot &root = *static_cast<StoreRoot *>(loka::dsl::testing::SceneTestAccess::rootBoundary(*window->scene()));
-  const TextDocumentRegistration *registration = loka::app::testing::TextDocumentAccess::registration(root.text);
-  LOKA_VERIFY(registration && registration->store() && root.text.fact()->get().state() == TEXT_DOCUMENT_READY);
-  NSTextView *view = Access::view(*registration->store());
-  LOKA_VERIFY(![view superview] && ![view window]);
-  NSWindow *native = (NSWindow *)loka::dsl::testing::MacWindowTestAccess::nativeWindow(*window);
-  LOKA_VERIFY(native);
-  [native close];
-  loka::app::testing::AppTestAccess::flushWindowInvalidations(app);
-  LOKA_VERIFY(rootDeaths == before + 1);
+  for (unsigned external = 0; external < 2; ++external)
+  {
+    CloseApp app;
+    const unsigned before = rootDeaths;
+    MacWindow *window = new MacWindow(&context, WindowProps().scene(new Scene(Boundary<StoreRoot>())));
+    app.install(window);
+    loka::app::testing::AppTestAccess::flushWindowInvalidations(app);
+    app.reconcileAtCompletion();
+    StoreRoot &root = *static_cast<StoreRoot *>(loka::dsl::testing::SceneTestAccess::rootBoundary(*window->scene()));
+    const TextDocumentRegistration *registration = loka::app::testing::TextDocumentAccess::registration(root.text);
+    LOKA_VERIFY(registration && registration->store() && root.text.fact()->get().state() == TEXT_DOCUMENT_READY);
+    NSTextView *view = Access::view(*registration->store());
+    LOKA_VERIFY(![view superview] && ![view window]);
+    NSWindow *native = (NSWindow *)loka::dsl::testing::MacWindowTestAccess::nativeWindow(*window);
+    LOKA_VERIFY(native);
+    NSTextStorage *old = [Access::storage(*registration->store()) retain];
+    LOKA_VERIFY(root.text.replace(TextReplacement::Empty()) == POST_ACCEPTED);
+    app.reconcileAtCompletion();
+    LOKA_VERIFY(root.text.replaceReply()->get().kind() == Reply<TextReplacement>::GRANTED);
+    TextStoreRow &fresh = *registration->store();
+    LOKA_VERIFY(loka::app::testing::TextStoreTestAccess::retiredCount(fresh) == 1);
+    NSTextStorage *current = [Access::storage(fresh) retain];
+    LOKA_VERIFY(current != old && [[old layoutManagers] count] == 1 && [[current layoutManagers] count] == 1);
+    if (external)
+      [native close];
+    else
+    {
+      loka::core::StateTrackerGuard guard(window->getTracker());
+      window->visibilityState().set(false);
+    }
+    loka::app::testing::AppTestAccess::flushWindowInvalidations(app);
+    LOKA_VERIFY(rootDeaths == before + 1);
+    LOKA_VERIFY([[old layoutManagers] count] == 0 && [[current layoutManagers] count] == 0);
+    [current release];
+    [old release];
+  }
+}
+
+namespace
+{
+  typedef loka::app::testing::NativeTextStoreAdmission<MacWindow, StoreRoot> AdmissionFixture;
+}
+void testMacTextStoreReplacementAdmission()
+{
+  Pool pool;
+  AdmissionFixture f;
+  NSTextStorage *old = [Access::storage(f.store()) retain];
+  TextStoreRow &fresh = f.replace();
+  LOKA_VERIFY([[old layoutManagers] count] == 1);
+  f.checkReplacementAdmission(fresh);
+  LOKA_VERIFY([[old layoutManagers] count] == 0);
+  [old release];
+}
+void testMacTextStoreRefusedBirthAdmission()
+{
+  Pool pool;
+  AdmissionFixture f;
+  failStoreAllocation(STORAGE, 1);
+  f.checkRefusal(TEXT_REPLACE_ALLOCATION);
+}
+void testMacTextStoreBusyAdmission()
+{
+  Pool pool;
+  AdmissionFixture f;
+  f.checkBusy();
+}
+void testMacTextStoreRemountAdmission()
+{
+  Pool pool;
+  AdmissionFixture f;
+  f.checkRemount();
 }

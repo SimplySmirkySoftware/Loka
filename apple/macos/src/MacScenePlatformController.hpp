@@ -296,6 +296,8 @@ private:
   };
   // Parking twin of Win32TextParking. A parked NSTextView has no superview or window.
   loka::app::scene::TextStoreLedger textStores_;
+  // A rail declares one binding after its ledger.
+  TextStoreAdmissionBinding textStoreBinding_;
   std::vector<NativeRetirement> nativeRetirements_;
 };
 
