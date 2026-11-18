@@ -25,6 +25,25 @@ addToLibrary({
       row.element.style.setProperty('display', value ? 'none' : (row.kind === 0 ? 'block' : 'inline-block'), 'important');
       row.element.inert = !!value;
     },
+    /** Cost: runs staging once per fragment; builds one detached box from its own payload. */
+    fragmentBox(words, offset, descriptor, text, service) {
+      const element=document.createElement('span');
+      Object.assign(element.style,{position:'absolute',display:'block',margin:'0',padding:'0',border:'0',
+        left:words[offset+1]+'px',top:words[offset+2]+'px',width:words[offset+3]+'px',height:words[offset+4]+'px',
+        textAlign:'left',textAlignLast:'auto',whiteSpace:'pre',overflow:'visible'});
+      service.environment(LokaWebStyle.fontKey(descriptor)).applyToElement(element);
+      // Deliberate paint twin of web_set_text_style: generated names survive vocabulary remapping.
+      const colors=LokaWebStyle.colors;
+      const palette={ [colors.UNSET]:'var(--loka-text)', [colors.PRIMARY]:'var(--loka-text)',
+        [colors.SECONDARY]:'var(--loka-secondary)', [colors.BLACK]:'black', [colors.WHITE]:'white',
+        [colors.RED]:'red', [colors.GREEN]:'green', [colors.BLUE]:'blue',
+        [colors.CYAN]:'cyan', [colors.MAGENTA]:'magenta', [colors.YELLOW]:'yellow' };
+      element.style.color=palette[descriptor.color];
+      element.style.textDecoration=descriptor.underline===1?'underline':'none';
+      element.style.lineHeight=words[offset+4]+'px';
+      element.textContent=text;
+      return element;
+    },
     arm(callback, owner, kind, ms) {
       const handle = WebDOM.next++;
       const run = () => {
@@ -85,6 +104,7 @@ addToLibrary({
             overflow:'hidden',pointerEvents:'none',userSelect:'none'});
           element.textContent = 'RectSurface';
         }
+        if (kind === 7) Object.assign(element.style,{margin:"0",border:"0",padding:"0",overflow:"hidden"});
         if (kind === 5) {
           const g=LokaWebStyle.webButtonGeometry;
           Object.assign(element.style,{boxSizing:'border-box',
@@ -254,6 +274,79 @@ addToLibrary({
     if (!service) return false;
     WebDOM.text=service;
     return true;
+  },
+  web_set_runs__deps:['$WebDOM'],
+  /** Cost: attributed render once; O(words+bytes) validation/comparison of this row's payload.
+   * Changed values copy/decode O(words+bytes), then stage O(fragments) owned children. */
+  web_set_runs(token,words,wordCount,bytes,byteLength) {
+    const status=LokaWebStyle.webRunsStatus, row=WebDOM.row(token);
+    try {
+      words>>>=0; bytes>>>=0;
+      const bounded=n=>Number.isInteger(n) && n>=0 && n<=2147483647;
+      if(!bounded(wordCount) || wordCount<3 || !bounded(byteLength) || words%4!==0
+          || words>HEAPU8.length || wordCount>Math.floor((HEAPU8.length-words)/4)
+          || bytes>HEAPU8.length || byteLength>HEAPU8.length-bytes) return status.PROTOCOL;
+      const base=words/4, F=HEAP32[base+1], D=HEAP32[base+2];
+      if(HEAP32[base]!==1 || !bounded(F) || !bounded(D) || 3+7*F+9*D!==wordCount
+          || (F===0 && byteLength!==0)) return status.PROTOCOL;
+      let end=0;
+      for(let i=0;i<F;++i) {
+        const o=base+3+7*i, d=HEAP32[o], x=HEAP32[o+1], y=HEAP32[o+2], w=HEAP32[o+3], h=HEAP32[o+4];
+        const start=HEAP32[o+5], next=HEAP32[o+6];
+        if(d<0 || d>=D || x<0 || y<0 || w<0 || h<=0 || x+w>32767 || y+h>32767
+            || start!==end || next<start || next>byteLength) return status.PROTOCOL;
+        // Each range must independently end at a scalar boundary. No allocations here.
+        for(let p=start;p<next;) {
+          const first=HEAPU8[bytes+p++];
+          if(first===10 || first===13) return status.PROTOCOL;
+          if(first<128) continue;
+          let count,scalar,minimum;
+          if(first>=194 && first<=223) { count=1; scalar=first&31; minimum=128; }
+          else if(first>=224 && first<=239) { count=2; scalar=first&15; minimum=2048; }
+          else if(first>=240 && first<=244) { count=3; scalar=first&7; minimum=65536; }
+          else return status.PROTOCOL;
+          if(count>next-p) return status.PROTOCOL;
+          while(count--) {
+            const b=HEAPU8[bytes+p++];
+            if((b&192)!==128) return status.PROTOCOL;
+            scalar=scalar*64+(b&63);
+          }
+          if(scalar<minimum || scalar>1114111 || (scalar>=55296 && scalar<=57343)) return status.PROTOCOL;
+        }
+        end=next;
+      }
+      if(end!==byteLength) return status.PROTOCOL;
+      const descriptors=[];
+      for(let i=0;i<D;++i) {
+        const d=LokaWebStyle.decodeTextDescriptor(HEAP32,words+4*(3+7*F+9*i),9);
+        if(!d) return status.PROTOCOL;
+        descriptors.push(d);
+      }
+      const service=WebDOM.text;
+      if(!service || (row && row.kind!==7)) return status.PROTOCOL;
+      if(!row) return status.APPLIED;
+      const previous=row.runs;
+      if(previous && previous.words.length===wordCount && previous.bytes.length===byteLength
+          && previous.words.every((v,i)=>v===HEAP32[base+i])
+          && previous.bytes.every((v,i)=>v===HEAPU8[bytes+i])) return status.APPLIED;
+      const payload={words:new Int32Array(HEAP32.subarray(base,base+wordCount)),
+        bytes:new Uint8Array(HEAPU8.subarray(bytes,bytes+byteLength))};
+      const fragment=document.createDocumentFragment();
+      for(let i=0;i<F;++i) {
+        const o=3+7*i;
+        const decoder=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true});
+        let text;
+        try { text=decoder.decode(payload.bytes.subarray(payload.words[o+5],payload.words[o+6])); }
+        catch (error) { if(error instanceof TypeError) return status.PROTOCOL; throw error; }
+        fragment.appendChild(WebDOM.fragmentBox(payload.words,o,descriptors[payload.words[o]],text,service));
+      }
+      row.element.replaceChildren(fragment);
+      row.runs=payload;
+      return status.APPLIED;
+    } catch (_) {
+      if(row) delete row.runs;
+      return status.REFUSED;
+    }
   },
   web_set_text_style__deps:['$WebDOM'],
   /** Cost: Text render once per visit; nine borrowed words and one element's Env rows. */
