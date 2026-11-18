@@ -46,6 +46,10 @@ namespace loka
       private:
         /** Visits in membership order; a visit may withdraw its current row. */
         void visit(Visitor &visitor);
+        /** One declaration's initial store. A member of the befriended class, so GCC 4.0.1
+            grants it the registration's private link and phase, which the nested
+            StoreCreator would not get. */
+        static void createStore(TextDocumentRegistration &row, IPlatformController &controller);
         void disconnectAll();
         SceneTextDocuments(const SceneTextDocuments &);
         SceneTextDocuments &operator=(const SceneTextDocuments &);

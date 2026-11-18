@@ -375,25 +375,29 @@ namespace loka
         }
         void visit(TextDocumentRegistration &row)
         {
-          if (!row.document_.remote() || row.phase_.value() != TextStorePhase::STORE_AWAITED)
-            return;
-          TextStoreSource source(TextReplacement::Empty());
-          TextStoreRow *fresh = 0;
-          TextStoreReading reading;
-          BorrowScope borrow(this->controller_);
-          if (this->controller_.createTextStore(source, 0, fresh, reading) == TEXT_STORE_BORN)
-          {
-            assert(fresh);
-            row.connectStore(*fresh);
-            row.phase_.link();
-          }
-          else
-            row.phase_.refuse();
+          createStore(row, this->controller_);
         }
 
       private:
         IPlatformController &controller_;
       };
+      void SceneTextDocuments::createStore(TextDocumentRegistration &row, IPlatformController &controller)
+      {
+        if (!row.document_.remote() || row.phase_.value() != TextStorePhase::STORE_AWAITED)
+          return;
+        TextStoreSource source(TextReplacement::Empty());
+        TextStoreRow *fresh = 0;
+        TextStoreReading reading;
+        BorrowScope borrow(controller);
+        if (controller.createTextStore(source, 0, fresh, reading) == TEXT_STORE_BORN)
+        {
+          assert(fresh);
+          row.connectStore(*fresh);
+          row.phase_.link();
+        }
+        else
+          row.phase_.refuse();
+      }
       void SceneTextDocuments::createStores(IPlatformController &controller)
       {
         StoreCreator visitor(controller);
