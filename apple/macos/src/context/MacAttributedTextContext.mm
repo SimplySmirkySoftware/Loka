@@ -3,7 +3,6 @@
 #include "../MacObjCCompat.hpp"
 #include "../MacGround.hpp"
 #include "../platform/MacNativeGeometry.hpp"
-#include "app/layout/FallbackControlMetrics.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
 #include "platform/StringUTF8.hpp"
 #include "core/Utf8Decode.hpp"
@@ -11,6 +10,203 @@
 #include <cassert>
 #include <climits>
 #include <new>
+
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace testing
+  {
+    bool refuseMacTextKitAllocation();
+  }
+} // namespace loka
+#endif
+
+namespace
+{
+  const CGFloat kMacTextContainerHeight = 1.0e7;
+  const NSPoint kMacTextOrigin = {0, 0};
+
+  id AllocateTextKitObject(Class type)
+  {
+#ifdef TEST_BUILD
+    if (loka::testing::refuseMacTextKitAllocation())
+      return nil;
+#endif
+    return [type alloc];
+  }
+
+  bool MakeMacTextKitSet(NSTextStorage *&storage,
+                         NSLayoutManager *&manager,
+                         NSTextContainer *&container,
+                         CGFloat &appliedWidth)
+  {
+    appliedWidth = 0;
+    storage = [AllocateTextKitObject([NSTextStorage class]) init];
+    if (!storage)
+      return false;
+    manager = [AllocateTextKitObject([NSLayoutManager class]) init];
+    if (!manager)
+      return false;
+    container = [AllocateTextKitObject([NSTextContainer class])
+        initWithContainerSize:NSMakeSize(appliedWidth, kMacTextContainerHeight)];
+    if (!container)
+      return false;
+    [container setLineFragmentPadding:2];
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+    [manager setUsesScreenFonts:NO];
+    [manager setHyphenationFactor:0];
+    [manager setBackgroundLayoutEnabled:NO];
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+    [manager addTextContainer:container];
+    [storage addLayoutManager:manager];
+    return true;
+  }
+} // namespace
+
+/** Passive attributed leaf. Its container is shared by measurement and painting. */
+@interface LokaAttributedTextView : NSView
+{
+@private
+  NSTextStorage *storage_;
+  NSLayoutManager *manager_;
+  NSTextContainer *container_;
+  CGFloat appliedWidth_;
+}
+- (void)applyContainerWidth:(CGFloat)width;
+- (BOOL)installValue:(NSAttributedString *)value extent:(CGFloat *)extent;
+@end
+
+@interface LokaAttributedTextView (Private)
+- (NSTextStorage *)lokaTextStorage;
+- (NSLayoutManager *)lokaLayoutManager;
+- (NSTextContainer *)lokaTextContainer;
+- (CGFloat)appliedWidth;
+- (void)setAppliedWidth:(CGFloat)width;
+@end
+
+@implementation LokaAttributedTextView
+- (id)initWithFrame:(NSRect)frame
+{
+  self = [super initWithFrame:frame];
+  if (self)
+  {
+    if (!MakeMacTextKitSet(storage_, manager_, container_, appliedWidth_))
+    {
+      [self release];
+      return nil;
+    }
+    if ([self respondsToSelector:@selector(setClipsToBounds:)])
+      [self setClipsToBounds:YES];
+    if ([self respondsToSelector:@selector(setLayerContentsRedrawPolicy:)])
+      [self setLayerContentsRedrawPolicy:LOKA_MAC_LAYER_REDRAW_DURING_VIEW_RESIZE];
+  }
+  return self;
+}
+- (void)dealloc
+{
+  [storage_ release];
+  [manager_ release];
+  [container_ release];
+  [super dealloc];
+}
+- (BOOL)isFlipped
+{
+  return YES;
+}
+- (BOOL)acceptsFirstMouse:(NSEvent *)event
+{
+  return YES;
+}
+- (void)addSubview:(NSView *)view
+{
+  assert(false && "AttributedText cannot host children");
+}
+- (void)addSubview:(NSView *)view positioned:(NSWindowOrderingMode)order relativeTo:(NSView *)sibling
+{
+  assert(false && "AttributedText cannot host children");
+}
+- (void)setSubviews:(NSArray *)views
+{
+  if ([views count])
+  {
+    assert(false && "AttributedText cannot host children");
+    return;
+  }
+  if ([NSView instancesRespondToSelector:@selector(setSubviews:)])
+    [super setSubviews:views];
+}
+- (NSTextStorage *)lokaTextStorage
+{
+  return storage_;
+}
+- (NSLayoutManager *)lokaLayoutManager
+{
+  return manager_;
+}
+- (NSTextContainer *)lokaTextContainer
+{
+  return container_;
+}
+- (void)setAppliedWidth:(CGFloat)width
+{
+  appliedWidth_ = width;
+}
+- (CGFloat)appliedWidth
+{
+  return appliedWidth_;
+}
+- (void)applyContainerWidth:(CGFloat)width
+{
+  if ([self appliedWidth] != width)
+  {
+    [self setAppliedWidth:width];
+    [[self lokaTextContainer] setContainerSize:NSMakeSize(width, kMacTextContainerHeight)];
+  }
+}
+- (BOOL)installValue:(NSAttributedString *)value extent:(CGFloat *)extent
+{
+  NSTextStorage *storage = [self lokaTextStorage];
+  if (!value)
+  {
+    [storage deleteCharactersInRange:NSMakeRange(0, [storage length])];
+    return YES;
+  }
+  [storage setAttributedString:value];
+  NSLayoutManager *manager = [self lokaLayoutManager];
+  NSTextContainer *container = [self lokaTextContainer];
+  [manager glyphRangeForTextContainer:container];
+  if ([value length])
+    *extent = [manager usedRectForTextContainer:container].size.height;
+  else
+  {
+    NSFont *font = [NSFont systemFontOfSize:[NSFont systemFontSize]];
+    if (!font)
+      return NO;
+    *extent = [manager defaultLineHeightForFont:font];
+  }
+  return YES;
+}
+- (void)drawRect:(NSRect)dirty
+{
+  const NSRect bounds = [self bounds];
+  NSRectClip(bounds);
+  const NSRect band = NSOffsetRect(NSIntersectionRect(dirty, bounds), -kMacTextOrigin.x, -kMacTextOrigin.y);
+  if (NSIsEmptyRect(band))
+    return;
+  NSLayoutManager *manager = [self lokaLayoutManager];
+  const NSRange range = [manager glyphRangeForBoundingRect:band inTextContainer:[self lokaTextContainer]];
+  if (range.length)
+  {
+    [manager drawBackgroundForGlyphRange:range atPoint:kMacTextOrigin];
+    [manager drawGlyphsForGlyphRange:range atPoint:kMacTextOrigin];
+  }
+}
+@end
 
 namespace
 {
@@ -21,18 +217,6 @@ namespace
     return block.hasTruncation_ && block.truncation_ == loka::app::TEXT_TRUNCATION_ELLIPSIS
                ? NSLineBreakByTruncatingTail
                : NSLineBreakByClipping;
-  }
-
-  /** Both the measuring cell and the installed cell cross this same door. */
-  void ConfigureCell(NSTextFieldCell *cell, const loka::app::BlockStyle &block)
-  {
-    const BOOL wraps = block.hasWrap_ && block.wrap_ != loka::app::TEXT_WRAP_NONE;
-    if ([cell respondsToSelector:@selector(setUsesSingleLineMode:)])
-      [cell setUsesSingleLineMode:NO];
-    [cell setWraps:wraps];
-    // NONE disables soft wrapping; explicit LF still separates paragraphs.
-    [cell setScrollable:NO];
-    [cell setLineBreakMode:LineBreakMode(block)];
   }
 
   /** Byte bounds are construction-local and relative to the current style run. */
@@ -87,7 +271,7 @@ namespace
       // A context whose only native view could not be created would be
       // installed forever and never retried; refuse it so a later ensure
       // can build a complete one (AGENTS "Failure-atomicity policy").
-      if (context && !context->hasNativeLabel())
+      if (context && !context->hasNativeView())
       {
         delete context;
         return 0;
@@ -164,13 +348,12 @@ void MacAttributedTextContext::Projection::clear()
 
 bool MacAttributedTextContext::Projection::build(const loka::app::AttributedString &value,
                                                  const loka::app::BlockStyle &block,
-                                                 const MacScenePlatformController &controller,
-                                                 const loka::macos::MacLength &constraint)
+                                                 const MacScenePlatformController &controller)
 {
   // One failure exit: fill's locals (bounds, byte buffers) are released when it
   // returns, and a refused fill leaves no partial value, measurement or slots.
   this->clear();
-  if (this->fill(value, block, controller, constraint))
+  if (this->fill(value, block, controller))
     return true;
   this->clear();
   return false;
@@ -178,8 +361,7 @@ bool MacAttributedTextContext::Projection::build(const loka::app::AttributedStri
 
 bool MacAttributedTextContext::Projection::fill(const loka::app::AttributedString &value,
                                                 const loka::app::BlockStyle &block,
-                                                const MacScenePlatformController &controller,
-                                                const loka::macos::MacLength &constraint)
+                                                const MacScenePlatformController &controller)
 {
   if (!value.valid() || !this->sources_.reserve(value.segmentCount()))
     return false;
@@ -274,12 +456,6 @@ bool MacAttributedTextContext::Projection::fill(const loka::app::AttributedStrin
     break;
   }
   [result addAttribute:NSParagraphStyleAttributeName value:paragraph range:NSMakeRange(0, [result length])];
-  NSTextFieldCell *measure = [[[NSTextFieldCell alloc] initTextCell:@""] autorelease];
-  if (!measure)
-    return false;
-  [measure setAttributedStringValue:result];
-  ConfigureCell(measure, block);
-  const NSSize size = [measure cellSizeForBounds:loka::macos::MacMeasurementBounds(constraint)];
 #ifdef LOKA_LIFECYCLE_AUDIT
   for (std::size_t segment = 0; segment < value.segmentCount(); ++segment)
   {
@@ -290,10 +466,7 @@ bool MacAttributedTextContext::Projection::fill(const loka::app::AttributedStrin
   }
 #endif
   this->value_ = (void *)[result copy];
-  if (!this->value_)
-    return false;
-  this->measurement_.commit(constraint.pt, controller.projection().measurementToLu(size.height));
-  return true;
+  return this->value_ != 0;
 }
 
 MacAttributedTextContext::MacAttributedTextContext(MacScenePlatformController *controller,
@@ -301,28 +474,24 @@ MacAttributedTextContext::MacAttributedTextContext(MacScenePlatformController *c
                                                    loka::app::AttributedTextNode *node)
     : MacRetirableContext(controller),
       node_(node),
-      label_(0)
+      view_(0)
 {
   assert(controller && controller->textShaping() == loka::app::WHOLE_LINE);
-  NSTextField *label = [[NSTextField alloc] initWithFrame:NSZeroRect];
-  [label setEditable:NO];
-  [label setSelectable:NO];
-  [label setBezeled:NO];
-  [label setDrawsBackground:NO];
-  this->label_ = (void *)label;
-  if (parentView && label)
-    [(NSView *)parentView addSubview:label];
+  LokaAttributedTextView *view = [[LokaAttributedTextView alloc] initWithFrame:NSZeroRect];
+  this->view_ = view;
+  if (parentView && view)
+    [(NSView *)parentView addSubview:view];
 }
 
 MacAttributedTextContext::~MacAttributedTextContext()
 {
-  assert(!this->label_ && "retirement must queue the native view before reclaim");
+  assert(!this->view_ && "retirement must queue the native view before reclaim");
   assert(!this->projection_.value() && "retirement must drop derived text before reclaim");
 }
 
 void MacAttributedTextContext::clearProjection()
 {
-  [(NSTextField *)this->label_ setStringValue:@""];
+  [(LokaAttributedTextView *)this->view_ installValue:nil extent:0];
   this->projection_.clear();
 }
 
@@ -335,49 +504,60 @@ void MacAttributedTextContext::onPropsApplied()
 
 void MacAttributedTextContext::readLifecycleFactOnAttach()
 {
-  [(NSTextField *)this->label_ setHidden:this->node_->lifecycleFact() != loka::app::scene::NODE_FACT_ATTACHED];
+  [(NSView *)this->view_ setHidden:this->node_->lifecycleFact() != loka::app::scene::NODE_FACT_ATTACHED];
 }
 
 void MacAttributedTextContext::onFactChanged(loka::app::scene::NodeLifecycleFact,
                                              loka::app::scene::NodeLifecycleFact next)
 {
-  [(NSTextField *)this->label_ setHidden:next != loka::app::scene::NODE_FACT_ATTACHED];
+  [(NSView *)this->view_ setHidden:next != loka::app::scene::NODE_FACT_ATTACHED];
   if (next == loka::app::scene::NODE_FACT_RETIRED)
   {
     this->clearProjection();
-    [(NSTextField *)this->label_ removeFromSuperview];
-    this->retireNativeObject(this->label_);
+    [(NSView *)this->view_ removeFromSuperview];
+    this->retireNativeObject(this->view_);
     this->node_ = 0;
   }
+}
+
+bool MacAttributedTextContext::rebuildProjection(const loka::macos::MacLength &constraint)
+{
+  this->clearProjection();
+  LokaAttributedTextView *view = (LokaAttributedTextView *)this->view_;
+  if (!view || !this->node_ || !this->node_->props.text_
+      || !this->projection_.build(this->node_->props.text_->get(), this->node_->props.blockStyle_, *this->controller()))
+    return false;
+  [view applyContainerWidth:constraint.pt];
+  CGFloat extent;
+  if (![view installValue:(NSAttributedString *)this->projection_.value() extent:&extent])
+    return false;
+  this->projection_.commitMeasurement(constraint, this->controller()->projection().measurementToLu(extent));
+  return true;
 }
 
 short MacAttributedTextContext::layout(loka::app::scene::IPlatformController *, loka::app::scene::LayoutState &state)
 {
   const loka::macos::MacProjection &projection = this->controller()->projection();
   const loka::macos::MacLength constraint = projection.projectLength(state.x, state.x + state.width);
-  NSTextField *label = (NSTextField *)this->label_;
+  LokaAttributedTextView *view = (LokaAttributedTextView *)this->view_;
   // Per visited leaf: O(1) hit, no run walk or native measurement; always place.
   if (state.inputs != loka::app::scene::NODE_DIRTY_NONE || !this->projection_.reusable(constraint))
   {
-    this->clearProjection();
-    if (label && this->node_ && this->node_->props.text_
-        && this->projection_.build(this->node_->props.text_->get(), this->node_->props.blockStyle_,
-                                   *this->controller(), constraint))
-    {
-      [label setAttributedStringValue:(NSAttributedString *)this->projection_.value()];
-      ConfigureCell([label cell], this->node_->props.blockStyle_);
-    }
-    else
+    if (!this->rebuildProjection(constraint))
     {
       this->controller()->refuseTextMeasurement(this->node_, state);
       this->clearProjection();
     }
   }
+#ifdef LOKA_LIFECYCLE_AUDIT
+  else
+    assert([view appliedWidth] == constraint.pt);
+#endif
   state.height = Coordinate(this->projection_.height());
   loka::macos::SetMacFrame(
-      label,
+      view,
       this->controller()->projection().projectFrame(loka::core::Frame(state.x, state.y, state.width, state.height)));
-  [label setNeedsDisplay:YES];
+  [view setNeedsDisplay:YES];
   return Coordinate(state.y + state.height);
 }
 
