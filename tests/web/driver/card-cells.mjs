@@ -120,7 +120,19 @@ export async function runCardCells(client, navigate) {
       return bands.length===4 && bands.every(band=>getComputedStyle(band.firstElementChild).borderTopColor==='rgb(0, 0, 0)');
     })()`),true,'classic skin Card border');
     await client.evaluate('web.dispose();web.completed.then(()=>true)');
-    console.log('Card frame strips, paint comparison and skin border passed');
+// An explicit no-shadow Card keeps the rounded border and paints no shadow.
+    await navigate('index.html');
+    assert.equal(await client.evaluate(`(()=>{
+      fixture._fixture_configure(-804,0);
+      if(web.start()!==0) throw Error('Card fixture start');
+      const bands=[...document.querySelector('body > [data-loka-token]').children];
+      return bands.length===4 && bands.every(band=>{
+        const paint=getComputedStyle(band.firstElementChild);
+        return paint.boxShadow==='none' && paint.borderTopWidth==='1px' && paint.borderRadius==='6px';
+      });
+    })()`),true,'no-shadow Card border without shadow');
+    await client.evaluate('web.dispose();web.completed.then(()=>true)');
+    console.log('Card frame strips, paint comparison, skin border and no-shadow passed');
   } finally {
     await client.send('Emulation.setDeviceMetricsOverride',{width:800,height:600,deviceScaleFactor:1,mobile:false});
   }

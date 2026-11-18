@@ -54,6 +54,8 @@ namespace loka
         return new webtest::CardConfig<app::CARD_SHADOW_WIDE, true>(platform);
       if (webtest::staged.roots == -803)
         return new webtest::CardConfig<app::CARD_SHADOW_WIDE, false>(platform);
+      if (webtest::staged.roots == -804)
+        return new webtest::CardConfig<app::CARD_SHADOW_NONE, false>(platform);
       if (webtest::staged.roots == -700)
         return webtest::CreateDocument(platform);
       if (webtest::staged.roots == -600)
