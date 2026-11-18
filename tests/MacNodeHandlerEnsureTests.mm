@@ -394,6 +394,7 @@ void testMacNodeHandlerEnsureContract()
 #include "support/LifecycleFactTestAccess.hpp"
 #include "support/LokaAllocFailure.hpp"
 #include "platform/String.hpp"
+#include "MacGround.hpp"
 
 namespace
 {
@@ -425,6 +426,209 @@ namespace
   public:
     virtual bool appendUtf8(std::string &) const { return false; }
   };
+}
+
+// Raw bodies deliberately bypass native String decoding, including split scalars.
+namespace
+{
+  class MacRawAttributedString : public loka::platform::String
+  {
+  public:
+    MacRawAttributedString(const char *bytes, std::size_t size)
+        : bytes_(bytes, size)
+    {
+    }
+    virtual bool appendUtf8(std::string &out) const
+    {
+      out.append(this->bytes_);
+      return true;
+    }
+
+  private:
+    std::string bytes_;
+  };
+
+  loka::core::String RawAttributed(const char *bytes, std::size_t size)
+  {
+    return loka::core::String(
+        loka::core::Managed<loka::platform::String>::Wrap(new MacRawAttributedString(bytes, size)));
+  }
+
+  struct ExpectedAttributedRun
+  {
+    NSString *text;
+    loka::app::TextStyle style;
+  };
+
+  // Expected strings/ranges are supplied by the fixture, never decoded from
+  // its bodies. Measure the independently constructed expected native value.
+  void
+  CharacterizeAttributed(const loka::app::AttributedString &value, const ExpectedAttributedRun *runs, std::size_t count)
+  {
+    using namespace loka::app;
+    NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 320, 240)];
+    {
+      MacScenePlatformController controller(root, RailMetrics());
+      AttributedTextProps props(value);
+      props.blockStyle_ = BlockStyle().wrap(TEXT_WRAP_WORD).align(TEXT_ALIGN_CENTER);
+      AttributedTextNode node(props);
+      loka::app::scene::LayoutState state;
+      state.width = 90;
+      node.layoutProjected(&controller, state);
+      NSAttributedString *actual = [AttributedField(root) attributedStringValue];
+      NSMutableAttributedString *expected = [[[NSMutableAttributedString alloc] initWithString:@""] autorelease];
+      for (std::size_t i = 0; i < count; ++i)
+      {
+        NSFont *font = (NSFont *)controller.textFont(runs[i].style);
+        NSColor *color = nil;
+        if (!loka::macos::QueryMacTextColor(runs[i].style.color_, color))
+          color = loka::macos::MacLabelTextColor();
+        NSMutableDictionary *attributes = [NSMutableDictionary
+            dictionaryWithObjectsAndKeys:font, NSFontAttributeName, color, NSForegroundColorAttributeName, nil];
+        bool underline = false;
+        if (runs[i].style.queryUnderline(underline) && underline)
+          [attributes setObject:[NSNumber numberWithInt:NSUnderlineStyleSingle] forKey:NSUnderlineStyleAttributeName];
+        NSAttributedString *part = [[[NSAttributedString alloc] initWithString:runs[i].text
+                                                                    attributes:attributes] autorelease];
+        [expected appendAttributedString:part];
+      }
+      NSMutableParagraphStyle *paragraph = [[[NSMutableParagraphStyle alloc] init] autorelease];
+      [paragraph setLineBreakMode:NSLineBreakByWordWrapping];
+      [paragraph setAlignment:LOKA_MAC_TEXT_ALIGNMENT_CENTER];
+      [expected addAttribute:NSParagraphStyleAttributeName value:paragraph range:NSMakeRange(0, [expected length])];
+      LOKA_VERIFY([[actual string] isEqualToString:[expected string]]);
+      for (NSUInteger u = 0; u < [expected length];)
+      {
+        NSRange actualRange, expectedRange;
+        NSDictionary *actualAttributes = [actual attributesAtIndex:u effectiveRange:&actualRange];
+        NSDictionary *expectedAttributes = [expected attributesAtIndex:u effectiveRange:&expectedRange];
+        LOKA_VERIFY(NSEqualRanges(actualRange, expectedRange));
+        LOKA_VERIFY([actualAttributes isEqualToDictionary:expectedAttributes]);
+        u = NSMaxRange(expectedRange);
+      }
+      if ([expected length])
+      {
+        NSRange range;
+        NSParagraphStyle *actualParagraph = [actual attribute:NSParagraphStyleAttributeName
+                                                      atIndex:0
+                                        longestEffectiveRange:&range
+                                                      inRange:NSMakeRange(0, [actual length])];
+        LOKA_VERIFY(NSEqualRanges(range, NSMakeRange(0, [expected length])));
+        LOKA_VERIFY([actualParagraph isEqual:paragraph]);
+      }
+      NSTextFieldCell *cell = [[[NSTextFieldCell alloc] initTextCell:@""] autorelease];
+      [cell setAttributedStringValue:expected];
+      if ([cell respondsToSelector:@selector(setUsesSingleLineMode:)])
+        [cell setUsesSingleLineMode:NO];
+      [cell setWraps:YES];
+      [cell setScrollable:NO];
+      [cell setLineBreakMode:NSLineBreakByWordWrapping];
+      const NSSize size =
+          [cell cellSizeForBounds:loka::macos::MacMeasurementBounds(controller.projection().projectLength(0, 90))];
+      LOKA_VERIFY(state.height == controller.projection().measurementToLu(size.height));
+    }
+    [root release];
+  }
+
+  NSFont *MacAttributedMissingSystemFont(id, SEL, CGFloat)
+  {
+    return nil;
+  }
+} // namespace
+
+void testMacAttributedTextCharacterizeStyles()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  const TextStyle small = FontSize<12>();
+  const ExpectedAttributedRun linked[] = {{@"ab", small}};
+  CharacterizeAttributed(Linked("a", small, LinkTarget(loka::core::String("x")))
+                             + Linked("b", small, LinkTarget(loka::core::String("y"))),
+                         linked,
+                         1);
+  const ExpectedAttributedRun empty[] = {{@"", small}};
+  CharacterizeAttributed(Styled("", small) + Styled("", Italic), empty, 1);
+  const TextStyle on = small + Underline + TextStyle().color(TEXT_COLOR_RED);
+  const TextStyle off = small + TextStyle().underline(false);
+  const TextStyle large = FontSize<24>();
+  const ExpectedAttributedRun transitions[] = {{@"on", on}, {@"offunset", small}, {@"\nlarge", large}};
+  CharacterizeAttributed(
+      Styled("on", on) + Styled("off", off) + Styled("unset", small) + Styled("\nlarge", large), transitions, 3);
+  [pool drain];
+}
+
+void testMacAttributedTextCharacterizeBytes()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  const TextStyle style = FontSize<12>();
+  const char *bytes[] = {"\xEF\xBB\xBF"
+                         "ab",
+                         "\xEF\xBB\xBF",
+                         "\xEF\xBB\xBF\xEF\xBB\xBF"
+                         "a",
+                         "a\xEF\xBB\xBF"
+                         "b",
+                         "a\0b"};
+  const std::size_t lengths[] = {5, 3, 7, 5, 3};
+  const unichar nul[] = {'a', 0, 'b'};
+  NSString *strings[] = {@"ab", @"", @"\uFEFFa", @"a\uFEFFb", [NSString stringWithCharacters:nul length:3]};
+  for (int i = 0; i < 5; ++i)
+  {
+    const ExpectedAttributedRun expected[] = {{strings[i], style}};
+    CharacterizeAttributed(Styled(RawAttributed(bytes[i], lengths[i]), style), expected, 1);
+  }
+  const unichar pair[] = {0xD83D, 0xDE00};
+  const ExpectedAttributedRun split[] = {{[NSString stringWithCharacters:pair length:2], style}};
+  CharacterizeAttributed(
+      Styled(RawAttributed("\xF0\x9F", 2), style) + Styled(RawAttributed("\x98\x80", 2), style), split, 1);
+  [pool drain];
+}
+
+void testMacAttributedTextCharacterizeRefusals()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 320, 240)];
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    const loka::core::String refused(
+        loka::core::Managed<loka::platform::String>::Wrap(new MacRefusedAttributedString()));
+    const AttributedString values[] = {Styled(RawAttributed("\xF0\x9F", 2), FontSize<12>())
+                                           + Styled(RawAttributed("\x98\x80", 2), Italic),
+                                       Styled(refused, Italic)};
+    for (int i = 0; i < 2; ++i)
+    {
+      AttributedTextNode node((AttributedTextProps(values[i])));
+      loka::app::scene::LayoutState state;
+      state.width = 90;
+      node.layoutProjected(&controller, state);
+      LOKA_VERIFY(state.height == 0);
+      LOKA_VERIFY([[AttributedField(root) stringValue] length] == 0);
+    }
+  }
+  MacScenePlatformController *controller = 0;
+  {
+    MacNativeRefusal refusal(@selector(systemFontOfSize:),
+                             reinterpret_cast<IMP>(&MacAttributedMissingSystemFont),
+                             object_getClass([NSFont class]));
+    controller = new MacScenePlatformController(root, RailMetrics());
+  }
+  {
+    LOKA_VERIFY(controller->textFont(SmallLabel) == 0);
+    AttributedTextNode node((AttributedTextProps(Styled("visible", Monospace) + Styled("", SmallLabel))));
+    loka::app::scene::LayoutState state;
+    state.width = 90;
+    node.layoutProjected(controller, state);
+    LOKA_VERIFY(state.height == 0);
+    LOKA_VERIFY([[AttributedField(root) stringValue] length] == 0);
+  }
+  delete controller;
+  [root release];
+  [pool drain];
 }
 
 void testMacAttributedTextWholeLineProjection()
@@ -588,6 +792,329 @@ void testMacAttributedTextRefusalClearsProjection()
     LOKA_VERIFY(state.height == 0 && [[field stringValue] length] == 0);
     LOKA_VERIFY(AttributedText(Styled("recovered again", Italic)).applyPropsToNode(&node));
     VerifyAttributedHeight(node, controller, root, 100);
+  }
+  [root release];
+  [pool drain];
+}
+
+#include "context/MacAttributedTextContext.hpp"
+
+namespace loka
+{
+  namespace dsl
+  {
+    namespace testing
+    {
+      class MacAttributedTextTestAccess
+      {
+      public:
+        static bool build(MacAttributedTextContext &context,
+                          const app::AttributedString &value,
+                          const MacScenePlatformController &controller)
+        {
+          return context.projection_.build(
+              value, app::BlockStyle(), controller, controller.projection().projectLength(0, 100));
+        }
+        static bool
+        query(const MacAttributedTextContext &context, NSUInteger start, NSUInteger end, app::TextSegmentRange &out)
+        {
+          return context.projection_.queryProvenance(start, end, out);
+        }
+        static bool complete(const MacAttributedTextContext &context)
+        {
+          return context.projection_.value() != 0;
+        }
+        static bool measured(const MacAttributedTextContext &context)
+        {
+          CGFloat constraint = 0;
+          return context.projection_.measurement_.queryConstraint(constraint);
+        }
+      };
+    } // namespace testing
+  } // namespace dsl
+} // namespace loka
+
+namespace
+{
+  typedef loka::dsl::testing::MacAttributedTextTestAccess AttributedAccess;
+
+  void VerifySource(
+      const MacAttributedTextContext &context, NSUInteger start, NSUInteger end, std::size_t first, std::size_t last)
+  {
+    loka::app::TextSegmentRange out(99);
+    LOKA_VERIFY(AttributedAccess::query(context, start, end, out));
+    LOKA_VERIFY(out.first() == first && out.last() == last);
+  }
+
+  void VerifyNoSource(const MacAttributedTextContext &context, NSUInteger start, NSUInteger end)
+  {
+    loka::app::TextSegmentRange out = loka::app::TextSegmentRange(97).through(99);
+    LOKA_VERIFY(!AttributedAccess::query(context, start, end, out));
+    LOKA_VERIFY(out.first() == 97 && out.last() == 99);
+  }
+
+  MacAttributedTextContext &AttributedContext(loka::app::AttributedTextNode &node)
+  {
+    LOKA_VERIFY(node.getContext() != 0);
+    return *static_cast<MacAttributedTextContext *>(node.getContext());
+  }
+
+  loka::app::AttributedString ManyAttributed(const loka::core::String &last, const loka::app::TextStyle &lastStyle)
+  {
+    using namespace loka::app;
+    AttributedString::Builder builder(34);
+    for (int i = 0; i < 33; ++i)
+      LOKA_VERIFY(builder.append(loka::core::String("a"), FontSize<12>()));
+    LOKA_VERIFY(builder.append(last, lastStyle));
+    return builder.build();
+  }
+} // namespace
+
+void testMacAttributedTextSourceIntervals()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 320, 240)];
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    AttributedTextNode node((AttributedTextProps(Styled("a", FontSize<12>()))));
+    VerifyAttributedHeight(node, controller, root, 100);
+    MacAttributedTextContext &context = AttributedContext(node);
+    VerifySource(context, 0, 1, 0, 0);
+    const TextStyle style = FontSize<12>();
+    LOKA_VERIFY(AttributedAccess::build(context, Styled("a", style) + Styled("b", style), controller));
+    VerifySource(context, 0, 1, 0, 0);
+    VerifySource(context, 1, 2, 1, 1);
+    VerifySource(context, 0, 2, 0, 1);
+    VerifyNoSource(context, 0, 0);
+    VerifyNoSource(context, 1, 0);
+    VerifyNoSource(context, 0, 3);
+    VerifyNoSource(context, 2, 3);
+    VerifyNoSource(context, 2, 2);
+    LOKA_VERIFY(AttributedAccess::build(context, Styled("\xF0\x9F\x98\x80", style), controller));
+    VerifySource(context, 0, 1, 0, 0);
+    VerifySource(context, 1, 2, 0, 0);
+    VerifySource(context, 0, 2, 0, 0);
+    LOKA_VERIFY(AttributedAccess::build(context,
+                                        Styled(RawAttributed("a\xF0\x9F", 3), style)
+                                            + Styled(RawAttributed("\x98\x80"
+                                                                   "b",
+                                                                   3),
+                                                     style),
+                                        controller));
+    VerifySource(context, 0, 1, 0, 0);
+    VerifyNoSource(context, 1, 2);
+    VerifyNoSource(context, 2, 3);
+    VerifyNoSource(context, 1, 3);
+    VerifyNoSource(context, 0, 4);
+    VerifySource(context, 3, 4, 1, 1);
+    LOKA_VERIFY(AttributedAccess::build(context,
+                                        Styled("", style) + Styled("a", style) + Styled("", Italic) + Styled("b", style)
+                                            + Styled("", style),
+                                        controller));
+    VerifySource(context, 0, 1, 1, 1);
+    VerifySource(context, 1, 2, 3, 3);
+    VerifySource(context, 0, 2, 1, 3);
+    LOKA_VERIFY(
+        AttributedAccess::build(context, Styled("a", style) + Styled("", Italic) + Styled("b", style), controller));
+    VerifySource(context, 0, 2, 0, 2);
+    VerifySource(context, 1, 2, 2, 2);
+    LOKA_VERIFY(AttributedAccess::build(context, Styled("a", style) + Styled("b", Italic), controller));
+    VerifySource(context, 0, 2, 0, 1);
+  }
+  [root release];
+  [pool drain];
+}
+
+void testMacAttributedTextSourceAgreement()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 320, 240)];
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    AttributedTextNode node((AttributedTextProps(Styled("a", FontSize<12>()))));
+    VerifyAttributedHeight(node, controller, root, 100);
+    MacAttributedTextContext &context = AttributedContext(node);
+    const TextStyle style = FontSize<12>();
+    const char *bytes[] = {"\xEF\xBB\xBF"
+                           "a",
+                           "\xEF\xBB\xBF\xEF\xBB\xBF"
+                           "a",
+                           "\xEF\xBB\xBF"};
+    const std::size_t sizes[] = {4, 7, 3};
+    const NSUInteger lengths[] = {1, 2, 0};
+    for (int i = 0; i < 3; ++i)
+    {
+      LOKA_VERIFY(AttributedAccess::build(context,
+                                          Styled("p", style) + Styled(RawAttributed(bytes[i], sizes[i]), Italic)
+                                              + Styled("n", style),
+                                          controller));
+      VerifySource(context, 0, 1, 0, 0);
+      for (NSUInteger u = 1; u <= lengths[i]; ++u)
+        VerifyNoSource(context, u, u + 1);
+      if (lengths[i])
+        VerifyNoSource(context, 0, lengths[i] + 2);
+      VerifySource(context, lengths[i] + 1, lengths[i] + 2, 2, 2);
+    }
+    // Interior and doubled interior BOMs agree; rejecting all BOMs is too broad.
+    LOKA_VERIFY(AttributedAccess::build(context,
+                                        Styled("p", Italic)
+                                            + Styled(RawAttributed("a\xEF\xBB\xBF\xEF\xBB\xBF"
+                                                                   "b",
+                                                                   8),
+                                                     style),
+                                        controller));
+    VerifySource(context, 0, 1, 0, 0);
+    VerifySource(context, 1, 5, 1, 1);
+    LOKA_VERIFY(AttributedAccess::build(context, Styled(RawAttributed("a\0b", 3), style), controller));
+    VerifySource(context, 0, 3, 0, 0);
+  }
+  [root release];
+  [pool drain];
+}
+
+void testMacAttributedTextSourceSearchEmpties()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 320, 240)];
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    AttributedTextNode node((AttributedTextProps(Styled("a", FontSize<12>()))));
+    VerifyAttributedHeight(node, controller, root, 100);
+    MacAttributedTextContext &context = AttributedContext(node);
+    const std::size_t n = 40;
+    AttributedString::Builder builder(3 * n + 2);
+    for (std::size_t i = 0; i < 3 * n + 2; ++i)
+      LOKA_VERIFY(builder.append(loka::core::String(i == n ? "a" : i == 2 * n + 1 ? "b" : ""), FontSize<12>()));
+    const AttributedString value = builder.build();
+    LOKA_VERIFY(AttributedAccess::build(context, value, controller));
+    VerifySource(context, 0, 1, n, n);
+    VerifySource(context, 1, 2, 2 * n + 1, 2 * n + 1);
+    VerifySource(context, 0, 2, n, 2 * n + 1);
+    AttributedString::Builder empties(40);
+    for (int i = 0; i < 40; ++i)
+      LOKA_VERIFY(empties.append(loka::core::String(""), FontSize<12>()));
+    const AttributedString empty = empties.build();
+    node.props.text(empty);
+    context.onPropsApplied();
+    loka::core::testing::failLokaAllocRaw("TextLineBreaker", "Table", 0);
+    const int baseline = loka::core::testing::lokaAllocRawLive();
+    loka::app::scene::LayoutState state;
+    state.width = 100;
+    node.layoutProjected(&controller, state);
+    LOKA_VERIFY([[AttributedField(root) stringValue] length] == 0);
+    LOKA_VERIFY(loka::core::testing::lokaAllocRawLive() == baseline + 1);
+    LOKA_VERIFY(AttributedAccess::complete(context));
+    LOKA_VERIFY(AttributedAccess::measured(context));
+    VerifyNoSource(context, 0, 0);
+    VerifyNoSource(context, 0, 1);
+    context.onPropsApplied();
+    LOKA_VERIFY(loka::core::testing::lokaAllocRawLive() == baseline);
+    loka::core::testing::allowLokaAllocRaw();
+  }
+  [root release];
+  [pool drain];
+}
+
+void testMacAttributedTextSourceAllocationLifecycle()
+{
+  using namespace loka::app;
+  using namespace loka::core::testing;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  const AttributedString value = ManyAttributed(loka::core::String("b"), Italic);
+  for (int allocation = 1; allocation <= 2; ++allocation)
+  {
+    NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 320, 240)];
+    {
+      MacScenePlatformController controller(root, RailMetrics());
+      AttributedTextNode node((AttributedTextProps(value)));
+      VerifyAttributedHeight(node, controller, root, 100);
+      MacAttributedTextContext &context = AttributedContext(node);
+      context.onPropsApplied();
+      failLokaAllocRaw("TextLineBreaker", "Table", allocation);
+      const int baseline = lokaAllocRawLive();
+      loka::app::scene::LayoutState state;
+      state.width = 100;
+      node.layoutProjected(&controller, state);
+      LOKA_VERIFY(state.height == 0 && [[AttributedField(root) stringValue] length] == 0);
+      LOKA_VERIFY(!AttributedAccess::complete(context) && !AttributedAccess::measured(context));
+      LOKA_VERIFY(lokaAllocRawLive() == baseline);
+      VerifyNoSource(context, 0, 1);
+      node.layoutProjected(&controller, state);
+      LOKA_VERIFY(AttributedAccess::complete(context));
+      LOKA_VERIFY([[AttributedField(root) stringValue] length] == 34);
+      LOKA_VERIFY(lokaAllocRawLive() == baseline + 1); // Only retained slots survive build.
+      VerifySource(context, 0, 34, 0, 33);
+      context.onPropsApplied();
+      LOKA_VERIFY(lokaAllocRawLive() == baseline);
+      VerifyNoSource(context, 0, 1);
+      node.layoutProjected(&controller, state);
+      LOKA_VERIFY(lokaAllocRawLive() == baseline + 1);
+      loka::app::scene::LifecycleFactTestAccess::MarkSubtreeRetired(&node);
+      loka::app::scene::LifecycleFactTestAccess::DeliverFacts(&node);
+      LOKA_VERIFY(lokaAllocRawLive() == baseline);
+      VerifyNoSource(context, 0, 1);
+      allowLokaAllocRaw();
+    }
+    [root release];
+  }
+  [pool drain];
+}
+
+void testMacAttributedTextSourceLateFailure()
+{
+  using namespace loka::app;
+  using namespace loka::core::testing;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  const loka::core::String refused(loka::core::Managed<loka::platform::String>::Wrap(new MacRefusedAttributedString()));
+  const AttributedString failures[] = {ManyAttributed(refused, Italic),
+                                       ManyAttributed(RawAttributed("\xC0\xAF", 2), Italic)};
+  const AttributedString good = ManyAttributed(loka::core::String("b"), Italic);
+  const AttributedString disagreements[] = {ManyAttributed(RawAttributed("\xEF\xBB\xBF"
+                                                                         "a",
+                                                                         4),
+                                                           Italic),
+                                            ManyAttributed(RawAttributed("\xEF\xBB\xBF\xEF\xBB\xBF"
+                                                                         "a",
+                                                                         7),
+                                                           Italic)};
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 320, 240)];
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    AttributedTextNode node((AttributedTextProps(Styled("a", FontSize<12>()))));
+    VerifyAttributedHeight(node, controller, root, 100);
+    MacAttributedTextContext &context = AttributedContext(node);
+    context.onPropsApplied();
+    failLokaAllocRaw("TextLineBreaker", "Table", 0);
+    const int baseline = lokaAllocRawLive();
+    for (int i = 0; i < 2; ++i)
+    {
+      // No layout clear can mask build's cleanup: inspect immediately.
+      LOKA_VERIFY(!AttributedAccess::build(context, failures[i], controller));
+      LOKA_VERIFY(!AttributedAccess::complete(context));
+      LOKA_VERIFY(!AttributedAccess::measured(context));
+      LOKA_VERIFY(lokaAllocRawLive() == baseline);
+      VerifyNoSource(context, 0, 1);
+      LOKA_VERIFY(AttributedAccess::build(context, good, controller));
+      LOKA_VERIFY(lokaAllocRawLive() == baseline + 1);
+      VerifySource(context, 0, 34, 0, 33);
+      LOKA_VERIFY(AttributedAccess::build(context, disagreements[i], controller));
+      VerifySource(context, 0, 33, 0, 32);
+      VerifyNoSource(context, 33, 34);
+      if (i == 1)
+        VerifyNoSource(context, 34, 35);
+      LOKA_VERIFY(lokaAllocRawLive() == baseline + 1);
+    }
+    context.onPropsApplied();
+    LOKA_VERIFY(lokaAllocRawLive() == baseline);
+    allowLokaAllocRaw();
   }
   [root release];
   [pool drain];
