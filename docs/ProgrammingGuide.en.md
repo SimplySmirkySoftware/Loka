@@ -2421,14 +2421,15 @@ result reports queuing, not successful OS opening. The complete Boundary is
 [compiled as a C++98 sample](../tests/compile/pins/accepts_document.cpp).
 
 On Web, a code block shows its text at the framed position. The frame and
-shadow are not drawn yet. Web links display link styling but do not activate. Heading height in aligned Row/Grid layouts
-has the same limitations as AttributedText.
+shadow are not drawn yet. Web links display link styling but do not activate.
+Heading height in aligned Row/Grid layouts has the same limitations as
+AttributedText.
 
-An accepted update always becomes the block's current semantic value. Invalid
-text, including failure to allocate the lowered styled value, refuses projection;
-a later successful props application can restore it. This is not a promise of
-immediate pixel erasure. A valid value with an unreadable String body follows
-the existing rail behavior: native projections clear, while Web may keep the
-previous snapshot and retry until the body can be read. Structural allocation
-refusal follows ordinary subtree admission; applying props to a childless block
-does not itself create its missing children.
+When a block's content changes, the block always holds the new value. If that
+value cannot be displayed (the text is invalid, or memory for styling it ran
+out), the block shows nothing instead of the old text, and the next successful
+update shows it again; the old pixels are not necessarily erased at once. One
+exception: when the value is fine but its text cannot be read for the moment,
+native rails show nothing, while Web may keep showing the previous text until
+the read succeeds. A block whose children could not be created under memory
+pressure stays empty; updating its content does not create them.
