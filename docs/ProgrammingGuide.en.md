@@ -2396,11 +2396,10 @@ explicit style axes override heading defaults. Headings and paragraphs wrap at
 words. Code blocks preserve explicit line breaks, do not automatically wrap,
 and clip horizontally.
 
-Changing documents are values: the owner reapplies block props, for example by
-editing a LazyView's list of block props. A direct definition application also
-updates an existing block. `For` constructs its items initially; it does not
-provide subsequent props updates. Live `State<AttributedString>*` input is not
-accepted by document blocks.
+To change a document, update its block props in the owner. For example, editing
+a paragraph in a LazyView's list updates the text on screen. `For` constructs
+its items initially and does not apply later edits. Document blocks take values
+and do not accept live `State<AttributedString>*` input.
 
 Both Heading and Paragraph accept `.activatedLink(box)`. The box belongs to the
 application. A Boundary can route its result through a lifecycle-owned Flow:

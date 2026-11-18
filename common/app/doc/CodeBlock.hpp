@@ -3,6 +3,7 @@
 #include "app/doc/Lowering.hpp"
 #include "app/scene/node/ComponentNode.hpp"
 #include "app/nodes/controls/Card.hpp"
+#include "core/util/OwnedDef.hpp"
 
 namespace loka
 {
@@ -59,10 +60,17 @@ namespace loka
         }
 
       protected:
-        /** Materializes existing projection nodes. Cost: one lowering per attach attempt. */
+        /** Declares the Card once its required text has been captured.
+            Cost: one lowering and one owned child capture per materialization attempt. */
         virtual void composeChildren(scene::NodeComposition &composition)
         {
-          composition.declare(Card() << Lower(this->props));
+          core::OwnedDef<scene::NodeDefinitionBase> content(Lower(this->props).clone());
+          if (!content.isSet())
+          {
+            scene::NoteDefinitionCaptureRefusal();
+            return;
+          }
+          composition.declare(Card() << content.take());
         }
       };
     } // namespace doc

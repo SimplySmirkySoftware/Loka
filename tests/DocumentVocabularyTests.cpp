@@ -1,4 +1,5 @@
 #include "DocumentVocabularyTests.hpp"
+#include "CardTests.hpp"
 #include "app/doc/Heading.hpp"
 #include "app/doc/Paragraph.hpp"
 #include "app/doc/CodeBlock.hpp"
@@ -766,8 +767,47 @@ void testDocumentVocabularyChildStates()
   LOKA_VERIFY(leaf(first.node()) == child && value(leaf(first.node())).valid());
 #endif
 }
+#ifdef LOKA_CARD_CLONE_FAULT_PINS
+namespace
+{
+  class RefusedCodeBlock : public doc::CodeBlockNode
+  {
+  public:
+    explicit RefusedCodeBlock(const doc::CodeBlockProps &p)
+        : doc::CodeBlockNode(p)
+    {
+    }
+
+  protected:
+    virtual void composeChildren(NodeComposition &c)
+    {
+      if (this->props.text.equals(String("first")))
+        refuseNextDefinitionAllocation(sizeof(NodeDefinition<AttributedTextProps, AttributedTextNode>));
+      doc::CodeBlockNode::composeChildren(c);
+    }
+  };
+} // namespace
+#endif
 void testDocumentVocabularyInitialRefusalAndFor()
 {
+#ifdef LOKA_CARD_CLONE_FAULT_PINS
+  {
+    typedef NodeDefinition<doc::CodeBlockProps, RefusedCodeBlock> FaultDefinition;
+    Fixture<FaultDefinition> f(FaultDefinition(doc::CodeBlockProps("first")), false);
+    Node *block = f.node();
+    LOKA_VERIFY(block);
+    LOKA_VERIFY(!block->asNestable()->childrenHead());
+    LOKA_VERIFY(doc::CodeBlock("latest").applyPropsToNode(block));
+    LOKA_VERIFY(!block->asNestable()->childrenHead());
+    ComponentContext context;
+    context.setBoundary(root(f.scene));
+    context.setStateOwner(root(f.scene));
+    context.setScene(&f.scene);
+    context.setPlatformController(&f.controller);
+    BoundaryNode::composeSubtree(block, context, COMPOSE_EVENT_ATTACH, root(f.scene));
+    LOKA_VERIFY(f.node() == block && value(leaf(block)).segment(0).text.equals(String("latest")));
+  }
+#endif
 #ifdef TEST_BUILD
   doc::HeadingDefinition heading = doc::Heading(1, "first");
   loka::core::testing::failLokaAllocRaw("AttributedString", "Segments", 1);

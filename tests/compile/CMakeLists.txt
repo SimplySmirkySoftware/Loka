@@ -943,10 +943,10 @@ loka_compile_pin(text-view-store-transfer
 
 loka_compile_pin(document-heading-level
   REFUSES pins/refuses_document_heading_level.cpp
-  ACCEPTS pins/accepts_document.cpp)
+  ACCEPTS pins/accepts_document_heading_level.cpp)
 loka_compile_pin(document-live-state
   REFUSES pins/refuses_document_live.cpp
-  ACCEPTS pins/accepts_document.cpp)
+  ACCEPTS pins/accepts_document_live.cpp)
 
 add_executable(documentLevelsRelease pins/document_levels_release.cpp)
 target_link_libraries(documentLevelsRelease PRIVATE LokaContractTestEnvironment)
@@ -955,12 +955,16 @@ set_target_properties(documentLevelsRelease PROPERTIES CXX_STANDARD 98 CXX_STAND
 loka_enable_warnings(documentLevelsRelease)
 add_test(NAME documentLevelsRelease COMMAND documentLevelsRelease)
 
-foreach(pin IN ITEMS document-heading-level document-live-state)
-  foreach(kind IN ITEMS accepts refuses)
-    if(MSVC)
-      target_compile_options(compilePin_${pin}_${kind} PRIVATE /GR-)
-    else()
-      target_compile_options(compilePin_${pin}_${kind} PRIVATE -fno-rtti -fno-exceptions)
-    endif()
-  endforeach()
+add_library(documentBoundarySample OBJECT pins/accepts_document.cpp)
+target_link_libraries(documentBoundarySample PRIVATE LokaContractTestEnvironment)
+set_target_properties(documentBoundarySample PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+loka_enable_warnings(documentBoundarySample)
+foreach(target IN ITEMS documentBoundarySample
+    compilePin_document-heading-level_accepts compilePin_document-heading-level_refuses
+    compilePin_document-live-state_accepts compilePin_document-live-state_refuses)
+  if(MSVC)
+    target_compile_options(${target} PRIVATE /GR-)
+  else()
+    target_compile_options(${target} PRIVATE -fno-rtti -fno-exceptions)
+  endif()
 endforeach()

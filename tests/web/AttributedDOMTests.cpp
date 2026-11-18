@@ -325,9 +325,14 @@ void WebDocumentVocabularyFixture()
   LOKA_VERIFY(webtest::resources.empty());
 }
 
+namespace webtest
+{
+  void documentUpdatePaths();
+}
 void WebAttributedDOMTests()
 {
   WebDocumentVocabularyFixture();
+  webtest::documentUpdatePaths();
   MountedInvalidSource();
   MountedLifecycleAndBottom();
   webtest::reset();

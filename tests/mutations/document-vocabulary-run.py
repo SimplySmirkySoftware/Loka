@@ -23,6 +23,9 @@ MUTATIONS = [
     ('g', 'common/app/nodes/controls/Card.hpp',
      'return content && content->asCardBandNode() ? 0 : content;',
      'return content && content->asCardBandNode() ? 0 : column;', 'testDocumentVocabularyLowering'),
+    ('h', 'common/app/doc/CodeBlock.hpp',
+     'scene::NoteDefinitionCaptureRefusal();\n            return;', 'scene::NoteDefinitionCaptureRefusal();',
+     'testDocumentVocabularyInitialRefusalAndFor'),
 ]
 
 def run(command, log):

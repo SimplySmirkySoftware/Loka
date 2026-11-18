@@ -16,6 +16,12 @@
 namespace
 {
   unsigned cardAllocationCountdown = 0;
+  std::size_t allocationSize = 0;
+} // namespace
+void refuseNextDefinitionAllocation(std::size_t size)
+{
+  allocationSize = size;
+  cardAllocationCountdown = 1;
 }
 #if __SIZEOF_POINTER__ == 8
 #define CARD_REAL_NEW __real__Znwm
@@ -27,8 +33,11 @@ namespace
 extern "C" void *CARD_REAL_NEW(size_t);
 extern "C" void *CARD_WRAP_NEW(size_t size)
 {
-  if (cardAllocationCountdown && --cardAllocationCountdown == 0)
+  if (cardAllocationCountdown && (!allocationSize || allocationSize == size) && --cardAllocationCountdown == 0)
+  {
+    allocationSize = 0;
     return 0;
+  }
   return CARD_REAL_NEW(size);
 }
 #endif
