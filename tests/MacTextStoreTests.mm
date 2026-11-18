@@ -323,7 +323,8 @@ void testMacTextStoreChunks()
   if (accepted)
     LOKA_VERIFY(change_[1] > 0 && undo_[2] > 0);
   else
-    LOKA_VERIFY(change_[1] == 0 && undo_[2] == 0);
+    // Replaying the test's empty group may notify the undo manager; no text change may follow it.
+    LOKA_VERIFY(change_[1] == 0 && change_[2] == 0);
 }
 @end
 @interface LokaStoreRejectEdit : NSObject
@@ -413,6 +414,7 @@ void testMacTextStoreBracket()
     {
       LOKA_VERIFY(!controller.peekTextStore(row));
       // A refused approval registers nothing: undoing the empty group changes neither body nor selection.
+      [probe setPhase:2];
       [undo undo];
       LOKA_VERIFY([[view string] isEqualToString:@"body"] && NSEqualRanges([view selectedRange], NSMakeRange(1, 0))
                   && ![undo canUndo]);

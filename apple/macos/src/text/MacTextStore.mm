@@ -70,7 +70,7 @@ using namespace loka::macos::testing;
 
 namespace
 {
-  /** Transient UTF-16 units, including embedded NUL. Only the storage survives birth. */
+  /** Transient UTF-16 units, including embedded NUL. Ownership passes to the seeding string; only the storage survives birth. */
   class BirthBuffer
   {
   public:
@@ -88,11 +88,18 @@ namespace
     {
       return this->length_;
     }
-    NSString *newString() const
+    /** Hands the units to the string (10.0 no-copy initializer) so birth holds one UTF-16 body, not two.
+        On nil the buffer stays here and the destructor frees it. */
+    NSString *takeString()
     {
       const unichar empty = 0;
-      return MAC_STORE_ALLOC(
-          STRING, [[NSString alloc] initWithCharacters:(this->units_ ? this->units_ : &empty) length:this->length_]);
+      if (!this->units_)
+        return MAC_STORE_ALLOC(STRING, [[NSString alloc] initWithCharacters:&empty length:0]);
+      NSString *string = MAC_STORE_ALLOC(
+          STRING, [[NSString alloc] initWithCharactersNoCopy:this->units_ length:this->length_ freeWhenDone:YES]);
+      if (string)
+        this->units_ = 0;
+      return string;
     }
     TextStoreBirth append(unsigned int scalar)
     {
@@ -289,7 +296,7 @@ TextStoreBirth MacTextStore::create(TextStoreLedger &ledger,
         || (placement.kind() == TextPlacement::AT_UTF8_OFFSET && source.logicalOffset() <= placement.utf8Offset()))
       caret = buffer.length();
   }
-  NSString *body = buffer.newString();
+  NSString *body = buffer.takeString();
   if (!body)
     return TEXT_STORE_REFUSED_ALLOCATION;
   MacTextStore *row = MAC_STORE_ALLOC(ROW, new (std::nothrow) MacTextStore(ledger, controller));

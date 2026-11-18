@@ -497,10 +497,9 @@ Retirement cuts the delegate's borrowed row pointer and clears both native
 delegate slots synchronously. At the controller's drain the row clears undo,
 removes the layout manager from storage and releases the network. Both
 controller exits retire live rows before that drain. View attachment remains
-deferred and splice returns the inherited `UNAVAILABLE`. The Tahoe probes
-cover native mechanisms. Candidate runtime verification on Tahoe and legacy
-build verification on the 10.9 SDK are pending. macOS 10.4–10.6 behavior is
-not runtime-verified.
+deferred and splice returns the inherited `UNAVAILABLE`. The store row is
+runtime-verified on macOS 26 (Tahoe) and build-verified with the 10.9 and 10.6
+SDK toolchains. macOS 10.4–10.6 behavior is not runtime-verified.
 
 ### Win32 store row and parking (4w-1)
 
