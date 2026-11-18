@@ -406,6 +406,7 @@ namespace
   using loka::dsl::testing::CellAdvance;
   using loka::dsl::testing::DarwinMajor;
   using loka::dsl::testing::ReferenceTextGeometry;
+  using loka::dsl::testing::TextAttribute;
 
   void VerifyAttributedHeight(loka::app::AttributedTextNode &node, MacScenePlatformController &controller,
                               NSView *root, short width)
@@ -417,14 +418,15 @@ namespace
     node.layoutProjected(&controller, state);
     NSView *field = AttributedAccess::leaf(root);
     const loka::macos::MacProjection &projection = controller.projection();
-    NSAttributedString *text = AttributedAccess::installedValue(node);
+    NSAttributedString *text = AttributedAccess::projectionSnapshot(node);
     CGFloat points = projection.projectLength(state.x, state.x + width).pt;
-    NSParagraphStyle *style = [text attribute:NSParagraphStyleAttributeName atIndex:0 effectiveRange:0];
+    NSParagraphStyle *style = TextAttribute(AttributedAccess::storage(field), NSParagraphStyleAttributeName, 0);
     const CGFloat cell = CellAdvance(text, [style lineBreakMode], points);
     const CGFloat rendered = ReferenceTextGeometry(text, points).size.height;
     std::printf("attributed fixture width=%g cell=%g TextKit=%g\n", (double)points, (double)cell, (double)rendered);
     LOKA_VERIFY(state.height == projection.measurementToLu(rendered));
-    if (DarwinMajor() == 25)
+    static const bool cellParity = loka::dsl::testing::HasTahoeCellBaseline("attributed height");
+    if (cellParity)
       LOKA_VERIFY(state.height == projection.measurementToLu(cell));
     LOKA_VERIFY(NSEqualRects([field frame], projection.projectFrame(
         loka::core::Frame(3, 5, width, state.height)).r));
@@ -484,7 +486,7 @@ namespace
       loka::app::scene::LayoutState state;
       state.width = 90;
       node.layoutProjected(&controller, state);
-      NSAttributedString *actual = AttributedAccess::installedValue(node);
+      NSAttributedString *actual = AttributedAccess::projectionSnapshot(node);
       NSMutableAttributedString *expected = [[[NSMutableAttributedString alloc] initWithString:@""] autorelease];
       for (std::size_t i = 0; i < count; ++i)
       {
@@ -515,16 +517,19 @@ namespace
         LOKA_VERIFY([actualAttributes isEqualToDictionary:expectedAttributes]);
         u = NSMaxRange(expectedRange);
       }
-      if ([expected length])
-      {
-        NSRange range;
-        NSParagraphStyle *actualParagraph = [actual attribute:NSParagraphStyleAttributeName
-                                                      atIndex:0
-                                        longestEffectiveRange:&range
-                                                      inRange:NSMakeRange(0, [actual length])];
-        LOKA_VERIFY(NSEqualRanges(range, NSMakeRange(0, [expected length])));
-        LOKA_VERIFY([actualParagraph isEqual:paragraph]);
-      }
+      NSTextStorage *storage = AttributedAccess::storage(AttributedAccess::leaf(root));
+      LOKA_VERIFY([[storage string] isEqualToString:[expected string]]);
+      NSString *keys[] = {NSForegroundColorAttributeName, NSUnderlineStyleAttributeName, NSParagraphStyleAttributeName};
+      for (unsigned k = 0; k < 3; ++k)
+        for (NSUInteger u = 0; u < [expected length];)
+        {
+          NSRange actualRange, expectedRange;
+          id installed = TextAttribute(storage, keys[k], u, &actualRange);
+          id wanted = TextAttribute(expected, keys[k], u, &expectedRange);
+          LOKA_VERIFY(installed == wanted || [installed isEqual:wanted]);
+          LOKA_VERIFY(NSEqualRanges(actualRange, expectedRange));
+          u = NSMaxRange(expectedRange);
+        }
       const CGFloat cellHeight =
           CellAdvance(expected, NSLineBreakByWordWrapping, controller.projection().projectLength(0, 90).pt);
       const CGFloat expectedHeight =
@@ -536,7 +541,8 @@ namespace
                   (double)cellHeight,
                   (double)expectedHeight);
       LOKA_VERIFY(state.height == controller.projection().measurementToLu(expectedHeight));
-      if (DarwinMajor() == 25)
+      static const bool cellParity = loka::dsl::testing::HasTahoeCellBaseline("attributed run characterization");
+      if (cellParity)
         LOKA_VERIFY(state.height == controller.projection().measurementToLu(cellHeight));
     }
     [root release];
@@ -619,7 +625,7 @@ void testMacAttributedTextCharacterizeRefusals()
       state.width = 90;
       node.layoutProjected(&controller, state);
       LOKA_VERIFY(state.height == 0);
-      LOKA_VERIFY([[AttributedAccess::installedValue(node) string] length] == 0);
+      LOKA_VERIFY([[AttributedAccess::storage(AttributedAccess::leaf(root)) string] length] == 0);
     }
   }
   MacScenePlatformController *controller = 0;
@@ -636,7 +642,7 @@ void testMacAttributedTextCharacterizeRefusals()
     state.width = 90;
     node.layoutProjected(controller, state);
     LOKA_VERIFY(state.height == 0);
-    LOKA_VERIFY([[AttributedAccess::installedValue(node) string] length] == 0);
+    LOKA_VERIFY([[AttributedAccess::storage(AttributedAccess::leaf(root)) string] length] == 0);
   }
   delete controller;
   [root release];
@@ -671,7 +677,7 @@ void testMacAttributedTextWholeLineProjection()
       LOKA_VERIFY(node.getContext() != 0);
       VerifyAttributedHeight(node, controller, root, 90);
       NSView *field = AttributedAccess::leaf(root);
-      NSAttributedString *native = AttributedAccess::installedValue(node);
+      NSAttributedString *native = AttributedAccess::projectionSnapshot(node);
       NSRange range;
       NSFont *first = [native attribute:NSFontAttributeName atIndex:0 effectiveRange:&range];
       LOKA_VERIFY([first isEqual:(NSFont *)controller.textFont(small)]);
@@ -686,16 +692,13 @@ void testMacAttributedTextWholeLineProjection()
       node.props.blockStyle_ = BlockStyle().wrap(TEXT_WRAP_CHAR);
       context->onPropsApplied();
       VerifyAttributedHeight(node, controller, root, 90);
-      NSParagraphStyle *paragraph = [AttributedAccess::installedValue(node) attribute:NSParagraphStyleAttributeName
-                                                                              atIndex:0
-                                                                       effectiveRange:0];
+      NSParagraphStyle *paragraph = TextAttribute(AttributedAccess::storage(field), NSParagraphStyleAttributeName, 0);
       LOKA_VERIFY([paragraph lineBreakMode] == NSLineBreakByCharWrapping);
       node.props.blockStyle_ = BlockStyle().wrap(TEXT_WRAP_NONE).truncation(TEXT_TRUNCATION_ELLIPSIS);
       context->onPropsApplied();
       VerifyAttributedHeight(node, controller, root, 90);
-      LOKA_VERIFY([(NSParagraphStyle *)[AttributedAccess::installedValue(node) attribute:NSParagraphStyleAttributeName
-                                                                                 atIndex:0
-                                                                          effectiveRange:0] lineBreakMode]
+      LOKA_VERIFY([(NSParagraphStyle *)TextAttribute(AttributedAccess::storage(field), NSParagraphStyleAttributeName, 0)
+                      lineBreakMode]
                   == NSLineBreakByTruncatingTail);
       const TextAlign alignments[] = {TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, TEXT_ALIGN_RIGHT};
       const NSTextAlignment expected[] = {LOKA_MAC_TEXT_ALIGNMENT_LEFT, LOKA_MAC_TEXT_ALIGNMENT_CENTER, LOKA_MAC_TEXT_ALIGNMENT_RIGHT};
@@ -710,9 +713,7 @@ void testMacAttributedTextWholeLineProjection()
         context->onPropsApplied();
         VerifyAttributedHeight(node, controller, root, 90);
         LOKA_VERIFY([field frame].size.height > oneLine);
-        NSParagraphStyle *aligned = [AttributedAccess::installedValue(node) attribute:NSParagraphStyleAttributeName
-                                                                              atIndex:0
-                                                                       effectiveRange:0];
+        NSParagraphStyle *aligned = TextAttribute(AttributedAccess::storage(field), NSParagraphStyleAttributeName, 0);
         LOKA_VERIFY([aligned alignment] == expected[a]);
       }
       LOKA_VERIFY(node.getContext() == context);
@@ -741,17 +742,17 @@ void testMacAttributedTextRetainedLifecycle()
     MacAttributedTextContext *context = static_cast<MacAttributedTextContext *>(node.getContext());
     const loka::macos::MacLength measuredWidth = controller.projection().projectLength(3, 103);
     NSView *field = AttributedAccess::leaf(root);
-    NSAttributedString *before = [AttributedAccess::installedValue(node) retain];
+    NSAttributedString *before = [AttributedAccess::projectionSnapshot(node) retain];
     loka::app::scene::NotifySubtreeNodeDetached(&node);
     loka::app::scene::LifecycleFactTestAccess::DeliverFacts(&node);
     LOKA_VERIFY([field isHidden]);
-    LOKA_VERIFY([AttributedAccess::installedValue(node) isEqualToAttributedString:before]);
+    LOKA_VERIFY([AttributedAccess::projectionSnapshot(node) isEqualToAttributedString:before]);
     loka::app::scene::NotifySubtreeNodeAttached(&node);
     loka::app::scene::LifecycleFactTestAccess::DeliverFacts(&node);
     LOKA_VERIFY(![field isHidden]);
     LOKA_VERIFY(AttributedAccess::reusable(*context, measuredWidth));
     LOKA_VERIFY(node.getContext() == context);
-    LOKA_VERIFY([AttributedAccess::installedValue(node) isEqualToAttributedString:before]);
+    LOKA_VERIFY([AttributedAccess::projectionSnapshot(node) isEqualToAttributedString:before]);
     [before release];
     loka::app::scene::NotifySubtreeNodeDetached(&node);
     loka::app::scene::LifecycleFactTestAccess::DeliverFacts(&node);
@@ -767,10 +768,10 @@ void testMacAttributedTextRetainedLifecycle()
     loka::app::scene::LifecycleFactTestAccess::DeliverFacts(&node);
     LOKA_VERIFY(![field isHidden]);
     LOKA_VERIFY(AttributedAccess::reusable(*context, measuredWidth));
-    LOKA_VERIFY([[AttributedAccess::installedValue(node) string] isEqualToString:@"updated while hidden"]);
+    LOKA_VERIFY([[AttributedAccess::storage(field) string] isEqualToString:@"updated while hidden"]);
     LOKA_VERIFY(node.getContext() == context);
     NSTextStorage *storage = AttributedAccess::storage(field);
-    LOKA_VERIFY([[storage string] isEqualToString:[AttributedAccess::installedValue(node) string]]);
+    LOKA_VERIFY([[storage string] isEqualToString:[AttributedAccess::projectionSnapshot(node) string]]);
     loka::app::scene::LifecycleFactTestAccess::MarkSubtreeRetired(&node);
     loka::app::scene::LifecycleFactTestAccess::DeliverFacts(&node);
     LOKA_VERIFY([[root subviews] count] == 0);
@@ -801,13 +802,13 @@ void testMacAttributedTextRefusalClearsProjection()
     loka::app::scene::LayoutState state;
     state.width = 100;
     node.layoutProjected(&controller, state);
-    LOKA_VERIFY(state.height == 0 && [[AttributedAccess::installedValue(node) string] length] == 0);
+    LOKA_VERIFY(state.height == 0 && [[AttributedAccess::storage(AttributedAccess::leaf(root)) string] length] == 0);
     LOKA_VERIFY(AttributedText(Styled("recovered", Italic)).applyPropsToNode(&node));
     VerifyAttributedHeight(node, controller, root, 100);
     const loka::core::String unreadable(loka::core::Managed<loka::platform::String>::Wrap(new MacRefusedAttributedString()));
     LOKA_VERIFY(AttributedText(Styled(unreadable, Italic)).applyPropsToNode(&node));
     node.layoutProjected(&controller, state);
-    LOKA_VERIFY(state.height == 0 && [[AttributedAccess::installedValue(node) string] length] == 0);
+    LOKA_VERIFY(state.height == 0 && [[AttributedAccess::storage(AttributedAccess::leaf(root)) string] length] == 0);
     LOKA_VERIFY(AttributedText(Styled("recovered again", Italic)).applyPropsToNode(&node));
     VerifyAttributedHeight(node, controller, root, 100);
   }
@@ -987,7 +988,7 @@ void testMacAttributedTextSourceSearchEmpties()
     loka::app::scene::LayoutState state;
     state.width = 100;
     node.layoutProjected(&controller, state);
-    LOKA_VERIFY([[AttributedAccess::installedValue(node) string] length] == 0);
+    LOKA_VERIFY([[AttributedAccess::storage(AttributedAccess::leaf(root)) string] length] == 0);
     LOKA_VERIFY(loka::core::testing::lokaAllocRawLive() == baseline + 1);
     LOKA_VERIFY(AttributedAccess::complete(context));
     LOKA_VERIFY(AttributedAccess::measured(context));
@@ -1022,13 +1023,13 @@ void testMacAttributedTextSourceAllocationLifecycle()
       loka::app::scene::LayoutState state;
       state.width = 100;
       node.layoutProjected(&controller, state);
-      LOKA_VERIFY(state.height == 0 && [[AttributedAccess::installedValue(node) string] length] == 0);
+      LOKA_VERIFY(state.height == 0 && [[AttributedAccess::storage(AttributedAccess::leaf(root)) string] length] == 0);
       LOKA_VERIFY(!AttributedAccess::complete(context) && !AttributedAccess::measured(context));
       LOKA_VERIFY(lokaAllocRawLive() == baseline);
       VerifyNoSource(context, 0, 1);
       node.layoutProjected(&controller, state);
       LOKA_VERIFY(AttributedAccess::complete(context));
-      LOKA_VERIFY([[AttributedAccess::installedValue(node) string] length] == 34);
+      LOKA_VERIFY([[AttributedAccess::storage(AttributedAccess::leaf(root)) string] length] == 34);
       LOKA_VERIFY(lokaAllocRawLive() == baseline + 1); // Only retained slots survive build.
       VerifySource(context, 0, 34, 0, 33);
       context.onPropsApplied();
@@ -1214,13 +1215,17 @@ namespace
     MacMeasurementCounter &operator=(const MacMeasurementCounter &);
   };
 
-  NSAttributedString *LeafContents(const loka::app::TextNode &, NSView *view)
+  NSAttributedString *LeafSnapshot(const loka::app::TextNode &, NSView *view)
   {
     return [(NSTextField *)view attributedStringValue];
   }
-  NSAttributedString *LeafContents(const loka::app::AttributedTextNode &node, NSView *)
+  NSAttributedString *LeafSnapshot(const loka::app::AttributedTextNode &node, NSView *)
   {
-    return AttributedAccess::installedValue(node);
+    return AttributedAccess::projectionSnapshot(node);
+  }
+  NSString *PresentedText(NSView *view, bool attributed)
+  {
+    return attributed ? [AttributedAccess::storage(view) string] : [(NSTextField *)view stringValue];
   }
   template <class Leaf>
   void VerifyMacMeasurementReuse(Leaf &node, bool attributed)
@@ -1240,7 +1245,7 @@ namespace
       LOKA_VERIFY(counter.calls(attributed) == 1); // Positive control: swizzle must observe the real call.
       const short height = state.height;
       LOKA_VERIFY(height > 0);
-      NSAttributedString *before = [LeafContents(node, field) retain];
+      NSAttributedString *before = [LeafSnapshot(node, field) retain];
       state.x = 4; // Same endpoint phase at spaceScale 5/4.
       state.y = 23;
       state.height = 999;
@@ -1252,7 +1257,7 @@ namespace
       LOKA_VERIFY(NSEqualRects([field frame], controller.projection().projectFrame(
           loka::core::Frame(4, 23, 101, height)).r));
       if (attributed)
-        LOKA_VERIFY(LeafContents(node, field) == before);
+        LOKA_VERIFY(LeafSnapshot(node, field) == before);
       [before release];
       state.x = 1;
       LOKA_VERIFY(controller.projection().projectLength(0, 101).pt == 126);
@@ -1269,11 +1274,11 @@ namespace
       NotifySubtreeNodeDetached(&node);
       LifecycleFactTestAccess::DeliverFacts(&node);
       LOKA_VERIFY([field isHidden]);
-      before = [LeafContents(node, field) retain];
+      before = [LeafSnapshot(node, field) retain];
       NotifySubtreeNodeAttached(&node);
       LifecycleFactTestAccess::DeliverFacts(&node);
       LOKA_VERIFY(![field isHidden]);
-      LOKA_VERIFY([LeafContents(node, field) isEqualToAttributedString:before]);
+      LOKA_VERIFY([LeafSnapshot(node, field) isEqualToAttributedString:before]);
       [before release];
       calls = counter.calls(attributed);
       node.layout(&controller, state);
@@ -1305,7 +1310,7 @@ namespace
       LifecycleFactTestAccess::MarkSubtreeRetired(&node);
       LifecycleFactTestAccess::DeliverFacts(&node);
       LOKA_VERIFY([[root subviews] count] == 0);
-      LOKA_VERIFY([[LeafContents(node, field) string] length] == 0);
+      LOKA_VERIFY([PresentedText(field, attributed) length] == 0);
       node.setContext(0);
     }
     [root release];
@@ -1363,7 +1368,7 @@ namespace
       state.width = 90; // Force a miss without mutating the logical input.
       const short refusedAdvance = node.layout(&controller, state);
       LOKA_VERIFY(refusedAdvance == state.y);
-      LOKA_VERIFY(state.height == 0 && [[LeafContents(node, field) string] length] == 0);
+      LOKA_VERIFY(state.height == 0 && [PresentedText(field, attributed) length] == 0);
       LOKA_VERIFY(NSIsEmptyRect([field frame]));
       const unsigned refusedAttempts = source.attempts();
       node.layout(&controller, state);
@@ -1372,7 +1377,7 @@ namespace
       source.available(true);
       node.layout(&controller, state);
       LOKA_VERIFY(counter.calls(attributed) == 2 && state.height > 0);
-      LOKA_VERIFY([[LeafContents(node, field) string] isEqualToString:@"retry the same wrapped text"]);
+      LOKA_VERIFY([PresentedText(field, attributed) isEqualToString:@"retry the same wrapped text"]);
       LOKA_VERIFY(!NSIsEmptyRect([field frame]));
       node.layout(&controller, state);
       LOKA_VERIFY(counter.calls(attributed) == 2);
@@ -1392,7 +1397,7 @@ namespace
       MacScenePlatformController::flushPendingRelayouts();
       LOKA_VERIFY(!controller.hasPendingRelayout());
       LOKA_VERIFY(counter.calls(attributed) == beforeRetry + 1);
-      LOKA_VERIFY([[LeafContents(node, field) string] isEqualToString:@"retry the same wrapped text"]);
+      LOKA_VERIFY([PresentedText(field, attributed) isEqualToString:@"retry the same wrapped text"]);
       LOKA_VERIFY(!NSIsEmptyRect([field frame]));
       controller.relayout(0, 0);
       LOKA_VERIFY(counter.calls(attributed) == beforeRetry + 1);
@@ -1554,7 +1559,7 @@ void testMacTextMeasurementInputPublications()
     attributed.layout(&controller, state);
     LOKA_VERIFY(counter.calls() == 2 && counter.calls(true) == 2);
     LOKA_VERIFY([[plainField stringValue] isEqualToString:@"after wrapped words"]);
-    LOKA_VERIFY([[AttributedAccess::installedValue(attributed) string] isEqualToString:@"after wrapped words"]);
+    LOKA_VERIFY([[AttributedAccess::storage(richField) string] isEqualToString:@"after wrapped words"]);
     {
       StateTrackerGuard guard(&tracker);
       style.set(FontSize<24>());
@@ -1571,9 +1576,7 @@ void testMacTextMeasurementInputPublications()
     attributed.layout(&controller, state);
     LOKA_VERIFY(counter.calls() == 4 && counter.calls(true) == 4);
     LOKA_VERIFY([plainField alignment] == LOKA_MAC_TEXT_ALIGNMENT_RIGHT);
-    NSParagraphStyle *paragraph = [AttributedAccess::installedValue(attributed) attribute:NSParagraphStyleAttributeName
-                                                                                  atIndex:0
-                                                                           effectiveRange:0];
+    NSParagraphStyle *paragraph = TextAttribute(AttributedAccess::storage(richField), NSParagraphStyleAttributeName, 0);
     LOKA_VERIFY([paragraph alignment] == LOKA_MAC_TEXT_ALIGNMENT_RIGHT);
     plain.layout(&controller, state);
     attributed.layout(&controller, state);
@@ -1587,7 +1590,7 @@ void testMacTextMeasurementInputPublications()
     attributed.layout(&controller, state);
     LOKA_VERIFY(counter.calls() == 5 && counter.calls(true) == 5);
     LOKA_VERIFY([[plainField stringValue] isEqualToString:@"replacement words"]);
-    LOKA_VERIFY([[AttributedAccess::installedValue(attributed) string] isEqualToString:@"replacement words"]);
+    LOKA_VERIFY([[AttributedAccess::storage(richField) string] isEqualToString:@"replacement words"]);
     LOKA_VERIFY(Text("unstyled").applyPropsToNode(&plain));
     plain.layout(&controller, state);
     LOKA_VERIFY([plainField alignment] == LOKA_MAC_TEXT_ALIGNMENT_NATURAL);
@@ -1609,7 +1612,7 @@ void testMacTextMeasurementInputPublications()
     LifecycleFactTestAccess::DeliverFacts(&attributed);
     attributed.layout(&controller, state);
     LOKA_VERIFY(counter.calls() == 6 && counter.calls(true) == 6);
-    LOKA_VERIFY([[AttributedAccess::installedValue(attributed) string] isEqualToString:@"changed while parked"]);
+    LOKA_VERIFY([[AttributedAccess::storage(richField) string] isEqualToString:@"changed while parked"]);
     attributed.layout(&controller, state);
     LOKA_VERIFY(counter.calls() == 6 && counter.calls(true) == 6);
     LOKA_VERIFY(((Text(&content) + &style) + BlockStyle().wrap(TEXT_WRAP_WORD)).applyPropsToNode(&plain));
@@ -2799,13 +2802,16 @@ void testMacAttributedTextInstallSequence()
     VerifyTextKitWidth(view, 0);
     LOKA_VERIFY(!AttributedAccess::measured(context));
     MacMeasurementCounter counter;
+    const int host = DarwinMajor();
+    if (host != 13 && host != 25)
+      std::printf("[skip] attributed degenerate widths : no recorded baseline for this host\n");
     for (int i = 0; i < 2; ++i)
     {
       state.width = i ? 3 : 0;
       context.layout(&controller, state);
       VerifyTextKitCounts(i + 1, i + 1, i, i + 1);
       VerifyTextKitWidth(view, state.width);
-      NSAttributedString *value = AttributedAccess::installedValue(node);
+      NSAttributedString *value = AttributedAccess::projectionSnapshot(node);
       CGFloat oracle = ReferenceTextGeometry(value, state.width).size.height;
       std::printf("width=%d cell=%g TextKit=%g\n",
                   state.width,
@@ -2813,8 +2819,8 @@ void testMacAttributedTextInstallSequence()
                   (double)oracle);
       LOKA_VERIFY(state.height == controller.projection().measurementToLu(oracle));
       // Probe G, system-font "abc def", default typesetter. Zero is a completed advance on Mavericks.
-      if (DarwinMajor() == 13 || DarwinMajor() == 25)
-        LOKA_VERIFY(state.height == (i ? 96 : DarwinMajor() == 13 ? 0 : 16));
+      if (host == 13 || host == 25)
+        LOKA_VERIFY(state.height == (i ? 96 : host == 13 ? 0 : 16));
       LOKA_VERIFY(AttributedAccess::reusable(context, controller.projection().projectLength(0, state.width)));
       [view setFrameSize:NSMakeSize(111, 150)];
       VerifyTextKitWidth(view, state.width);
@@ -2844,10 +2850,10 @@ void testMacAttributedTextInstallSequence()
     context.layout(&controller, state);
     LOKA_VERIFY(state.height
                 == controller.projection().measurementToLu(
-                    ReferenceTextGeometry(AttributedAccess::installedValue(node), 120).size.height));
+                    ReferenceTextGeometry(AttributedAccess::projectionSnapshot(node), 120).size.height));
     context.layout(&controller, state);
     VerifyTextKitCounts(5, 5, 2, 5);
-    NSAttributedString *installed = [AttributedAccess::installedValue(node) retain];
+    NSAttributedString *installed = [AttributedAccess::projectionSnapshot(node) retain];
     node.props.text(AttributedString());
     state.width = 90;
     {
@@ -2861,7 +2867,7 @@ void testMacAttributedTextInstallSequence()
     context.layout(&controller, state);
     VerifyTextKitCounts(8, 7, 3, 7);
     LOKA_VERIFY(state.height > 0 && AttributedAccess::measured(context));
-    LOKA_VERIFY([installed length] && ![AttributedAccess::installedValue(node) length]);
+    LOKA_VERIFY([installed length] && ![AttributedAccess::projectionSnapshot(node) length]);
     [installed release];
     node.props.text(Styled(RawAttributed("\xC0\xAF", 2), Italic));
     state.width = 60;
@@ -2910,7 +2916,7 @@ void testMacAttributedTextEmptyAdvances()
       node.props.text(empty[sample]);
       node.getContext()->onPropsApplied();
       const short bottom = node.layout(&controller, state);
-      NSAttributedString *installed = AttributedAccess::installedValue(node);
+      NSAttributedString *installed = AttributedAccess::projectionSnapshot(node);
       LOKA_VERIFY(![installed length]);
       const CGFloat width = controller.projection().projectLength(1, 102).pt;
       const CGFloat oracle = CellAdvance(installed, modes[mode], width);
@@ -3154,7 +3160,7 @@ void testMacAttributedTextDrawBands()
     drawBackground = class_getMethodImplementation(cls, @selector(drawBackgroundForGlyphRange:atPoint:));
     MacNativeRefusal ink(@selector(drawGlyphsForGlyphRange:atPoint:), (IMP)RecordInk, cls);
     MacNativeRefusal bg(@selector(drawBackgroundForGlyphRange:atPoint:), (IMP)RecordBackground, cls);
-    NSString *text = [AttributedAccess::installedValue(node) string];
+    NSString *text = [AttributedAccess::storage(view) string];
     NSString *samples[] = {@"ffff", @"underlined", @"\u05e9", @"last"};
     for (unsigned i = 0; i < 4; ++i)
     {
@@ -3444,7 +3450,11 @@ void testMacAttributedTextWindow()
         [view setFrameSize:NSMakeSize(70, 60)];
         [window displayIfNeeded];
         [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
-        LOKA_VERIFY(layerPaints && [view layerContentsRedrawPolicy] == LOKA_MAC_LAYER_REDRAW_DURING_VIEW_RESIZE);
+        LOKA_VERIFY(layerPaints);
+        if ([view respondsToSelector:@selector(layerContentsRedrawPolicy)])
+          LOKA_VERIFY([view layerContentsRedrawPolicy] == LOKA_MAC_LAYER_REDRAW_DURING_VIEW_RESIZE);
+        else
+          std::printf("[skip] attributed resize: redraw policy getter unavailable\n");
         VerifyTextKitWidth(view, 80);
       }
     }
@@ -3465,31 +3475,116 @@ void testMacAttributedTextWindow()
 }
 
 #ifndef NDEBUG
+#include <cerrno>
+#include <crt_externs.h>
+#include <signal.h>
+#include <spawn.h>
+#include <string>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <vector>
+
+namespace
+{
+  const char *const childActionKey = "LOKA_MAC_ATTRIBUTED_CHILD";
+  const char *const childActions[] = {"addSubview", "addSubviewPositioned", "setSubviewsNonEmpty"};
+
+  void ForwardedNonEmptySubviews(id, SEL, NSArray *)
+  {
+    // A forwarded setSubviews: can reenter the leaf's addSubview: assertion.
+    // Exit at the super send so that assertion cannot satisfy the death test.
+    _exit(42);
+  }
+
+  void RunAttributedChildAction(const char *action)
+  {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    [NSApplication sharedApplication];
+    NSView *view = [[[NSClassFromString(@"LokaAttributedTextView") alloc] initWithFrame:NSZeroRect] autorelease];
+    NSView *child = [[[NSView alloc] initWithFrame:NSZeroRect] autorelease];
+    NSArray *children = [NSArray arrayWithObject:child];
+    LOKA_VERIFY(view);
+    for (int door = 0; door < 3; ++door)
+    {
+      if (std::strcmp(action, childActions[door]) != 0)
+        continue;
+      if (door == 2 && [NSView instancesRespondToSelector:@selector(setSubviews:)])
+      {
+        MacNativeRefusal intercept(@selector(setSubviews:), (IMP)ForwardedNonEmptySubviews, [NSView class]);
+        AttemptChild(view, child, children, door);
+      }
+      else
+        AttemptChild(view, child, children, door);
+      break;
+    }
+    [pool drain];
+    _exit(1);
+  }
+
+  void VerifyAttributedChildAssertion(const char *action)
+  {
+    // The runner's single-name entry executes only the selected test in the new image.
+    char *binary = (*_NSGetArgv())[0];
+    char test[] = "testMacAttributedTextChildAssertions";
+    char *args[] = {binary, test, 0};
+    std::string setting = std::string(childActionKey) + "=" + action;
+    std::vector<char *> environment;
+    for (char **entry = *_NSGetEnviron(); *entry; ++entry)
+      environment.push_back(*entry);
+    environment.push_back(const_cast<char *>(setting.c_str()));
+    environment.push_back(0);
+
+    FILE *errors = std::tmpfile();
+    LOKA_VERIFY(errors);
+    posix_spawn_file_actions_t redirects;
+    LOKA_VERIFY(posix_spawn_file_actions_init(&redirects) == 0);
+    LOKA_VERIFY(posix_spawn_file_actions_adddup2(&redirects, fileno(errors), STDERR_FILENO) == 0);
+    pid_t pid;
+    int launched = posix_spawnp(&pid, binary, &redirects, 0, args, &environment[0]);
+    posix_spawn_file_actions_destroy(&redirects);
+    LOKA_VERIFY(launched == 0);
+
+    int status = 0;
+    pid_t result = 0;
+    for (int poll = 0; poll < 1000; ++poll)
+    {
+      result = waitpid(pid, &status, WNOHANG);
+      if (result == pid)
+        break;
+      LOKA_VERIFY(result == 0 || errno == EINTR);
+      usleep(10000);
+    }
+    if (result != pid)
+    {
+      kill(pid, SIGKILL);
+      while (waitpid(pid, &status, 0) < 0 && errno == EINTR)
+      {
+      }
+      std::fprintf(stderr, "Timed out waiting for attributed child %s\n", action);
+    }
+    std::rewind(errors);
+    char line[1024];
+    bool diagnosed = false;
+    while (std::fgets(line, sizeof(line), errors))
+      if (std::strstr(line, "AttributedText cannot host children"))
+        diagnosed = true;
+    std::fclose(errors);
+    if (result != pid || !WIFSIGNALED(status) || WTERMSIG(status) != SIGABRT || !diagnosed)
+      std::fprintf(
+          stderr, "Attributed child %s: wait status %d, expected assertion seen %d\n", action, status, diagnosed);
+    LOKA_VERIFY(result == pid && WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT && diagnosed);
+  }
+} // namespace
 #endif
+
 void testMacAttributedTextChildAssertions()
 {
 #ifndef NDEBUG
-  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-  [NSApplication sharedApplication];
-  NSView *view = [[[NSClassFromString(@"LokaAttributedTextView") alloc] initWithFrame:NSZeroRect] autorelease];
-  NSView *child = [[[NSView alloc] initWithFrame:NSZeroRect] autorelease];
-  NSArray *children = [NSArray arrayWithObject:child];
-  LOKA_VERIFY(view);
-  for (int door = 0; door < 3; ++door)
-  {
-    pid_t pid = fork();
-    LOKA_VERIFY(pid >= 0);
-    if (!pid)
-    {
-      AttemptChild(view, child, children, door);
-      _exit(0);
-    }
-    int status = 0;
-    LOKA_VERIFY(waitpid(pid, &status, 0) == pid && WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
-  }
-  [pool drain];
+  const char *action = std::getenv(childActionKey);
+  if (action)
+    RunAttributedChildAction(action);
+  for (int i = 0; i < 3; ++i)
+    VerifyAttributedChildAssertion(childActions[i]);
 #else
   std::printf("[skip] child assertion requires debug assertions; release refusal exercised in window test\n");
 #endif
@@ -3514,7 +3609,7 @@ void testMacAttributedTextLineAdvances()
       node.props.text(Styled(samples[i], TextStyle()));
       node.getContext()->onPropsApplied();
       node.layout(&controller, state);
-      NSAttributedString *text = AttributedAccess::installedValue(node);
+      NSAttributedString *text = AttributedAccess::projectionSnapshot(node);
       const CGFloat oracle = ReferenceTextGeometry(text, state.width).size.height;
       LOKA_VERIFY(state.height == controller.projection().measurementToLu(oracle) && state.height > single);
       std::printf("LF fixture %d cell=%g TextKit=%g\n",
@@ -3535,7 +3630,7 @@ void testMacAttributedTextLineAdvances()
       node.props.blockStyle_ = BlockStyle().wrap(i == 0 ? TEXT_WRAP_WORD : TEXT_WRAP_CHAR);
       node.getContext()->onPropsApplied();
       node.layout(&controller, state);
-      NSAttributedString *text = AttributedAccess::installedValue(node);
+      NSAttributedString *text = AttributedAccess::projectionSnapshot(node);
       [AttributedAccess::manager(view) lineFragmentRectForGlyphAtIndex:0 effectiveRange:&lines[i]];
       LOKA_VERIFY(state.height
                   == controller.projection().measurementToLu(ReferenceTextGeometry(text, state.width).size.height));

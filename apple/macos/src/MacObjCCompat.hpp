@@ -125,6 +125,7 @@ typedef float CGFloat;
 #if !defined(MAC_OS_X_VERSION_MAX_ALLOWED) || MAC_OS_X_VERSION_MAX_ALLOWED < 1060
 @interface NSView (LokaLayerRedrawCompat)
 - (void)setLayerContentsRedrawPolicy:(NSInteger)policy;
+- (NSInteger)layerContentsRedrawPolicy;
 @end
 #define LOKA_MAC_LAYER_REDRAW_DURING_VIEW_RESIZE ((NSInteger)2)
 #else

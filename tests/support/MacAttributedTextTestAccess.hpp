@@ -25,6 +25,19 @@ namespace loka
         LOKA_VERIFY(uname(&host) == 0);
         return std::atoi(host.release);
       }
+      inline bool HasTahoeCellBaseline(const char *fixture)
+      {
+        if (DarwinMajor() == 25)
+          return true;
+        std::printf("[skip] %s Tahoe cell parity : no recorded baseline for this host\n", fixture);
+        return false;
+      }
+
+      inline id TextAttribute(NSAttributedString *text, NSString *key, NSUInteger index, NSRange *range = 0)
+      {
+        LOKA_VERIFY(index < [text length]);
+        return [text attribute:key atIndex:index longestEffectiveRange:range inRange:NSMakeRange(0, [text length])];
+      }
       inline NSRect ReferenceTextGeometry(NSAttributedString *text, CGFloat width)
       {
         NSTextStorage *storage = [[[NSTextStorage alloc] initWithAttributedString:text] autorelease];
@@ -84,7 +97,7 @@ namespace loka
         {
           return [leaf appliedWidth];
         }
-        static NSAttributedString *installedValue(const app::AttributedTextNode &node)
+        static NSAttributedString *projectionSnapshot(const app::AttributedTextNode &node)
         {
           LOKA_VERIFY(node.getContext());
           const MacAttributedTextContext *context = static_cast<MacAttributedTextContext *>(node.getContext());

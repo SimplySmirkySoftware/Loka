@@ -994,7 +994,7 @@ namespace
     for (NSUInteger i = 0; i < [value length]; ++i)
     {
       NSRange range;
-      NSNumber *attribute = [value attribute:NSUnderlineStyleAttributeName atIndex:i effectiveRange:&range];
+      NSNumber *attribute = loka::dsl::testing::TextAttribute(value, NSUnderlineStyleAttributeName, i, &range);
       if (on)
       {
         LOKA_VERIFY([attribute intValue] == NSUnderlineStyleSingle);
@@ -1066,12 +1066,12 @@ void testMacTextUnderlineRuns()
 {
   UnderlineRunFixture f(AttributedTextProps(Styled("AB", Underline) + Styled("CD", TextStyle().underline(false))
                                             + Styled("EF", TextStyle()) + Styled("GH", Underline)));
-  NSAttributedString *value = AttributedAccess::installedValue(f.node);
+  NSTextStorage *value = AttributedAccess::storage(f.view());
   LOKA_VERIFY([[value string] isEqualToString:@"ABCDEFGH"]);
   for (NSUInteger i = 0; i < 8; ++i)
   {
     NSRange range;
-    NSNumber *attribute = [value attribute:NSUnderlineStyleAttributeName atIndex:i effectiveRange:&range];
+    NSNumber *attribute = loka::dsl::testing::TextAttribute(value, NSUnderlineStyleAttributeName, i, &range);
     if (i < 2 || i >= 6)
     {
       LOKA_VERIFY([attribute intValue] == NSUnderlineStyleSingle);
@@ -1110,6 +1110,7 @@ void testMacTextUnderlineTransitions()
 
 void testMacTextUnderlineSizes()
 {
+  const bool cellParity = loka::dsl::testing::HasTahoeCellBaseline("underline sizes");
   for (int policy = 0; policy < 6; ++policy)
     for (int s = 0; s < 4; ++s)
       for (int font = 0; font < (policy ? 2 : 1); ++font)
@@ -1146,13 +1147,13 @@ void testMacTextUnderlineSizes()
           runOff.state.width = runOn.state.width = migrationWidths[w];
           runOff.node.layout(&runOff.controller, runOff.state);
           runOn.node.layout(&runOn.controller, runOn.state);
-          VerifyUnderline(AttributedAccess::installedValue(runOn.node), true);
+          VerifyUnderline(AttributedAccess::storage(runOn.view()), true);
           LOKA_VERIFY(runOff.state.height == runOn.state.height);
           NSLayoutManager *m = AttributedAccess::manager(runOff.view()), *n = AttributedAccess::manager(runOn.view());
           NSTextContainer *c = AttributedAccess::container(runOff.view()),
                           *d = AttributedAccess::container(runOn.view());
           LOKA_VERIFY(NSEqualRects([m usedRectForTextContainer:c], [n usedRectForTextContainer:d]));
-          NSAttributedString *expected = AttributedAccess::installedValue(runOff.node);
+          NSAttributedString *expected = AttributedAccess::projectionSnapshot(runOff.node);
           const CGFloat width = migrationWidths[w];
           const CGFloat expectedCell = loka::dsl::testing::CellAdvance(
               expected,
@@ -1173,7 +1174,7 @@ void testMacTextUnderlineSizes()
                       (double)width,
                       (double)expectedCell,
                       runOff.state.height);
-          if (loka::dsl::testing::DarwinMajor() == 25)
+          if (cellParity)
             LOKA_VERIFY(runOff.state.height == runOff.controller.projection().measurementToLu(expectedCell));
           NSRange glyphs = [m glyphRangeForTextContainer:c];
           LOKA_VERIFY(NSEqualRanges(glyphs, [n glyphRangeForTextContainer:d]));
