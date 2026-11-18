@@ -10,6 +10,7 @@
 #include "app/nodes/controls/Ribbon.hpp"
 #include "app/nodes/AttributedText.hpp"
 #include "app/nodes/ImageView.hpp"
+#include "support/ScrollViewSeat.hpp"
 #include "support/TestVerify.hpp"
 #include "support/LayoutY.hpp"
 #include "app/layout/ColumnLayout.hpp"
@@ -388,7 +389,8 @@ void testContainerGapNullGeometry()
   box.addChild(inner);
   LOKA_VERIFY(platform.projectLayoutForTesting(&box, s) == 20 + 8 + 32 + 8);
   LOKA_VERIFY(button->placed.y == 28 && button->placed.height == 32);
-  ScrollViewNode scroll((ScrollViewProps()));
+  loka::testing::ScrollViewSeat viewport;
+  ScrollViewNode scroll(ScrollViewProps(viewport.state()));
   scroll.addChild(new TextNode(TextProps("a")));
   scroll.addChild(new FragmentNode(FragmentProps()));
   scroll.addChild(new TextNode(TextProps("b")));
@@ -443,7 +445,8 @@ void testContainerGapPassThroughLimits()
 void testContainerGapShortRefusal()
 {
   NullScenePlatformController platform;
-  ScrollViewNode scroll((ScrollViewProps()));
+  loka::testing::ScrollViewSeat viewport;
+  ScrollViewNode scroll(ScrollViewProps(viewport.state()));
   StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
   BoxProps large;
   large.setSize(10, 32760);
@@ -462,7 +465,8 @@ void testContainerGapShortRefusal()
   LOKA_VERIFY(platform.scrollViewShortRangeRefusalCount() == before + 1);
   LOKA_VERIFY(unreached->getContext() == 0);
   // Both content endpoints fit short, but their total including the gap does not.
-  ScrollViewNode accumulated((ScrollViewProps()));
+  loka::testing::ScrollViewSeat accumulatedViewport;
+  ScrollViewNode accumulated(ScrollViewProps(accumulatedViewport.state()));
   large.setSize(10, 20000);
   tiny.setSize(10, 12760);
   accumulated.addChild(new BoxNode(large));
@@ -474,7 +478,8 @@ void testContainerGapShortRefusal()
   // The common Box and Null generic path must also refuse before narrowing.
   for (unsigned kind = 0; kind != 2; ++kind)
   {
-    ScrollViewNode wrapper((ScrollViewProps()));
+    loka::testing::ScrollViewSeat wrapperViewport;
+    ScrollViewNode wrapper(ScrollViewProps(wrapperViewport.state()));
     Node *container =
         kind ? static_cast<Node *>(new BoxNode(BoxProps())) : static_cast<Node *>(new FragmentNode(FragmentProps()));
     large.setSize(10, 32760);
@@ -613,7 +618,8 @@ void testContainerGapKindCharacterization()
   ScrollBarNode scrollBar((ScrollBarProps()));
   LOKA_VERIFY(scrollBar.kind() == NODE_KIND_SCROLL_BAR);
   verifySeatVerdicts(&scrollBar);
-  ScrollViewNode scrollView((ScrollViewProps()));
+  loka::testing::ScrollViewSeat viewport;
+  ScrollViewNode scrollView(ScrollViewProps(viewport.state()));
   LOKA_VERIFY(scrollView.kind() == NODE_KIND_SCROLL_VIEW);
   verifySeatVerdicts(&scrollView);
   CanvasNode canvas((CanvasProps()));
@@ -792,8 +798,9 @@ void testGapDoorDelivery()
 
   for (unsigned wrapper = 0; wrapper < 3; ++wrapper)
   {
+    loka::testing::ScrollViewSeat viewport;
     Node *root = wrapper == 0   ? static_cast<Node *>((Column().gap(20)).create())
-                 : wrapper == 1 ? static_cast<Node *>(ScrollView().create())
+                 : wrapper == 1 ? static_cast<Node *>(ScrollView(viewport.state()).create())
                                 : static_cast<Node *>(Fragment().create());
     BoxNode *box = new BoxNode(BoxProps());
     FragmentNode *inside = gapPair();
@@ -840,6 +847,7 @@ void testGapDoorResets()
   NullScenePlatformController platform;
   for (unsigned kind = 0; kind < 6; ++kind)
   {
+    loka::testing::ScrollViewSeat viewport;
     StackNode outer(Column().gap(20).props);
     Node *reset = 0;
     switch (kind)
@@ -857,7 +865,7 @@ void testGapDoorResets()
       reset = new RibbonGroupNode(RibbonGroupProps());
       break;
     case 4:
-      reset = ScrollView().create();
+      reset = ScrollView(viewport.state()).create();
       break;
     case 5:
       reset = Column().create();
@@ -936,7 +944,8 @@ void testGapDoorOverflow()
   for (unsigned rightEdge = 0; rightEdge < 2; ++rightEdge)
   {
     NullScenePlatformController platform;
-    ScrollViewNode scroll((ScrollViewProps()));
+    loka::testing::ScrollViewSeat viewport;
+    ScrollViewNode scroll(ScrollViewProps(viewport.state()));
     StackNode *row = new StackNode(Row().gap(rightEdge ? SHRT_MAX - 1 : SHRT_MAX).props);
     row->addChild(Box().size(1, 1).create());
     BoxNode *last = new BoxNode(Box().size(1, 1).props);
@@ -1236,7 +1245,8 @@ void testWindowMarginBoxRefusal()
   for (unsigned axis = 0; axis < 2; ++axis)
   {
     NullScenePlatformController platform;
-    ScrollViewNode scroll((ScrollViewProps()));
+    loka::testing::ScrollViewSeat viewport;
+    ScrollViewNode scroll(ScrollViewProps(viewport.state()));
     BoxNode *inner = new BoxNode(Box().padding(20000).props);
     TextNode *unreached = new TextNode(TextProps("refused origin"));
     inner->addChild(unreached);
