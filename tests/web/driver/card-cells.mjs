@@ -24,7 +24,7 @@ async function pixelDifference(client, assembled, reference) {
       if(b.data[i]!==b.data[0] || b.data[i+1]!==b.data[1] || b.data[i+2]!==b.data[2]) referenceHasInk=true;
       max=Math.max(max,diff);
       if(diff) ++changedPixels;
-      if(diff>8 && worst.length<400) worst.push([(i/4)%a.width,Math.floor(i/4/a.width),diff]);
+      if(diff>8) worst.push([(i/4)%a.width,Math.floor(i/4/a.width),diff]);
     }
     if(!referenceHasInk) throw Error('reference crop is a solid colour');
     return {max,changedPixels,width:a.width,height:a.height,worst:JSON.stringify(worst)};
@@ -109,6 +109,18 @@ export async function runCardCells(client, navigate) {
         assert.equal(await client.evaluate('fixture.textTest.resources()'),0);
       }
     }
+    // The border follows the selected skin: classic's button border is black, the default's is GrayText.
+    await client.send('Emulation.setDeviceMetricsOverride',{width:800,height:600,deviceScaleFactor:1,mobile:false});
+    await navigate('index.html');
+    assert.equal(await client.evaluate(`(()=>{
+      fixture.lokaSkin='classic';
+      fixture._fixture_configure(-801,0);
+      if(web.start()!==0) throw Error('Card fixture start');
+      const bands=[...document.querySelector('body > [data-loka-token]').children];
+      return bands.length===4 && bands.every(band=>getComputedStyle(band.firstElementChild).borderTopColor==='rgb(0, 0, 0)');
+    })()`),true,'classic skin Card border');
+    await client.evaluate('web.dispose();web.completed.then(()=>true)');
+    console.log('Card frame strips, paint comparison and skin border passed');
   } finally {
     await client.send('Emulation.setDeviceMetricsOverride',{width:800,height:600,deviceScaleFactor:1,mobile:false});
   }
