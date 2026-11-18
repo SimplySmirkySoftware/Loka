@@ -341,7 +341,8 @@ bool App::windowHasAdmissionWork(Window *window) const
     return false;
   loka::app::DialogResultDelivery *delivery = window->dialogResultDelivery();
   return window->hasPendingNativeVisibility() || window->hasPendingSceneInvalidation()
-         || window->hasPendingScenePlatformSync() || (delivery && delivery->hasRunnableWork());
+         || window->hasPendingScenePlatformSync() || (delivery && delivery->hasRunnableWork())
+         || window->hasRetiredTextStores();
 }
 
 App::AdmittedWindow::AdmittedWindow(

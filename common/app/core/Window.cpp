@@ -26,6 +26,12 @@ void Window::reclaimScenes(loka::app::scene::Scene *retired)
   this->sceneManager_.retiredScenes_.drainSnapshot(retired);
 }
 
+bool Window::hasRetiredTextStores() const
+{
+  const loka::app::scene::Scene *current = this->scene();
+  return current && current->platformController_ && current->platformController_->hasRetiredTextStores();
+}
+
 bool Window::flushSceneInvalidation()
 {
   loka::app::scene::Scene *current = this->scene();

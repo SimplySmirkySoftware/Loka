@@ -1,5 +1,6 @@
 #include "TextDocumentKernelTests.hpp"
 #include "support/TextStoreConformance.hpp"
+#include "support/RecordingPlatformController.hpp"
 #include "support/BlobAllocationProbe.hpp"
 #include "app/TextDocumentFile.hpp"
 #include "core/State.hpp"
@@ -413,6 +414,204 @@ void testTextKernelReclaim()
     ledger.drain();
   }
 }
+namespace
+{
+  TextDocument &windowText(TestWindow &window)
+  {
+    return static_cast<Root *>(SceneAccess::rootBoundary(*window.scene()))->text;
+  }
+
+  class AdmissionController : public NullScenePlatformController
+  {
+  public:
+    unsigned drains, syncs;
+    AdmissionController()
+        : drains(0),
+          syncs(0)
+    {
+    }
+    virtual void drainNativeRetirements()
+    {
+      ++this->drains;
+      NullScenePlatformController::drainNativeRetirements();
+    }
+    virtual void synchronize()
+    {
+      ++this->syncs;
+      NullScenePlatformController::synchronize();
+    }
+  };
+
+  TextStoreRow &replaceForAdmission(TestWindow &window, WindowAdmissionTestApp &app)
+  {
+    TextDocument &doc = windowText(window);
+    LOKA_VERIFY(!app.hasPendingWindowAdmission());
+    LOKA_VERIFY(doc.replace(TextReplacement::Empty()) == POST_ACCEPTED);
+    app.reconcileAtCompletion();
+    TextStoreRow *fresh = TextDocumentAccess::store(doc);
+    LOKA_VERIFY(fresh && doc.replaceReply()->get().kind() == Reply<TextReplacement>::GRANTED);
+    LOKA_VERIFY(TextStoreTestAccess::retiredCount(*fresh) == 1);
+    return *fresh;
+  }
+
+  class ReclaimWitness : public NullTextStore
+  {
+  public:
+    ReclaimWitness(TextStoreRow &sibling, bool &destroyed)
+        : NullTextStore(TextStoreTestAccess::ledger(sibling), sibling.controller()),
+          destroyed_(destroyed)
+    {
+    }
+    virtual ~ReclaimWitness()
+    {
+      this->destroyed_ = true;
+    }
+
+  private:
+    bool &destroyed_;
+  };
+
+  class BindingProbe : public SceneTestSupport::RecordingPlatformController
+  {
+  public:
+    void bindTwice(TextStoreLedger &ledger)
+    {
+      TextStoreAdmissionBinding first(*this, ledger);
+      TextStoreAdmissionBinding second(*this, ledger);
+    }
+  };
+} // namespace
+
+void testTextStoreReplacementAdmission()
+{
+  NullPlatformContext context;
+  AdmissionController a, b;
+  TestWindow first(&context, props(), &a), second(&context, props(), &b);
+  WindowAdmissionTestApp app(first, &second);
+  app.flush();
+  app.reconcileAtCompletion();
+  TextStoreRow &fresh = replaceForAdmission(first, app);
+  const unsigned drains = a.drains, syncs = a.syncs, otherDrains = b.drains;
+  LOKA_VERIFY(app.hasPendingWindowAdmission());
+  app.admitAndApplyWindows();
+  LOKA_VERIFY(TextStoreTestAccess::retiredCount(fresh) == 0);
+  LOKA_VERIFY(a.drains == drains + 1 && a.syncs == syncs && b.drains == otherDrains);
+  LOKA_VERIFY(!app.hasPendingWindowAdmission());
+  app.admitAndApplyWindows();
+  LOKA_VERIFY(a.drains == drains + 1 && a.syncs == syncs && b.drains == otherDrains);
+  app.reclaimWindows();
+}
+
+void testTextStoreRefusedBirthAdmission()
+{
+  Fixture f;
+  TextStoreRow *old = TextDocumentAccess::store(f.text());
+  LOKA_VERIFY(old && !f.app.hasPendingWindowAdmission());
+  failTextStoreBirths(TEXT_STORE_REFUSED_ALLOCATION, 1);
+  LOKA_VERIFY(f.text().replace(TextReplacement::Empty()) == POST_ACCEPTED);
+  f.app.reconcileAtCompletion();
+  LOKA_VERIFY(f.text().replaceReply()->get().reason() == TEXT_REPLACE_ALLOCATION);
+  LOKA_VERIFY(TextDocumentAccess::store(f.text()) == old && TextStoreTestAccess::retiredCount(*old) == 1);
+  f.app.flush();
+  LOKA_VERIFY(TextStoreTestAccess::retiredCount(*old) == 0 && !f.app.hasPendingWindowAdmission());
+}
+
+void testTextStoreBusyAdmission()
+{
+  Fixture f;
+  TextStoreRow &fresh = replaceForAdmission(f.window, f.app);
+  {
+    BorrowScope busy(f.controller);
+    LOKA_VERIFY(f.window.scene()->isBusy() && !f.app.hasPendingWindowAdmission());
+    f.app.flush();
+    LOKA_VERIFY(TextStoreTestAccess::retiredCount(fresh) == 1);
+  }
+  LOKA_VERIFY(f.app.hasPendingWindowAdmission());
+  f.app.flush();
+  LOKA_VERIFY(TextStoreTestAccess::retiredCount(fresh) == 0);
+}
+
+void testTextStoreCloseAdmission()
+{
+  NullPlatformContext context;
+  bool ownedReclaimed = false, borrowedReclaimed = false;
+  {
+    NullScenePlatformController borrowed;
+    TestWindow *ownedWindow = new TestWindow(&context, props(), 0);
+    TestWindow *borrowedWindow = new TestWindow(&context, props(), &borrowed);
+    WindowAdmissionTestApp app(*ownedWindow, borrowedWindow);
+    app.flush();
+    app.reconcileAtCompletion();
+    // Retired before close, so each window closes with store rows awaiting reclaim.
+    (new ReclaimWitness(*TextDocumentAccess::store(windowText(*ownedWindow)), ownedReclaimed))->retire();
+    (new ReclaimWitness(*TextDocumentAccess::store(windowText(*borrowedWindow)), borrowedReclaimed))->retire();
+    LOKA_VERIFY(app.hasPendingWindowAdmission());
+    app.requestWindowClose(ownedWindow);
+    app.requestWindowClose(borrowedWindow);
+    app.admitAndApplyWindows();
+    LOKA_VERIFY(!ownedReclaimed && !borrowedReclaimed);
+    app.reclaimWindows();
+    LOKA_VERIFY(ownedReclaimed && !borrowedReclaimed && borrowed.hasRetiredTextStores());
+    LOKA_VERIFY(!app.hasPendingWindowAdmission());
+    app.flush();
+    LOKA_VERIFY(!borrowedReclaimed);
+  }
+  LOKA_VERIFY(borrowedReclaimed);
+}
+
+void testTextStoreUnboundAdmission()
+{
+  SceneTestSupport::RecordingPlatformController controller;
+  TextStoreLedger ledger;
+  (new NullTextStore(ledger, controller))->retire();
+  LOKA_VERIFY(ledger.hasRetired());
+  LOKA_VERIFY(!controller.hasRetiredTextStores());
+}
+
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define LOKA_TEXT_STORE_BINDING_PIN_ASAN 1
+#endif
+#endif
+#if defined(__SANITIZE_ADDRESS__)
+#define LOKA_TEXT_STORE_BINDING_PIN_ASAN 1
+#endif
+
+void testTextStoreDoubleAdmissionBinding()
+{
+#if defined(__linux__) && defined(LOKA_LIFECYCLE_AUDIT) && !defined(NDEBUG)                                            \
+    && !defined(LOKA_TEXT_STORE_BINDING_PIN_ASAN)
+  const pid_t child = fork();
+  LOKA_VERIFY(child >= 0);
+  if (!child)
+  {
+    BindingProbe controller;
+    TextStoreLedger ledger;
+    controller.bindTwice(ledger);
+    _exit(0);
+  }
+  int status = 0;
+  LOKA_VERIFY(waitpid(child, &status, 0) == child);
+  LOKA_VERIFY(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
+#else
+  std::printf("[skip] double admission binding death pin requires Linux Debug audit without ASan.\n");
+#endif
+}
+
+void testTextStoreRemountAdmission()
+{
+  Fixture f;
+  f.window.teardownScene();
+  f.window.mountScene();
+  // Settle the teardown row as ordinary scene work before isolating replacement.
+  f.window.scene()->requestInvalidate(NODE_DIRTY_LAYOUT);
+  f.app.flush();
+  f.app.reconcileAtCompletion();
+  TextStoreRow &fresh = replaceForAdmission(f.window, f.app);
+  f.app.flush();
+  LOKA_VERIFY(TextStoreTestAccess::retiredCount(fresh) == 0);
+}
+
 namespace
 {
   struct Reentrant

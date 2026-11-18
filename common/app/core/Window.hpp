@@ -613,6 +613,8 @@ private:
   /** App completion only, after admission has left its flushing gate. */
   void reconcileFocus();
   void reconcileTextDocuments();
+  /** App admission probes the mounted controller in O(1), walking no rows. */
+  bool hasRetiredTextStores() const;
   loka::app::scene::Scene *textDocumentScene();
   bool commitTextDocuments();
   /** Rails without deferred dialog delivery carry no transport storage. */
