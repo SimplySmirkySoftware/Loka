@@ -5,6 +5,7 @@
 #include "context/LokaClipHostView.hpp"
 #include "testing/MacScenePlatformTestAccess.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
+#include "support/ScrollViewSeat.hpp"
 #include "support/TestVerify.hpp"
 #include "support/MacNativeRefusal.hpp"
 #include "support/MacRetirementProbe.hpp"
@@ -115,6 +116,7 @@ namespace
   {
     Host host;
     MacScenePlatformController controller;
+    loka::testing::ScrollViewSeat viewport;
     Node *tree;
     explicit Fixture(const RailMetrics &metrics = RailMetrics())
         : controller(this->host.root, metrics),
@@ -273,7 +275,7 @@ void testMacClipBoxScrollMixes()
   {
     Fixture f;
     BoxNode *clip = box(180, 100);
-    ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+    ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(f.viewport.state()));
     if (inside)
     {
       f.tree = clip;
@@ -536,7 +538,7 @@ void testMacClipBoxUnresolvedWidthDoesNotGrowDocument()
   for (int clipped = 0; clipped != 2; ++clipped)
   {
     Fixture f;
-    ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+    ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(f.viewport.state()));
     LOKA_VERIFY(Access::registerLayoutHandler(f.controller, new UnresolvedOfferHandler));
     UnresolvedOffer *offer = new UnresolvedOffer;
     BoxNode *clip = box(0, 40, clipped != 0);

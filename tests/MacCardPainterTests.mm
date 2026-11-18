@@ -1,4 +1,5 @@
 #include "MacCardPainterTests.hpp"
+#include "support/ScrollViewSeat.hpp"
 #include "support/MacWindowSession.hpp"
 #include "support/MacWindowCapture.hpp"
 #include "MacCardPainter.hpp"
@@ -1220,7 +1221,8 @@ namespace
     [window orderFront:nil];
     {
       MacScenePlatformController outer(root, RailMetrics());
-      ScrollViewNode scroll((ScrollViewProps()));
+      loka::testing::ScrollViewSeat viewport;
+      ScrollViewNode scroll(ScrollViewProps(viewport.state()));
       NSView *host = [[LokaCardTestRoot alloc] initWithFrame:NSMakeRect(3, 5, 160, 130)];
       NSScrollView *nativeScroll = nil;
       if (scrolling)

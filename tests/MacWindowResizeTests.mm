@@ -1,4 +1,5 @@
 #include "MacWindowResizeTests.hpp"
+#include "support/ScrollViewSeat.hpp"
 #include "support/TestVerify.hpp"
 
 #include <AppKit/AppKit.h>
@@ -249,7 +250,8 @@ namespace
     LOKA_VERIFY(root != nil);
     {
       MacScenePlatformController controller(root, loka::macos::DefaultRailMetrics());
-      ScrollViewNode scroll((ScrollViewProps()));
+      loka::testing::ScrollViewSeat viewport;
+      ScrollViewNode scroll(ScrollViewProps(viewport.state()));
       scroll.addChild(new ButtonNode(ButtonProps()));
       controller.onChange(&scroll, NODE_DIRTY_NONE, false);
       controller.relayout(300, 140);
