@@ -93,6 +93,7 @@ if(WIN32)
   # EXCLUDE_FROM_ALL: mirrors LokaTestsMacOS — built explicitly by the
   # win32-tests build preset, not by Build All / generated IDE projects.
   add_executable(LokaTestsWin32 EXCLUDE_FROM_ALL
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/compile/pins/document_sdk_order.cpp
     ${LOKA_SHARED_TEST_SOURCES}
     ${LOKA_WIN32_TEST_COMMON_SOURCES}
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/platform/Win32String.cpp

@@ -26,7 +26,7 @@ SceneManager::~SceneManager()
     this->retiredScenes_.drain();
 }
 
-bool SceneManager::commitTransaction(loka::app::scene::Scene *, loka::app::scene::Scene *to)
+bool SceneManager::requestReplacement(loka::app::scene::Scene *to)
 {
   if (!this->window_ || !to || this->retiredScenes_.contains(to))
     return false;
@@ -93,7 +93,7 @@ bool SceneManager::applyPendingWork()
 void SceneManager::seedScene(loka::app::scene::Scene *scene)
 {
   assert(!this->currentScene_ && !this->desired_);
-  this->commitTransaction(0, scene);
+  this->requestReplacement(scene);
   this->applying_ = scene;
   this->installScene(scene);
   this->applying_ = 0;

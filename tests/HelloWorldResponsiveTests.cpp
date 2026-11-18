@@ -336,7 +336,7 @@ void testHelloWorldNarrowMountComposesColumnFirst()
   loka::app::testing::WindowTestAccess::storeNativeFrame(
       window, loka::core::Frame(50, 50, 399, 330));
   loka::core::Operation operation;
-  window.sceneManager()->commitTransaction(0, new loka::app::scene::Scene(root.take()));
+  window.sceneManager()->requestReplacement(new loka::app::scene::Scene(root.take()));
   operation.settle();
   admission.flush();
   LOKA_VERIFY(findMainPanels(*window.scene())->props.effectiveAxis() ==

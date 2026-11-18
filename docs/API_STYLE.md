@@ -46,6 +46,8 @@ cell in [`MainNode.hpp`](../example/MineSweeper/src/MainNode.hpp) is the canonic
 small example. `scene::Component(props)` obtains its node type from
 `Props::NodeType`; the call site must not repeat a second node type.
 
+Framework semantic vocabulary may wrap `scene::Component` in a named function; use `doc::Heading`, `doc::Paragraph`, and `doc::CodeBlock` with the `doc::` qualifier even under `using namespace loka::app;`.
+
 A Component's children materialize once per structural lifetime. Props may be
 reapplied to the resident class without rebuilding that child structure. Give
 the enclosing Section or seat a new identity when structure must be replaced;

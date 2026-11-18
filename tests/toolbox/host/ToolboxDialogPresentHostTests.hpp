@@ -204,7 +204,7 @@ static void ScenePin(bool replace)
   {
     loka::app::scene::Scene *replacement = new loka::app::scene::Scene(
         loka::app::scene::Boundary<DialogSceneRoot>(DialogSceneProps()));
-    LOKA_VERIFY(window.sceneManager()->commitTransaction(window.scene(), replacement));
+    LOKA_VERIFY(window.sceneManager()->requestReplacement(replacement));
   }
   else window.root()->shown.set(false);
   app.tick();

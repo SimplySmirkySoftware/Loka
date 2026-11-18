@@ -45,6 +45,7 @@
 #include "MacImageBlobTests.hpp"
 #include "MacImageViewTests.hpp"
 #include "MacTextEditorTests.hpp"
+#include "MacTextStoreTests.hpp"
 #include "MacInputDoorTests.hpp"
 #include "MacFocusTests.hpp"
 #endif
@@ -205,6 +206,7 @@
 // UTF-8 route, edge, and style-boundary pins are registered in ContractTestRegistry.inc.
 #include "AttributedStringTests.hpp"
 #include "AttributedTextTests.hpp"
+#include "DocumentVocabularyTests.hpp"
 #include "TextSpanWin32Tests.hpp"
 #include "RectSurfaceSeatExtentTests.hpp"
 #include "NullPlatformContractTests.hpp"

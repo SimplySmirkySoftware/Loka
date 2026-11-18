@@ -385,7 +385,7 @@ namespace
     LifecycleFactTestAccess::MarkSubtreeRetired(linkRoot);
     LOKA_VERIFY(paragraph->lifecycleFact() == NODE_FACT_RETIRED);
     LOKA_VERIFY(!NullInputDoor::activateLink(*input, 0));
-    LOKA_VERIFY(f.window.sceneManager()->commitTransaction(0, new Scene(Boundary<LinkRoot>())));
+    LOKA_VERIFY(f.window.sceneManager()->requestReplacement(new Scene(Boundary<LinkRoot>())));
   }
 
 } // namespace

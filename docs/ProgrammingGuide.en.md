@@ -2362,3 +2362,74 @@ Avoid black boxes.
 
 If application code reads naturally while ownership and lifecycle remain
 inspectable, it is moving in the right direction for Loka.
+
+## Documents
+
+Include `app/doc/Heading.hpp`, `Paragraph.hpp`, `CodeBlock.hpp`, and `Inline.hpp`
+from the same directory. Document blocks keep their meaning in the scene tree
+and display through the existing text and Card nodes:
+
+```cpp
+using namespace loka::app;
+Column()
+  << doc::Heading(1, "Loka")
+  << doc::Paragraph(Styled("Read ", TextStyle())
+       + doc::Link("the guide", "https://example.com/guide")
+       + Styled(" or try ", TextStyle()) + doc::Code("Column()"))
+  << doc::CodeBlock("Column() << Text(\"hello\")");
+```
+
+Inline content is `AttributedString`. Use `Styled` for bold, italic, and other
+styles; `doc::Link` contributes a linked segment and `doc::Code` contributes
+monospace text. The latter is a visual convention, indistinguishable from
+`Styled(text, Monospace)`, and promises no lossless source round trip.
+
+| Heading level | Default size | Default weight |
+|---|---|---|
+| 1 | 24 | Bold |
+| 2 | 18 | Bold |
+| 3 | 14 | Bold |
+| 4–6 | 12 | Bold |
+
+Levels outside 1–6 assert in debug builds and clamp in release builds. A segment's
+explicit style axes override heading defaults. Headings and paragraphs wrap at
+words. Code blocks preserve explicit line breaks, do not automatically wrap,
+and clip horizontally.
+
+To change a document, update its block props in the owner. For example, editing
+a paragraph in a LazyView's list updates the text on screen. `For` constructs
+its items initially and does not apply later edits. Document blocks take values
+and do not accept live `State<AttributedString>*` input.
+
+Both Heading and Paragraph accept `.activatedLink(box)`. The box belongs to the
+application. A Boundary can route its result through a lifecycle-owned Flow:
+
+```cpp
+this->open_.set(Flow() | Match<LinkTarget, bool>(0)
+    .otherwise(&OpenWebLink, this->props.opener))
+    .bindTrigger(this->activated_.state())
+    .withTracker(this->tracker());
+c.declare(doc::Paragraph(doc::Link("Visit the guide", "https://example.com/guide"))
+    .activatedLink(this->activated_));
+```
+
+Here `activated_` is a declared `NodeState<LinkTarget>`, `open_` is a
+`FlowSlot<FlowChain<LinkTarget, bool> >`, and `opener` borrows the config-owned
+URL opener registered with the app. `OpenWebLink` posts a request; its boolean
+result reports queuing, not successful OS opening. The complete Boundary is
+[compiled as a C++98 sample](../tests/compile/pins/accepts_document.cpp).
+
+On Web, a code block shows its text at the framed position. The frame and
+shadow are not drawn yet. Web links display link styling but do not activate.
+Heading height in aligned Row/Grid layouts has the same limitations as
+AttributedText.
+
+When a block's content changes, the block always holds the new value. If that
+value cannot be displayed (the text is invalid, or memory for styling it ran
+out), the block shows nothing instead of the old text, and the next successful
+update shows it again; the old pixels are not necessarily erased at once. One
+exception: when the value is fine but its text cannot be read for the moment,
+native rails show nothing, while Web may keep showing the previous text until
+the read succeeds. A block whose children could not be created under memory
+pressure is empty; updating its content alone does not create them, but the
+next time its owner attaches it they are created from the latest content.
