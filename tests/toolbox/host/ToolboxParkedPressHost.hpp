@@ -1,3 +1,4 @@
+#include "support/ScrollViewSeat.hpp"
 #include "support/LifecycleFactTestAccess.hpp"
 #include "ToolboxScrollViewDecisions.hpp"
 
@@ -28,6 +29,7 @@ namespace parked_press
     MutableState<String> text;
     MutableState<int> value;
     NodeState<int> valueSeat;
+    loka::testing::ScrollViewSeat scrollSeat;
     EmitterState action, beneathAction;
     unsigned actions, beneathActions;
     ToolboxWindow window;
@@ -175,7 +177,7 @@ namespace parked_press
       case VIEWPORT_VERTICAL:
       case VIEWPORT_HORIZONTAL:
       {
-        ScrollViewNode *node = new ScrollViewNode(ScrollViewProps());
+        ScrollViewNode *node = new ScrollViewNode(ScrollViewProps(this->scrollSeat.state()));
         this->attach(node, 0);
         this->controller.ensureViewportScrollBarControl(
             this->rect, node, 300, 84, 0, ToolboxScrollViewMetrics(300, 0), true);

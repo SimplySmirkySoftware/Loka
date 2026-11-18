@@ -1,5 +1,6 @@
 #ifndef LOKA_TEST_TOOLBOX_PAINT_REFUSAL_PINS_HPP
 #define LOKA_TEST_TOOLBOX_PAINT_REFUSAL_PINS_HPP
+#include "support/ScrollViewSeat.hpp"
 #include "context/ToolboxClipBoxContext.hpp"
 #include "ToolboxScrollViewDecisions.hpp"
 #include "ToolboxPaintResultText.hpp"
@@ -52,7 +53,8 @@ namespace
     }
     else
     {
-      ScrollViewNode node((ScrollViewProps()));
+      loka::testing::ScrollViewSeat scrollSeat;
+      ScrollViewNode node(ScrollViewProps(scrollSeat.state()));
       if (std::strcmp(mode, "RefusalScrollMissing") != 0)
       {
         controller.ensureViewportScrollBarControl(
@@ -176,7 +178,8 @@ namespace
     ToolboxScenePlatformController c(&window);
     const Rect rect = {10, 10, 90, 110};
     MutableState<bool> enabled(true);
-    ScrollViewNode node((ScrollViewProps()));
+    loka::testing::ScrollViewSeat scrollSeat;
+    ScrollViewNode node(ScrollViewProps(scrollSeat.state()));
     const bool horizontal = std::strstr(mode, "Horizontal") != 0;
     const bool acquisition = std::strstr(mode, "Acquire") != 0;
     RgnHandle saved = c.paintSuppressClipRgn_;
@@ -379,7 +382,8 @@ namespace
     }
     else
     {
-      ScrollViewNode node((ScrollViewProps()));
+      loka::testing::ScrollViewSeat scrollSeat;
+      ScrollViewNode node(ScrollViewProps(scrollSeat.state()));
       const ToolboxViewportRows rows =
           c.ensureViewportScrollBarControl(rect, &node, 200, 80, 0, ToolboxScrollViewMetrics(100, 0), true);
       c.observation_.reset();
