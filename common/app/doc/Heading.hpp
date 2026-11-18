@@ -60,14 +60,14 @@ namespace loka
           const HeadingProps &other = static_cast<const HeadingProps &>(rhs);
           if (this->level_ != other.level_)
             return this->level_ < other.level_;
-          const int order = detail::CompareContent(this->content, other.content);
+          const int order = this->content.compareSegmentValues(other.content);
           if (order)
             return order < 0;
           return std::less<core::State<LinkTarget> *>()(this->activatedLink_.state(), other.activatedLink_.state());
         }
       };
       /** Shared leaf lowering for composition and retained application.
-          Cost: once per materialization attempt or props apply; folds this value's segments.
+          Cost: once per materialization attempt or apply with a destination; folds this value's segments.
           Refusal remains an invalid child value; no eager body read or retry. */
       inline AttributedTextDefinitionWithAttr Lower(const HeadingProps &props)
       {
@@ -106,8 +106,8 @@ namespace loka
       {
         static bool apply(doc::HeadingNode *node, const doc::HeadingProps &props)
         {
-          const AttributedTextDefinitionWithAttr lowered = doc::Lower(props);
-          doc::detail::ApplyLeaf(node->childrenHead(), lowered);
+          if (AttributedTextNode *leaf = doc::detail::ProjectionLeaf(node->childrenHead()))
+            doc::Lower(props).applyPropsToNode(leaf);
           node->props = props;
           return true;
         }

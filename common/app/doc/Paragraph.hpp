@@ -37,14 +37,14 @@ namespace loka
           if (rhs.propsTypeId() != this->propsTypeId())
             return false;
           const ParagraphProps &other = static_cast<const ParagraphProps &>(rhs);
-          const int order = detail::CompareContent(this->content, other.content);
+          const int order = this->content.compareSegmentValues(other.content);
           if (order)
             return order < 0;
           return std::less<core::State<LinkTarget> *>()(this->activatedLink_.state(), other.activatedLink_.state());
         }
       };
       /** Shared leaf lowering for composition and retained application.
-          Cost: once per materialization attempt or props apply; copies shared content.
+          Cost: once per materialization attempt or apply with a destination; copies shared content.
           Refusal remains an invalid child value; no eager body read or retry. */
       inline AttributedTextDefinitionWithAttr Lower(const ParagraphProps &props)
       {
@@ -76,8 +76,8 @@ namespace loka
       {
         static bool apply(doc::ParagraphNode *node, const doc::ParagraphProps &props)
         {
-          const AttributedTextDefinitionWithAttr lowered = doc::Lower(props);
-          doc::detail::ApplyLeaf(node->childrenHead(), lowered);
+          if (AttributedTextNode *leaf = doc::detail::ProjectionLeaf(node->childrenHead()))
+            doc::Lower(props).applyPropsToNode(leaf);
           node->props = props;
           return true;
         }

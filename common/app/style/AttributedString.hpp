@@ -61,6 +61,11 @@ namespace loka
           readability, normalization or stable run boundaries; not a substitute
           for operator==, which is segmentation-independent. */
       bool hasSameSegmentValues(const AttributedString &other) const;
+      /** Orders invalid values first, then compares corresponding segment bodies,
+          styles and links, including empty segments, and finally the segment count.
+          Cost: O(1) for shared storage. Otherwise visits only the compared values'
+          segments and text up to the first difference. */
+      int compareSegmentValues(const AttributedString &other) const;
       bool equals(const AttributedString &other) const;
       bool operator==(const AttributedString &other) const;
       bool operator!=(const AttributedString &other) const;

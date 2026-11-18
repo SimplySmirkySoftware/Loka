@@ -16,6 +16,7 @@
 #include "core/LokaAlloc.hpp"
 #include "app/layout/GridLayout.hpp"
 #include <climits>
+#include <cstdio>
 #if defined(__linux__) && !defined(__SANITIZE_ADDRESS__) && !defined(NDEBUG)
 #include <sys/wait.h>
 #include <unistd.h>
@@ -310,6 +311,9 @@ void testDocumentVocabularyOrdering()
 
 void testDocumentVocabularyLevels()
 {
+#if !defined(NDEBUG) && (!defined(__linux__) || defined(__SANITIZE_ADDRESS__))
+  std::puts("[skip] Heading level assertion checks require a Linux debug build without AddressSanitizer.");
+#else
   const int levels[] = {0, -1, 7, INT_MIN, INT_MAX};
   for (int i = 0; i < 5; ++i)
   {
@@ -317,7 +321,7 @@ void testDocumentVocabularyLevels()
     doc::HeadingProps p(levels[i], "x");
     LOKA_VERIFY(p.level() == (levels[i] < 1 ? 1 : 6));
     LOKA_VERIFY(doc::Lower(p).props.text_->get().valid());
-#elif defined(__linux__) && !defined(__SANITIZE_ADDRESS__)
+#else
     pid_t pid = fork();
     LOKA_VERIFY(pid >= 0);
     if (pid == 0)
@@ -329,10 +333,9 @@ void testDocumentVocabularyLevels()
     int status = 0;
     LOKA_VERIFY(waitpid(pid, &status, 0) == pid);
     LOKA_VERIFY(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
-#else
-    (void)levels;
 #endif
   }
+#endif
 }
 
 namespace
@@ -710,11 +713,33 @@ namespace
                 << NodeDefinition<doc::HeadingProps, RefusedHeading>(doc::HeadingProps(1, "old")));
     }
   };
+
+  template <class D> void childlessApply(const D &replacement)
+  {
+    typedef typename D::NodeType NodeType;
+    typedef typename D::PropsType Props;
+    const Props initial;
+    NodeType node(initial);
+    node.setPropsTypeId(Props::staticTypeId());
+    const int attempts = loka::core::testing::lokaAllocRawAttempts();
+    LOKA_VERIFY(replacement.applyPropsToNode(&node));
+    LOKA_VERIFY(loka::core::testing::lokaAllocRawAttempts() == attempts);
+    LOKA_VERIFY(!node.childrenHead());
+    LOKA_VERIFY(!(node.props < replacement.props) && !(replacement.props < node.props));
+  }
 #endif
 } // namespace
 void testDocumentVocabularyChildStates()
 {
 #ifdef TEST_BUILD
+  loka::core::testing::failLokaAllocRaw("AttributedString", "Segments", 0);
+  {
+    const AttributedString content = Styled("new", Bold) + Styled(" content", Italic);
+    childlessApply(doc::Heading(2, content));
+    childlessApply(doc::Paragraph(content));
+    childlessApply(doc::CodeBlock("new code"));
+  }
+  loka::core::testing::allowLokaAllocRaw();
   loka::core::testing::failLokaAllocRaw("NodeDefinition", "Node", 0);
   {
     // Materialization refusal leaves an attached semantic component without children.

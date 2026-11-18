@@ -167,6 +167,32 @@ void testAttributedStringOrdering()
     }
   }
   LOKA_VERIFY((Styled("a", Bold) + Styled("b", Bold)).compare(Styled("ac", Bold)) < 0);
+
+  const LinkTarget target(loka::core::String("target"));
+  const AttributedString prefix = Styled("a", Bold);
+  const AttributedString split = prefix + Styled("b", Bold);
+  const AttributedString shared = split;
+  LOKA_VERIFY(shared.compareSegmentValues(split) == 0);
+  LOKA_VERIFY(split.compareSegmentValues(Styled("a", Bold) + Styled("b", Bold)) == 0);
+  // Each earlier value precedes every later value: body, style, target,
+  // and a longer list with an otherwise identical prefix each discriminate.
+  const AttributedString ordered[] = {AttributedString(),
+                                      Styled("a", TextStyle()),
+                                      prefix,
+                                      prefix + Styled("", Bold),
+                                      split,
+                                      Linked("a", Bold, target),
+                                      Styled("ab", Bold)};
+  const std::size_t count = sizeof(ordered) / sizeof(ordered[0]);
+  for (std::size_t i = 0; i < count; ++i)
+  {
+    LOKA_VERIFY(ordered[i].compareSegmentValues(ordered[i]) == 0);
+    for (std::size_t j = i + 1; j < count; ++j)
+    {
+      LOKA_VERIFY(ordered[i].compareSegmentValues(ordered[j]) < 0);
+      LOKA_VERIFY(ordered[j].compareSegmentValues(ordered[i]) > 0);
+    }
+  }
 }
 
 void testAttributedStringStyleDirections()
@@ -229,6 +255,10 @@ void testAttributedStringEmptyAndInvalid()
   LOKA_VERIFY(allocatedEmpty.hasSameSegmentValues(empty));
   LOKA_VERIFY(empty.hasSameSegmentValues(allocatedEmpty));
   LOKA_VERIFY(invalid != empty);
+  LOKA_VERIFY(invalid.compareSegmentValues(invalid) == 0);
+  LOKA_VERIFY(invalid.compareSegmentValues(empty) < 0);
+  LOKA_VERIFY(empty.compareSegmentValues(invalid) > 0);
+  LOKA_VERIFY(empty.compareSegmentValues(allocatedEmpty) == 0);
   LOKA_VERIFY(invalid.compare(empty) < 0);
   LOKA_VERIFY(empty.compare(invalid) > 0);
   LOKA_VERIFY(!(invalid + empty).valid());
@@ -317,18 +347,23 @@ void testAttributedStringRefusedBuffersAndSharedFastPath()
       loka::core::String::FromPlatform(loka::core::Managed<loka::platform::String>::Wrap(new RefusedString(&calls)));
   const AttributedString left = Styled(refused, Bold);
   const AttributedString shared = left;
+  LOKA_VERIFY(left.compareSegmentValues(shared) == 0);
   LOKA_VERIFY(left.hasSameSegmentValues(shared));
   LOKA_VERIFY(calls == 0);
   LOKA_VERIFY(left == shared);
   LOKA_VERIFY(left.compare(shared) == 0);
   LOKA_VERIFY(calls == 0);
   const AttributedString rebuilt = Styled(refused, Bold);
+  LOKA_VERIFY(left.compareSegmentValues(rebuilt) == 0 && calls == 0);
   LOKA_VERIFY(left.hasSameSegmentValues(rebuilt));
   LOKA_VERIFY(left != rebuilt);
   LOKA_VERIFY(calls > 0);
   const loka::core::String otherRefused =
       loka::core::String::FromPlatform(loka::core::Managed<loka::platform::String>::Wrap(new RefusedString(&calls)));
-  LOKA_VERIFY(!left.hasSameSegmentValues(Styled(otherRefused, Bold)));
+  const AttributedString distinct = Styled(otherRefused, Bold);
+  const int bodyOrder = left.compareSegmentValues(distinct);
+  LOKA_VERIFY(bodyOrder != 0 && bodyOrder == -distinct.compareSegmentValues(left));
+  LOKA_VERIFY(!left.hasSameSegmentValues(distinct));
   LOKA_VERIFY(left.compare(rebuilt) == -rebuilt.compare(left));
   LOKA_VERIFY(!left.empty());
   LOKA_VERIFY(left != AttributedString());

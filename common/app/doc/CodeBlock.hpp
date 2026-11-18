@@ -1,6 +1,7 @@
 #ifndef LOKA_APP_DOC_CODEBLOCK_HPP
 #define LOKA_APP_DOC_CODEBLOCK_HPP
 #include "app/doc/Lowering.hpp"
+#include "app/style/AttributedTextRead.hpp"
 #include "app/scene/node/ComponentNode.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "core/util/OwnedDef.hpp"
@@ -42,7 +43,7 @@ namespace loka
         }
       };
       /** Shared leaf lowering for composition and retained application.
-          Cost: once per materialization attempt or props apply; allocates one segment.
+          Cost: once per materialization attempt or apply with a destination; allocates one segment.
           Refusal remains an invalid child value; no eager body read or retry. */
       inline AttributedTextDefinitionWithAttr Lower(const CodeBlockProps &props)
       {
@@ -82,7 +83,6 @@ namespace loka
       {
         static bool apply(doc::CodeBlockNode *node, const doc::CodeBlockProps &props)
         {
-          const AttributedTextDefinitionWithAttr lowered = doc::Lower(props);
           scene::Node *child = node->childrenHead();
           if (child)
           {
@@ -92,7 +92,8 @@ namespace loka
             {
               Node *content = static_cast<CardNode *>(child)->contentHead();
               assert(content && "CodeBlock requires Card content");
-              doc::detail::ApplyLeaf(content, lowered);
+              if (AttributedTextNode *leaf = doc::detail::ProjectionLeaf(content))
+                doc::Lower(props).applyPropsToNode(leaf);
             }
           }
           node->props = props;
