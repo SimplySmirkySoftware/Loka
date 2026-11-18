@@ -25,6 +25,10 @@ namespace loka
         {
           return row.phase_ == scene::TextStoreRow::RETIRED;
         }
+        static scene::TextStoreLedger &ledger(scene::TextStoreRow &row)
+        {
+          return row.owner_;
+        }
         static unsigned retiredCount(const scene::TextStoreRow &row)
         {
           unsigned count = 0;

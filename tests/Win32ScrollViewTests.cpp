@@ -9,6 +9,7 @@
 
 #include "Win32SceneLayout.hpp"
 #include "testing/Win32ScenePlatformTestAccess.hpp"
+#include "support/ScrollViewSeat.hpp"
 #include "support/TestVerify.hpp"
 
 #include <cassert>
@@ -1462,7 +1463,9 @@ void testWin32ScrollViewInsetBarRefusalAndDpi()
   {
     Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
     RegisterWin32BuiltInSupport(controller);
-    ScrollViewNode scroll(ScrollViewProps().contentInsets(ScrollViewContentInsets::of(SHRT_MAX, 1)));
+    loka::testing::ScrollViewSeat viewportSeat(-SHRT_MAX);
+    ScrollViewNode scroll(
+        ScrollViewProps(viewportSeat.state()).contentInsets(ScrollViewContentInsets::of(SHRT_MAX, 1)));
     scroll.addChild(new ImageViewNode(ImageViewProps().size(100, 400)));
     establishLayout(controller, &scroll, 300, 140);
     HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
@@ -1482,7 +1485,8 @@ void testWin32ScrollViewSubordinateRetirement()
     LOKA_VERIFY(root);
     {
       Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
-      ScrollViewNode scroll((ScrollViewProps()));
+      loka::testing::ScrollViewSeat viewportSeat;
+      ScrollViewNode scroll(ScrollViewProps(viewportSeat.state()));
       if (skip < 3)
         loka::win32::testing::failNativeChildWindowCreations(1, skip);
       Win32ScrollViewContext *context = new Win32ScrollViewContext(&controller, root, 0, 0, 200, 100, &scroll);
@@ -1527,7 +1531,8 @@ void testWin32ScrollViewFrameTabAndArrowFocus()
   {
     Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
     RegisterWin32BuiltInSupport(controller);
-    ScrollViewNode scroll((ScrollViewProps()));
+    loka::testing::ScrollViewSeat viewportSeat;
+    ScrollViewNode scroll(ScrollViewProps(viewportSeat.state()));
     addButtonColumn(scroll, 8);
     establishLayout(controller, &scroll, 300, 140);
     HWND frame = FindWindowExW(root, NULL, L"LOKA_SCROLL_FRAME", NULL);
@@ -1567,7 +1572,8 @@ void testWin32ScrollViewInsetBarTinyAndFractionalSeat()
   ShowWindow(root, SW_SHOWNOACTIVATE);
   {
     Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(144, RailMetrics()));
-    ScrollViewNode node((ScrollViewProps()));
+    loka::testing::ScrollViewSeat viewportSeat;
+    ScrollViewNode node(ScrollViewProps(viewportSeat.state()));
     Win32ScrollViewContext context(&controller, root, 1, 1, 101, 101, &node);
     LOKA_VERIFY(context.isValid());
     HWND viewport = FindWindowExW(context.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL);

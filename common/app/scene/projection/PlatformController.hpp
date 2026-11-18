@@ -116,13 +116,51 @@ namespace loka
        */
       class IPlatformController
       {
+      protected:
+        /** A rail declares its binding after its ledger. It survives destroy() and
+            remount, unbinding only at real destruction, before the ledger dies. */
+        class TextStoreAdmissionBinding
+        {
+        public:
+          TextStoreAdmissionBinding(IPlatformController &controller, TextStoreLedger &ledger)
+              : controller_(controller)
+          {
+            assert(!controller.textStoreAdmission_);
+            controller.textStoreAdmission_ = &ledger;
+          }
+          ~TextStoreAdmissionBinding()
+          {
+            this->controller_.textStoreAdmission_ = 0;
+          }
+
+        private:
+          TextStoreAdmissionBinding(const TextStoreAdmissionBinding &);
+          TextStoreAdmissionBinding &operator=(const TextStoreAdmissionBinding &);
+          IPlatformController &controller_;
+        };
+
+      private:
+        friend class TextStoreAdmissionBinding;
+        const TextStoreLedger *textStoreAdmission_;
         friend class BorrowScope;
         BorrowPhase borrowPhase_;
         IPlatformController(const IPlatformController &);
         IPlatformController &operator=(const IPlatformController &);
       public:
-        IPlatformController() {}
-        virtual ~IPlatformController() { assert(!this->borrowPhase_.open()); }
+        IPlatformController()
+            : textStoreAdmission_(0)
+        {
+        }
+        virtual ~IPlatformController()
+        {
+          assert(!this->borrowPhase_.open());
+          assert(!this->textStoreAdmission_);
+        }
+        /** O(1) per admission probe, no rows walked. An unbound rail has no store work. */
+        bool hasRetiredTextStores() const
+        {
+          return this->textStoreAdmission_ && this->textStoreAdmission_->hasRetired();
+        }
         const BorrowPhase &borrowPhase() const { return this->borrowPhase_; }
 
         /** Refusal-only: O(1) input restoration and dispatch, no rows walked

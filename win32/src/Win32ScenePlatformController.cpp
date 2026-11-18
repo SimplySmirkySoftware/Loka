@@ -431,11 +431,11 @@ loka::app::RailMetrics loka::win32::DefaultRailMetrics()
   return app::RailMetrics(app::Ratio(1, 1), app::Ratio(5, 4));
 }
 
-Win32ScenePlatformController::Win32ScenePlatformController(
-    HWND rootHwnd,
-    const loka::win32::Win32DisplayScale &displayScale,
-    PlatformContext *platformContext)
-    : platformContext_(platformContext),
+Win32ScenePlatformController::Win32ScenePlatformController(HWND rootHwnd,
+                                                           const loka::win32::Win32DisplayScale &displayScale,
+                                                           PlatformContext *platformContext)
+    : textStoreBinding_(*this, this->textParking_.ledger()),
+      platformContext_(platformContext),
       rootHwnd_(rootHwnd),
       activeNativeLayoutPass_(0),
       rectSurfaceExtentLedger_(),

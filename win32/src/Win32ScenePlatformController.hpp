@@ -275,6 +275,8 @@ public:
 
 private:
   Win32TextParking textParking_;
+  // A rail declares one binding after its ledger.
+  TextStoreAdmissionBinding textStoreBinding_;
   /** Display-font text extent plus title insets, returned in logical layout units. */
   bool measurePushButtonNaturalWidth(const loka::core::String &label, short &width) const;
 

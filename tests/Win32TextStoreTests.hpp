@@ -8,4 +8,8 @@ void testWin32TextStoreDpiQualification();
 void testWin32TextStoreWindowTeardown();
 void testWin32TextStoreControllerDestructor();
 void testWin32TextStoreConformance();
+void testWin32TextStoreReplacementAdmission();
+void testWin32TextStoreRefusedBirthAdmission();
+void testWin32TextStoreBusyAdmission();
+void testWin32TextStoreRemountAdmission();
 #endif

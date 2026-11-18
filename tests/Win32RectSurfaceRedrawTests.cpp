@@ -22,6 +22,7 @@
 #include "Win32BuiltInSupport.hpp"
 #include "support/WindowAdmissionTestApp.hpp"
 #include "Win32RectSurfaceRedrawTests.hpp"
+#include "support/ScrollViewSeat.hpp"
 #include "support/TestVerify.hpp"
 #include <cstdio>
 #include <vector>
@@ -175,7 +176,8 @@ static void exercisePaintOnlyChangeUnderScrollView(bool refused,
   if (clipped)
     wrapper.clipChildren();
   wrapper << content;
-  ScrollView declaration;
+  loka::testing::ScrollViewSeat viewportSeat;
+  ScrollView declaration(viewportSeat.state());
   if (clipped)
     declaration << wrapper;
   else
@@ -969,7 +971,8 @@ void testWin32ScrollViewAttributedTextShrinkRestoresGround()
   using namespace loka::app::scene;
   TransparentPaintWindow host;
   Win32ScenePlatformController controller(host.window.hwnd(), loka::win32::Win32DisplayScale(96, RailMetrics()));
-  ScrollViewNode node((ScrollViewProps()));
+  loka::testing::ScrollViewSeat viewportSeat;
+  ScrollViewNode node(ScrollViewProps(viewportSeat.state()));
   Win32ScrollViewContext viewport(&controller, host.window.hwnd(), 10, 10, 280, 120, &node);
   LOKA_VERIFY(viewport.isValid());
   exerciseAttributedTextShrink(controller, FindWindowExW(viewport.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL));
@@ -983,7 +986,8 @@ void testWin32ScrollViewImageRemovalRestoresGround()
   using namespace loka::app::scene;
   TransparentPaintWindow host;
   Win32ScenePlatformController controller(host.window.hwnd(), loka::win32::Win32DisplayScale(96, RailMetrics()));
-  ScrollViewNode node((ScrollViewProps()));
+  loka::testing::ScrollViewSeat viewportSeat;
+  ScrollViewNode node(ScrollViewProps(viewportSeat.state()));
   Win32ScrollViewContext viewport(&controller, host.window.hwnd(), 10, 10, 280, 120, &node);
   LOKA_VERIFY(viewport.isValid());
   exerciseImageTransparency(controller, FindWindowExW(viewport.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL), true);
@@ -1047,7 +1051,8 @@ void testWin32WindowAndViewportGroundRoles()
   TransparentPaintWindow host;
   HWND root = host.window.hwnd();
   Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
-  ScrollViewNode scrollNode((ScrollViewProps()));
+  loka::testing::ScrollViewSeat viewportSeat;
+  ScrollViewNode scrollNode(ScrollViewProps(viewportSeat.state()));
   Win32ScrollViewContext viewport(&controller, root, 10, 10, 180, 120, &scrollNode);
   LOKA_VERIFY(viewport.isValid());
   TextNode rootText((TextProps("root")));
@@ -1333,7 +1338,8 @@ void testWin32StaticTextInks()
   Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
   ShowWindow(root, SW_SHOWNOACTIVATE);
   exerciseStaticInk(controller, root, root);
-  ScrollViewNode scrollNode((ScrollViewProps()));
+  loka::testing::ScrollViewSeat viewportSeat;
+  ScrollViewNode scrollNode(ScrollViewProps(viewportSeat.state()));
   Win32ScrollViewContext viewport(&controller, root, 10, 70, 180, 120, &scrollNode);
   LOKA_VERIFY(viewport.isValid());
   exerciseStaticInk(controller, root, FindWindowExW(viewport.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL));
@@ -1509,7 +1515,8 @@ static void checkCardChildOnlyAndViewportPhase()
   TransparentPaintWindow host;
   HWND root = host.window.hwnd();
   Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
-  ScrollViewNode scrollNode((ScrollViewProps()));
+  loka::testing::ScrollViewSeat viewportSeat;
+  ScrollViewNode scrollNode(ScrollViewProps(viewportSeat.state()));
   Win32ScrollViewContext viewport(&controller, root, 13, 11, 180, 100, &scrollNode);
   LOKA_VERIFY(viewport.isValid());
   CardBandNode band(CardBandProps(CARD_BAND_BOTTOM, CardStyle(CARD_SHADOW_WIDE, CARD_SHADOW_ALPHA)));

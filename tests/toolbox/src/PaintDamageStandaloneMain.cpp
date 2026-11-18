@@ -557,6 +557,7 @@ namespace
     explicit CompositedDamageNode(const CompositedDamageProps &props)
         : StdCompositionBoundaryNodeBase<CompositedDamageProps>(props)
     {
+      this->state(this->viewport_, loka::core::Frame(0, 0, 0, 0));
       RectSurfaceModel model;
       model.rectCount = 1;
       model.rects[0] = RectSprite(4, 4, 12, 12);
@@ -565,9 +566,10 @@ namespace
     virtual void composeNode(NodeComposition &composition)
     {
       composition.declare(Box().size(180, 110)
-                          << (ScrollView() << Text("Baseline").TEST_ID("PaintDamage.Baseline")
-                                           << RectSurface(this->model_.state()).size(150, 70)
-                                           << AttributedText(Styled("Replay membership", loka::app::TextStyle()))));
+                          << (ScrollView(this->viewport_)
+                              << Text("Baseline").TEST_ID("PaintDamage.Baseline")
+                              << RectSurface(this->model_.state()).size(150, 70)
+                              << AttributedText(Styled("Replay membership", loka::app::TextStyle()))));
     }
     void advance()
     {
@@ -577,6 +579,7 @@ namespace
       this->model_.set(model);
     }
   private:
+    NodeState<loka::core::Frame> viewport_;
     NodeState<RectSurfaceModel> model_;
   };
 
@@ -606,6 +609,7 @@ namespace
     explicit EditDamageNode(const EditDamageProps &props)
         : StdCompositionBoundaryNodeBase<EditDamageProps>(props)
     {
+      this->state(this->viewport_, loka::core::Frame(0, 0, 0, 0));
       this->state(this->text_, loka::core::String::Literal("Clipped edit"));
     }
     virtual void composeNode(NodeComposition &composition)
@@ -613,13 +617,14 @@ namespace
       // The spacer plus inter-seat gap is 48: the 62px viewport leaves
       // 14 px of the 20px EditText chrome visible and clips 6 px.
       composition.declare(
-          Column() << (Box().size(180, 62)
-                       << (ScrollView() << (Column() << Box().size(150, 48 - kRootGap)
-                                                     << EditText(this->text_).TEST_ID("PaintDamage.Edit"))))
+          Column() << (Box().size(180, 62) << (ScrollView(this->viewport_)
+                                               << (Column() << Box().size(150, 48 - kRootGap)
+                                                            << EditText(this->text_).TEST_ID("PaintDamage.Edit"))))
                    << (ClipBox().size(40, 24)
                        << (Box().width(120) << EditText(this->text_).TEST_ID("PaintDamage.ClipEdit"))));
     }
   private:
+    NodeState<loka::core::Frame> viewport_;
     NodeState<loka::core::String> text_;
   };
 
@@ -634,6 +639,7 @@ namespace
     explicit EditExactNode(const EditExactProps &props)
         : StdCompositionBoundaryNodeBase<EditExactProps>(props)
     {
+      this->state(this->viewport_, loka::core::Frame(0, 0, 0, 0));
       this->state(this->text_, loka::core::String::Literal(""));
       RectSurfaceModel model;
       model.rectCount = 1;
@@ -643,12 +649,11 @@ namespace
     virtual void composeNode(NodeComposition &composition)
     {
       composition.declare(Box().size(180, 140)
-                          << (ScrollView()
+                          << (ScrollView(this->viewport_)
                               << (Column()
                                   << EditText(this->text_).TEST_ID("PaintDamage.Edit")
                                   << Text("Sibling ink").TEST_ID("EditExact.Text")
-                                  << RectSurface(this->model_.state()).size(150, 40)
-                                      .TEST_ID("EditExact.Surface"))));
+                                  << RectSurface(this->model_.state()).size(150, 40).TEST_ID("EditExact.Surface"))));
     }
     void advance()
     {
@@ -656,6 +661,7 @@ namespace
       this->text_.set(loka::core::String::Literal("HHHH"));
     }
   private:
+    NodeState<loka::core::Frame> viewport_;
     NodeState<loka::core::String> text_;
     NodeState<RectSurfaceModel> model_;
   };
@@ -1227,6 +1233,7 @@ namespace
     explicit PopupExactNode(const PopupExactProps &props)
         : StdCompositionBoundaryNodeBase<PopupExactProps>(props)
     {
+      this->state(this->viewport_, loka::core::Frame(0, 0, 0, 0));
       this->items_.push_back(loka::core::String::Literal(""));
       this->items_.push_back(loka::core::String::Literal("HHHH"));
       this->state(this->selection_, 0);
@@ -1239,15 +1246,13 @@ namespace
     }
     virtual void composeNode(NodeComposition &composition)
     {
-      composition.declare(Box().size(180, 140)
-                          << (ScrollView()
-                              << (Column()
-                                  << (Show(*this->popupShown_.state())
-                                      << PopupMenu(this->items_).selectedIndex(this->selection_)
-                                          .TEST_ID("PopupExact.Popup"))
-                                  << Text(this->text_.state())
-                                  << RectSurface(this->model_.state()).size(150, 40)
-                                      .TEST_ID("PopupExact.Surface"))));
+      composition.declare(
+          Box().size(180, 140)
+          << (ScrollView(this->viewport_)
+              << (Column() << (Show(*this->popupShown_.state())
+                               << PopupMenu(this->items_).selectedIndex(this->selection_).TEST_ID("PopupExact.Popup"))
+                           << Text(this->text_.state())
+                           << RectSurface(this->model_.state()).size(150, 40).TEST_ID("PopupExact.Surface"))));
     }
     void writeSibling()
     {
@@ -1265,6 +1270,7 @@ namespace
       this->selection_.set(1);
     }
   private:
+    NodeState<loka::core::Frame> viewport_;
     loka::Vector<loka::core::String> items_;
     NodeState<int> selection_;
     NodeState<bool> popupShown_;
@@ -1515,6 +1521,7 @@ namespace
     explicit SurfaceBoundsNode(const SurfaceBoundsProps &props)
         : StdCompositionBoundaryNodeBase<SurfaceBoundsProps>(props)
     {
+      this->state(this->viewport_, loka::core::Frame(0, 0, 0, 0));
       RectSurfaceModel model;
       model.rectCount = 1;
       model.rects[0] = RectSprite(52, 32, 16, 16);
@@ -1523,15 +1530,14 @@ namespace
     virtual void composeNode(NodeComposition &composition)
     {
       // Keep six pixels of Text inside the viewport after adding its gap.
-      composition.declare(Column()
-                          << (Box().size(180, 40)
-                              << RectSurface(this->model_.state()).size(60, 40))
-                          << (Box().size(180, 54)
-                              << (ScrollView()
-                                  << (Column() << Box().size(150, 48 - kRootGap)
-                                      << Text("HHHH").TEST_ID("PaintDamage.ClippedText")))));
+      composition.declare(
+          Column() << (Box().size(180, 40) << RectSurface(this->model_.state()).size(60, 40))
+                   << (Box().size(180, 54) << (ScrollView(this->viewport_)
+                                               << (Column() << Box().size(150, 48 - kRootGap)
+                                                            << Text("HHHH").TEST_ID("PaintDamage.ClippedText")))));
     }
   private:
+    NodeState<loka::core::Frame> viewport_;
     NodeState<RectSurfaceModel> model_;
   };
 
@@ -1543,23 +1549,32 @@ namespace
   public:
     typedef BoundaryPropsFor<DrawerDamageNode<Kind> > Props;
     typedef typename Props::TypeTag TypeTag;
-    explicit DrawerDamageNode(const Props &props) : StdCompositionBoundaryNodeBase<Props>(props) {}
+    explicit DrawerDamageNode(const Props &props)
+        : StdCompositionBoundaryNodeBase<Props>(props)
+    {
+      if (Kind != CELL_OVERFLOW)
+        this->state(this->viewport_, loka::core::Frame(0, 0, 0, 0));
+    }
     virtual void composeNode(NodeComposition &composition)
     {
       // Preserve 14 visible pixels of the third Cell across two seat gaps.
       if (Kind == CELL_VIEWPORT)
         composition.declare(Row() << (Box().size(180, 62 + 2 * kRootGap)
-                            << (ScrollView().TEST_ID("Drawer.Viewport")
-                                << (Column() << (Box().size(100, 24) << loka::app::Cell("One"))
-                                    << (Box().size(100, 24) << loka::app::Cell("Two"))
-                                    << (Box().size(100, 24) << loka::app::Cell("Three"))))) << Text("Rail"));
+                                      << (ScrollView(this->viewport_).TEST_ID("Drawer.Viewport")
+                                          << (Column() << (Box().size(100, 24) << loka::app::Cell("One"))
+                                                       << (Box().size(100, 24) << loka::app::Cell("Two"))
+                                                       << (Box().size(100, 24) << loka::app::Cell("Three")))))
+                                  << Text("Rail"));
       else if (Kind == POPUP_VIEWPORT)
         composition.declare(Box().size(96, 62)
-                            << (ScrollView().TEST_ID("Drawer.Viewport") << PopupMenu()));
+                            << (ScrollView(this->viewport_).TEST_ID("Drawer.Viewport") << PopupMenu()));
       else
         composition.declare(Row() << Box().size(42, 24)
                             << (Box().size(8, 24) << loka::app::Cell("WWWWWWW")));
     }
+
+  private:
+    NodeState<loka::core::Frame> viewport_;
   };
 
   /** Finite pixel snapshot owned by the fixture, never a production cache. */

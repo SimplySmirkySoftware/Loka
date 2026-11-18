@@ -1,3 +1,4 @@
+#include "support/ScrollViewSeat.hpp"
 #include "support/TextBufferFixture.hpp"
 #include "support/LokaAllocFailure.hpp"
 #include "app/layout/ColumnLayout.hpp"
@@ -161,7 +162,8 @@ namespace
     ToolboxWindow window;
     HostPortScope port(window.window());
     ToolboxScenePlatformController controller(&window);
-    ScrollViewNode scroll((ScrollViewProps()));
+    loka::testing::ScrollViewSeat scrollSeat;
+    ScrollViewNode scroll(ScrollViewProps(scrollSeat.state()));
     Probe *child = new Probe("clip-scroll-child", 30);
     scroll.addChild(child);
     LOKA_VERIFY(controller.projectionParentScopes_.resetRoot(window.window(), Frame(0, 0, 300, 200)));
@@ -4757,6 +4759,7 @@ namespace
     ToolboxScenePlatformController controller(&window);
     LOKA_VERIFY(RegisterToolboxPlatformLayoutHandlers(controller.gapLayoutRegistry));
     LOKA_VERIFY(controller.projectionParentScopes_.resetRoot(window.window(), Frame(0, 0, 300, 200)));
+    loka::testing::ScrollViewSeat scrollSeat;
     ZStackNode stack((ZStackProps()));
     Probe *ground = new Probe("ground", 70);
     Probe *upper = new Probe("upper", 40);
@@ -4774,7 +4777,7 @@ namespace
     }
     else if (scroll)
     {
-      ScrollViewNode *inner = new ScrollViewNode(ScrollViewProps());
+      ScrollViewNode *inner = new ScrollViewNode(ScrollViewProps(scrollSeat.state()));
       inner->addChild(upper);
       stack.addChild(inner);
     }

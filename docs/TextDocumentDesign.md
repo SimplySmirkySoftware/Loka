@@ -236,6 +236,12 @@ The obligations are:
   - Open builds the new store completely before swapping it in.
   - Detaching a view allocates nothing.
   - Reclaim happens at the owning clock's boundary and fires nothing.
+
+  Retired store rows make their window eligible for the next admission that passes
+  the close and busy checks. Each participating rail declares one explicit binding
+  after its ledger. Store-only work reaches the existing drain without requesting
+  platform synchronization. Null, Win32, and macOS each bind their controller-owned ledger.
+
 - **IME commit:** `App::commitTextInput` opens an Operation (joining an outer turn),
   shares completion's live window walk, and enters each window's shared document
   gate. It performs no admission, completion reconcile, or caret delivery.

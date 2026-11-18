@@ -59,12 +59,13 @@ namespace
   /** Test-only subclass witnesses notification silence and child-before-parent destruction. */
   struct Messages
   {
-    HWND parking, edit;
+    HWND parking, edit, otherEdit;
     WNDPROC previous;
     unsigned commands, changes, destroys;
-    Messages(HWND parent, HWND child)
+    Messages(HWND parent, HWND child, HWND otherChild = 0)
         : parking(parent),
           edit(child),
+          otherEdit(otherChild),
           previous(0),
           commands(0),
           changes(0),
@@ -94,7 +95,7 @@ namespace
       }
       if (message == WM_DESTROY)
       {
-        LOKA_VERIFY(!IsWindow(self.edit));
+        LOKA_VERIFY(!IsWindow(self.edit) && !IsWindow(self.otherEdit));
         ++self.destroys;
       }
       return CallWindowProcW(self.previous, hwnd, message, wp, lp);
@@ -382,8 +383,9 @@ void testWin32TextStoreDpiQualification()
 }
 
 #include "Win32Window.hpp"
+#include "testing/Win32ScenePlatformTestAccess.hpp"
 #include "platform/null/NullPlatformContext.hpp"
-#include "support/WindowAdmissionTestApp.hpp"
+#include "support/NativeTextStoreAdmission.hpp"
 #include "support/TextDocumentAccess.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
@@ -438,9 +440,9 @@ void testWin32TextStoreWindowTeardown()
     row = loka::app::testing::TextDocumentAccess::registration(root.text)->store();
     HWND freshEdit = TextStoreAccess::edit(*row);
     LOKA_VERIFY(freshEdit != edit && native(edit).empty());
-    window.drainNativeRetirements();
-    LOKA_VERIFY(!IsWindow(edit) && IsWindow(freshEdit));
-    Messages messages(parking, freshEdit);
+    LOKA_VERIFY(loka::app::testing::TextStoreTestAccess::retiredCount(*row) == 1);
+    LOKA_VERIFY(IsWindow(edit) && IsWindow(freshEdit));
+    Messages messages(parking, edit, freshEdit);
     if (external)
       LOKA_VERIFY(DestroyWindow(window.hwnd()));
     else
@@ -552,4 +554,44 @@ void testWin32TextStoreConformance()
     LOKA_VERIFY(loka::app::testing::TextStoreTestAccess::retiredCount(*controller.fresh) == 0);
   }
   LOKA_VERIFY(DestroyWindow(hwnd));
+}
+
+namespace
+{
+  typedef loka::app::testing::NativeTextStoreAdmission<Win32Window, StoreRoot> AdmissionFixture;
+}
+void testWin32TextStoreReplacementAdmission()
+{
+  AdmissionFixture f;
+  HWND old = TextStoreAccess::edit(f.store()), parking = GetParent(old);
+  TextStoreRow &fresh = f.replace();
+  HWND edit = TextStoreAccess::edit(fresh);
+  LOKA_VERIFY(old != edit && IsWindow(old) && GetParent(edit) == parking);
+  typedef loka::dsl::testing::Win32ScenePlatformTestAccess Redraw;
+  Win32ScenePlatformController &a = static_cast<Win32ScenePlatformController &>(fresh.controller());
+  TextStoreRow &other = f.otherStore();
+  Win32ScenePlatformController &b = static_cast<Win32ScenePlatformController &>(other.controller());
+  Redraw::resetRedrawStats(a);
+  Redraw::resetRedrawStats(b);
+  f.checkReplacementAdmission(fresh);
+  LOKA_VERIFY(&f.otherStore() == &other);
+  LOKA_VERIFY(!Redraw::onChangeCalls(a) && !Redraw::queuedFullWindowInvalidates(a));
+  LOKA_VERIFY(!Redraw::onChangeCalls(b) && !Redraw::queuedFullWindowInvalidates(b));
+  LOKA_VERIFY(!IsWindow(old) && IsWindow(edit) && IsWindow(parking));
+}
+void testWin32TextStoreRefusedBirthAdmission()
+{
+  AdmissionFixture f;
+  failTextEditCreations(1);
+  f.checkRefusal(TEXT_REPLACE_UNAVAILABLE);
+}
+void testWin32TextStoreBusyAdmission()
+{
+  AdmissionFixture f;
+  f.checkBusy();
+}
+void testWin32TextStoreRemountAdmission()
+{
+  AdmissionFixture f;
+  f.checkRemount();
 }

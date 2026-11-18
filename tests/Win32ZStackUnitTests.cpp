@@ -1,5 +1,6 @@
 #include "context/Win32ClipBoxContext.hpp"
 #include "Win32ZStackUnitTests.hpp"
+#include "support/ScrollViewSeat.hpp"
 #include "support/TestVerify.hpp"
 #include <climits>
 #include <cstdio>
@@ -60,9 +61,11 @@ namespace
   {
     Host host;
     Win32ScenePlatformController controller;
+    loka::testing::ScrollViewSeat viewportSeat;
     Node *tree;
-    Fixture()
+    explicit Fixture(int viewportY = 0)
         : controller(this->host.window.hwnd(), loka::win32::Win32DisplayScale(96, RailMetrics())),
+          viewportSeat(viewportY),
           tree(0)
     {
     }
@@ -538,7 +541,7 @@ void testWin32ScrollViewRefusedInsideUnit()
 {
   Fixture f;
   ZStackNode *stack = stackWithGround(f);
-  ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+  ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(f.viewportSeat.state()));
   scroll->addChild(buttonColumn("B"));
   stack->addChild(scroll);
   f.layout();
@@ -738,7 +741,7 @@ void testWin32ScrollViewHandlerChildRefusalBlocksCommit()
 void testWin32ZStackGroundRefusalStopsUpperChildren()
 {
   Fixture f;
-  ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+  ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(f.viewportSeat.state()));
   f.tree = scroll;
   ZStackNode *stack = new ZStackNode((ZStackProps()));
   scroll->addChild(stack);
@@ -758,7 +761,7 @@ void testWin32ZStackGroundRefusalStopsUpperChildren()
 void testWin32ZStackFirstPassRefusalKeepsUnitEmpty()
 {
   Fixture f;
-  ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+  ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(f.viewportSeat.state()));
   f.tree = scroll;
   ZStackNode *stack = new ZStackNode((ZStackProps()));
   scroll->addChild(stack);
@@ -787,7 +790,7 @@ void testWin32ZStackUnitOverScrollViewSurvivesPaintOnlyTick()
   Fixture f;
   ZStackNode *stack = new ZStackNode((ZStackProps()));
   f.tree = stack;
-  ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+  ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(f.viewportSeat.state()));
   scroll->addChild(new RectSurfaceNode(RectSurfaceProps().model(&model).size(200, 160)));
   stack->addChild(scroll);
   StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
@@ -876,9 +879,10 @@ void testWin32ZStackRetirementHidesBeforeDrain()
 
 void testWin32ScrollViewInsetBandAndCornerPaint()
 {
-  Fixture f;
+  Fixture f(-40);
   ZStackNode *stack = new ZStackNode((ZStackProps()));
-  ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps().contentInsets(ScrollViewContentInsets::of(40, 30)));
+  ScrollViewNode *scroll =
+      new ScrollViewNode(ScrollViewProps(f.viewportSeat.state()).contentInsets(ScrollViewContentInsets::of(40, 30)));
   RectSurfaceNode *surface = new RectSurfaceNode(RectSurfaceProps().size(600, 600));
   scroll->addChild(surface);
   stack->addChild(scroll);
