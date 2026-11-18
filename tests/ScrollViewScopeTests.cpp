@@ -2,6 +2,7 @@
 #include "ScrollViewRequestTests.hpp"
 
 #include <cassert>
+#include "support/ScrollViewSeat.hpp"
 #include "support/TestVerify.hpp"
 #include <climits>
 
@@ -10,37 +11,11 @@
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
-#include "app/scene/state/NodeState.hpp"
-#include "core/State.hpp"
-#include "core/StateTracker.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
 
 namespace
 {
-  class ViewportFact
-  {
-  public:
-    explicit ViewportFact(int initial, int x = 0)
-        : storage_(loka::core::Frame(x, initial, 0, 0)),
-          tracker_(),
-          state_(&this->storage_, &this->tracker_)
-    {
-      this->tracker_.addState(&this->storage_);
-    }
-
-    loka::app::scene::NodeState<loka::core::Frame> &state()
-    {
-      return this->state_;
-    }
-
-  private:
-    loka::core::MutableState<loka::core::Frame> storage_;
-    loka::core::PushStateTracker tracker_;
-    loka::app::scene::NodeState<loka::core::Frame> state_;
-
-    ViewportFact(const ViewportFact &);
-    ViewportFact &operator=(const ViewportFact &);
-  };
+  typedef loka::testing::ScrollViewSeat ViewportFact;
 
   class FixedLayoutProbeNode : public loka::app::scene::Node,
                                public loka::app::scene::IProjectedLayoutNode
@@ -516,9 +491,10 @@ void testScrollViewContentInsetsValueAndPropsIdentity()
   LOKA_VERIFY(ScrollViewContentInsets::of(0, 2) < ScrollViewContentInsets::of(1, 0));
   LOKA_VERIFY(ScrollViewContentInsets::of(1, 2) < ScrollViewContentInsets::of(1, 3));
   LOKA_VERIFY(ScrollViewContentInsets::of(SHRT_MAX, SHRT_MAX).extentExtra() == 2 * SHRT_MAX);
-  const loka::app::ScrollView small = loka::app::ScrollView().contentInsets(12, 3);
-  const loka::app::ScrollView equal = loka::app::ScrollView().contentInsets(12, 3);
-  const loka::app::ScrollView larger = loka::app::ScrollView().contentInsets(12, 4);
+  loka::testing::ScrollViewSeat viewport;
+  const loka::app::ScrollView small = loka::app::ScrollView(viewport.state()).contentInsets(12, 3);
+  const loka::app::ScrollView equal = loka::app::ScrollView(viewport.state()).contentInsets(12, 3);
+  const loka::app::ScrollView larger = loka::app::ScrollView(viewport.state()).contentInsets(12, 4);
   LOKA_VERIFY(!(small.props < equal.props));
   LOKA_VERIFY(!(equal.props < small.props));
   LOKA_VERIFY(small.props < larger.props);

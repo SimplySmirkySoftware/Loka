@@ -48,6 +48,7 @@ namespace webtest
   class SurfaceFixture : public loka::app::scene::BoundaryNodeFor<SurfaceFixture>
   {
   public:
+    loka::app::scene::NodeState<loka::core::Frame> viewport;
     loka::app::scene::NodeState<loka::core::Frame> extent;
     loka::app::scene::NodeState<loka::app::RectSurfaceModel> model;
     loka::app::scene::NodeState<bool> shown;
@@ -56,6 +57,7 @@ namespace webtest
           notifications_(0)
     {
       surfaceFixture() = this;
+      this->state(this->viewport, loka::core::Frame(0, 0, 0, 0));
       this->state(this->extent, loka::core::Frame(7, 11, 17, 19));
       this->state(this->model, loka::app::RectSurfaceModel());
       this->state(this->shown, true);
@@ -104,7 +106,7 @@ namespace webtest
         c.declare(Grid().rows(2).cols(1) << surface << surface);
         break;
       case SURFACE_SCROLL:
-        c.declare(ScrollView() << surface << surface);
+        c.declare(ScrollView(this->viewport) << surface << surface);
         break;
       case SURFACE_DIRECT:
         if (surfaceSetup().destroy)
@@ -116,7 +118,7 @@ namespace webtest
         c.declare(VStack().gap(0) << Box().height(1) << (Box().padding(0) << surface));
         break;
       case SURFACE_WALL_SCROLL:
-        c.declare(ScrollView() << (VStack().gap(0) << Box().height(1) << (Box().padding(0) << surface)));
+        c.declare(ScrollView(this->viewport) << (VStack().gap(0) << Box().height(1) << (Box().padding(0) << surface)));
         break;
       }
     }

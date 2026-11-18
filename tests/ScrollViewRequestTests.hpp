@@ -1,5 +1,6 @@
 #ifndef LOKA_TESTS_SCROLL_VIEW_REQUEST_TESTS_HPP
 #define LOKA_TESTS_SCROLL_VIEW_REQUEST_TESTS_HPP
+#include "support/ScrollViewSeat.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/nestable/ScrollViewSettlement.hpp"
 #include "app/nodes/Text.hpp"
@@ -272,8 +273,8 @@ inline void testScrollRequestBindingReplacement()
   LOKA_VERIFY((NodePropsApplier<ScrollViewNode, ScrollViewProps>::apply(
       &f.node, ScrollViewProps(f.storage.viewport).scrollTo(f.storage.other))));
   LOKA_VERIFY(f.storage.request.get().isNone());
-  const ScrollViewProps a = ScrollViewProps().scrollTo(f.storage.request);
-  const ScrollViewProps b = ScrollViewProps().scrollTo(f.storage.other);
+  const ScrollViewProps a = ScrollViewProps(f.storage.viewport).scrollTo(f.storage.request);
+  const ScrollViewProps b = ScrollViewProps(f.storage.viewport).scrollTo(f.storage.other);
   LOKA_VERIFY((a < b) != (b < a));
   LOKA_VERIFY(!(a < a));
 }
@@ -307,7 +308,8 @@ inline void testScrollRequestUnreachedChild()
 {
   using namespace scroll_request_tests;
   Fixture f;
-  ScrollViewNode parent((ScrollViewProps()));
+  loka::testing::ScrollViewSeat parentViewport;
+  ScrollViewNode parent(ScrollViewProps(parentViewport.state()));
   ScrollViewNode *child = new ScrollViewNode(f.node.props);
   parent.addChild(child);
   f.storage.request.set(ScrollTarget::Origin(4, 5));

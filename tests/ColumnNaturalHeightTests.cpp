@@ -1,4 +1,5 @@
 #include "ColumnNaturalHeightTests.hpp"
+#include "support/ScrollViewSeat.hpp"
 #include "support/TestVerify.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/Box.hpp"
@@ -41,7 +42,8 @@ void testColumnNaturalHeightOffersAndExtent()
       RectSurfaceProps firstProps, lastProps;
       firstProps.laidOutExtent(firstState);
       lastProps.size(30, 15).laidOutExtent(lastState);
-      ScrollViewNode scroll((ScrollViewProps()));
+      loka::testing::ScrollViewSeat viewport;
+      ScrollViewNode scroll(ScrollViewProps(viewport.state()));
       VStack definition;
       definition.gap(4);
       if (natural)

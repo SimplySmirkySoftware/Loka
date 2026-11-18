@@ -188,6 +188,11 @@ extern "C"
     args << "=" << x << "," << y << "," << width << "," << height;
     webtest::record("rect", token, args.str());
   }
+  // Cost: admitted band visit once; records one fake row's local paint arguments.
+  void web_set_card_body(uint32_t token, int x, int y, int width, int height, int extent)
+  {
+    webtest::resources[token].cardBody = std::make_pair(loka::core::Frame(x, y, width, height), extent);
+  }
   void web_set_projected(uint32_t token, int projected)
   {
     if (webtest::resources.find(token) == webtest::resources.end())

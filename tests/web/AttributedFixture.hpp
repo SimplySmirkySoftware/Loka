@@ -23,6 +23,7 @@ namespace webtest
   class AttributedFixture : public loka::app::scene::BoundaryNodeFor<AttributedFixture>
   {
   public:
+    loka::app::scene::NodeState<loka::core::Frame> viewport;
     loka::app::scene::NodeState<loka::app::AttributedString> content;
     loka::app::scene::NodeState<loka::app::AttributedString> other;
     loka::app::scene::NodeState<bool> shown;
@@ -31,6 +32,7 @@ namespace webtest
         : loka::app::scene::BoundaryNodeFor<AttributedFixture>(p)
     {
       attributedFixture() = this;
+      this->state(this->viewport, loka::core::Frame(0, 0, 0, 0));
       this->state(this->shown, true);
       this->state(this->activated, loka::app::LinkTarget(loka::core::String::Literal("sentinel")));
       const loka::app::AttributedString value =
@@ -54,8 +56,9 @@ namespace webtest
       else if (attributedMode() >= 3)
       {
         if (attributedMode() >= 5)
-          c.declare(ScrollView() << (VStack().gap(0)
-                                     << Box().height(attributedMode() == 5 ? 32754 : 32755) << text << Text("after")));
+          c.declare(ScrollView(this->viewport)
+                    << (VStack().gap(0) << Box().height(attributedMode() == 5 ? 32754 : 32755) << text
+                                        << Text("after")));
         else
           c.declare(VStack().gap(0) << Box().height(attributedMode() == 3 ? 32754 : 32755) << text << Text("after"));
       }

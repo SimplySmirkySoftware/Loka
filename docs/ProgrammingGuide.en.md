@@ -2419,8 +2419,8 @@ URL opener registered with the app. `OpenWebLink` posts a request; its boolean
 result reports queuing, not successful OS opening. The complete Boundary is
 [compiled as a C++98 sample](../tests/compile/pins/accepts_document.cpp).
 
-On Web, a code block shows its text at the framed position. The frame and
-shadow are not drawn yet. Web links display link styling but do not activate.
+On Web, a code block displays its Card's rounded frame and shadow around the text.
+Web links display link styling but do not activate.
 Heading height in aligned Row/Grid layouts has the same limitations as
 AttributedText.
 
