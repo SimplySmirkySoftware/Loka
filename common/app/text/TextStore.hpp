@@ -187,6 +187,11 @@ namespace loka
           this->retireAll();
           this->drain();
         }
+        /** O(1) admission query. Reads the retired head without walking rows. */
+        bool hasRetired() const
+        {
+          return this->retired_ != 0;
+        }
         void retireAll()
         {
           while (this->live_)
