@@ -542,8 +542,10 @@ void testTextStoreCloseAdmission()
     WindowAdmissionTestApp app(*ownedWindow, borrowedWindow);
     app.flush();
     app.reconcileAtCompletion();
-    new ReclaimWitness(*TextDocumentAccess::store(windowText(*ownedWindow)), ownedReclaimed);
-    new ReclaimWitness(*TextDocumentAccess::store(windowText(*borrowedWindow)), borrowedReclaimed);
+    // Retired before close, so each window closes with store rows awaiting reclaim.
+    (new ReclaimWitness(*TextDocumentAccess::store(windowText(*ownedWindow)), ownedReclaimed))->retire();
+    (new ReclaimWitness(*TextDocumentAccess::store(windowText(*borrowedWindow)), borrowedReclaimed))->retire();
+    LOKA_VERIFY(app.hasPendingWindowAdmission());
     app.requestWindowClose(ownedWindow);
     app.requestWindowClose(borrowedWindow);
     app.admitAndApplyWindows();
