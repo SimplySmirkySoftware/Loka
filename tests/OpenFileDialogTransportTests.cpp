@@ -115,8 +115,8 @@ namespace
       g_events = &this->events;
       g_window = &this->window;
       LOKA_VERIFY(this->window.scenePlatformController()->registerNodeHandler(&this->handler));
-      LOKA_VERIFY(this->window.sceneManager()->commitTransaction(
-          0, new Scene(new NodeDefinition<DialogOwnerProps, DialogOwner>(DialogOwnerProps()))));
+      LOKA_VERIFY(this->window.sceneManager()->requestReplacement(
+          new Scene(new NodeDefinition<DialogOwnerProps, DialogOwner>(DialogOwnerProps()))));
       this->app.flush();
       LOKA_VERIFY(g_owner && g_context);
     }

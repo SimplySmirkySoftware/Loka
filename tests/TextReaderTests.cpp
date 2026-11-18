@@ -244,7 +244,7 @@ void testTextReaderSceneReplacement()
   ReaderFixture f;
   TextReader reader(f.text());
   Scene *candidate = new Scene(Boundary<ReaderRoot>());
-  LOKA_VERIFY(f.window.sceneManager()->commitTransaction(0, candidate));
+  LOKA_VERIFY(f.window.sceneManager()->requestReplacement(candidate));
   f.app.flush();
   f.app.reconcileAtCompletion();
   refused(reader, TEXT_READ_NOT_READY);

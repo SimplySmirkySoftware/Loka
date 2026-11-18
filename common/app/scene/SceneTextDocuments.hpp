@@ -18,6 +18,7 @@ namespace loka
     {
       class TextDocumentRegistration;
       class TextViewClaim;
+      class TextStoreRow;
       class TextDocumentViewContext;
       class IPlatformController;
       /** Membership twin of SceneFocus; documents publish independently, not through one focus edge.
@@ -76,6 +77,10 @@ namespace loka
           const Phase previous_;
         };
         class StoreCreator;
+        // GCC 4.0 does not extend TextDocumentRegistration's friendship to classes nested in
+        // SceneTextDocuments, so StoreCreator reaches the row's private store phase through these (#1853).
+        static bool awaitsStore(TextDocumentRegistration &row);
+        static void settleStore(TextDocumentRegistration &row, TextStoreRow *born);
         Phase phase_;
         friend struct ::loka::app::testing::TextDocumentAccess;
         friend class Scene;

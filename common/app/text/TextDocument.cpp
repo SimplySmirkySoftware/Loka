@@ -365,6 +365,20 @@ namespace loka
       {
         MemberList<TextDocumentRegistration>::visit(visitor);
       }
+      bool SceneTextDocuments::awaitsStore(TextDocumentRegistration &row)
+      {
+        return row.document_.remote() && row.phase_.value() == TextStorePhase::STORE_AWAITED;
+      }
+      void SceneTextDocuments::settleStore(TextDocumentRegistration &row, TextStoreRow *born)
+      {
+        if (born)
+        {
+          row.connectStore(*born);
+          row.phase_.link();
+        }
+        else
+          row.phase_.refuse();
+      }
       /** Initial projection policy applied once to each live declaration. */
       class SceneTextDocuments::StoreCreator
       {
@@ -375,20 +389,15 @@ namespace loka
         }
         void visit(TextDocumentRegistration &row)
         {
-          if (!row.document_.remote() || row.phase_.value() != TextStorePhase::STORE_AWAITED)
+          if (!SceneTextDocuments::awaitsStore(row))
             return;
           TextStoreSource source(TextReplacement::Empty());
           TextStoreRow *fresh = 0;
           TextStoreReading reading;
           BorrowScope borrow(this->controller_);
-          if (this->controller_.createTextStore(source, 0, fresh, reading) == TEXT_STORE_BORN)
-          {
-            assert(fresh);
-            row.connectStore(*fresh);
-            row.phase_.link();
-          }
-          else
-            row.phase_.refuse();
+          const bool born = this->controller_.createTextStore(source, 0, fresh, reading) == TEXT_STORE_BORN;
+          assert(!born || fresh);
+          SceneTextDocuments::settleStore(row, born ? fresh : 0);
         }
 
       private:
