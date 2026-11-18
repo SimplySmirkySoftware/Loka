@@ -16,6 +16,7 @@ namespace loka
       POPUP,
       RECT_SURFACE,
       ATTRIBUTED_TEXT,
+      CARD_BAND,
       KIND_COUNT
     };
     enum ScrollCommit
@@ -66,6 +67,8 @@ extern "C"
   /** Cost: bootstrap and accepted resize once; one temporary probe, synchronous layout. */
   int web_scrollbar_geometry(int *vertical, int *horizontal);
   void web_set_rect(uint32_t token, int x, int y, int width, int height);
+  /** Cost: band layout once per admitted strip; writes only its owned body. */
+  void web_set_card_body(uint32_t token, int x, int y, int width, int height, int extent);
   /** Cost: projection once per visit (popup layout, text render), writes one owned element. */
   void web_set_projected(uint32_t token, int projected);
   /** Cost: popup render once; adjusts only its own select's option rows. */

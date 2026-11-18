@@ -308,9 +308,8 @@ void WebDocumentVocabularyFixture()
     if (it->second.kind == loka::web::ATTRIBUTED_TEXT)
       leaves.push_back(it->second);
   LOKA_VERIFY(leaves.size() == 4);
-  // One window and four text projections. The framed layout reserves the
-  // bands' geometry even though the Web rail creates no resources for them.
-  LOKA_VERIFY(webtest::resources.size() == 5);
+  // One window, four text projections and the code block's four frame strips.
+  LOKA_VERIFY(webtest::resources.size() == 9);
   const int x[] = {0, 0, 3, 0}, y[] = {0, 16, 35, 83};
   const int widths[] = {240, 240, 231, 240}, heights[] = {13, 13, 39, 13};
   const char *texts[] = {"Title codelink", "paragraph", "firstsecond", "after"};

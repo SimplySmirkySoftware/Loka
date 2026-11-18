@@ -29,10 +29,10 @@ public:
                            void *parentView,
                            loka::app::AttributedTextNode *node);
   virtual ~MacAttributedTextContext();
-  /** False when AppKit refused the native label; the handler then refuses the context. */
-  bool hasNativeLabel() const
+  /** False when AppKit refused the native view; the handler then refuses the context. */
+  bool hasNativeView() const
   {
-    return this->label_ != 0;
+    return this->view_ != 0;
   }
   void readLifecycleFactOnAttach();
   virtual void onPropsApplied();
@@ -79,8 +79,7 @@ private:
     void clear();
     bool build(const loka::app::AttributedString &value,
                const loka::app::BlockStyle &block,
-               const MacScenePlatformController &controller,
-               const loka::macos::MacLength &constraint);
+               const MacScenePlatformController &controller);
     bool queryProvenance(NSUInteger start, NSUInteger end, loka::app::TextSegmentRange &out) const;
     bool reusable(const loka::macos::MacLength &constraint) const
     {
@@ -88,7 +87,8 @@ private:
     }
     int height() const
     {
-      return this->value_ ? this->measurement_.extent() : 0;
+      CGFloat constraint;
+      return this->measurement_.queryConstraint(constraint) ? this->measurement_.extent() : 0;
     }
     void *value() const
     {
@@ -97,11 +97,15 @@ private:
 
   private:
     friend class loka::dsl::testing::MacAttributedTextTestAccess;
+    friend class MacAttributedTextContext;
+    void commitMeasurement(const loka::macos::MacLength &constraint, int extent)
+    {
+      this->measurement_.commit(constraint.pt, extent);
+    }
     /** Construction body of build; false leaves partial state for build to clear. */
     bool fill(const loka::app::AttributedString &value,
               const loka::app::BlockStyle &block,
-              const MacScenePlatformController &controller,
-              const loka::macos::MacLength &constraint);
+              const MacScenePlatformController &controller);
     MacTextSourceTable sources_;
     // No backing-scale invalidation until a measurement effect is demonstrated (#970).
     loka::app::MeasurementResult<CGFloat, int> measurement_;
@@ -109,9 +113,10 @@ private:
     Projection(const Projection &);
     Projection &operator=(const Projection &);
   };
+  bool rebuildProjection(const loka::macos::MacLength &constraint);
   void clearProjection();
   loka::app::AttributedTextNode *node_;
-  void *label_;
+  void *view_;
   Projection projection_;
 };
 

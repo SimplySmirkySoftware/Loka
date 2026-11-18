@@ -7,6 +7,13 @@ void testMacTextItalicTraits();
 void testMacSmallLabelUsesTheSmallSystemFont();
 
 void testMacAttributedTextWholeLineProjection();
+void testMacAttributedTextInstallSequence();
+void testMacAttributedTextEmptyAdvances();
+void testMacAttributedTextKitLifetime();
+void testMacAttributedTextDrawBands();
+void testMacAttributedTextWindow();
+void testMacAttributedTextChildAssertions();
+void testMacAttributedTextLineAdvances();
 void testMacAttributedTextCharacterizeStyles();
 void testMacAttributedTextCharacterizeBytes();
 void testMacAttributedTextCharacterizeRefusals();
