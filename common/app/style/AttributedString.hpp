@@ -64,7 +64,10 @@ namespace loka
       /** Orders invalid values first, then compares corresponding segment bodies,
           styles and links, including empty segments, and finally the segment count.
           Cost: O(1) for shared storage. Otherwise visits only the compared values'
-          segments and text up to the first difference. */
+          segments up to the first differing one. Comparing two bodies or targets
+          reads both: directly when their bytes are UTF-8, and by converting each
+          whole string first (linear time and scratch space) when a native string
+          needs conversion, even if the first bytes differ. */
       int compareSegmentValues(const AttributedString &other) const;
       bool equals(const AttributedString &other) const;
       bool operator==(const AttributedString &other) const;
