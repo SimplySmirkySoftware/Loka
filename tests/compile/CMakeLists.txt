@@ -940,3 +940,27 @@ loka_compile_pin(text-view-store-transfer
   REFUSES pins/refuses_text-view-store-transfer.cpp
   ACCEPTS pins/accepts_text-view-store-transfer.cpp
 )
+
+loka_compile_pin(document-heading-level
+  REFUSES pins/refuses_document_heading_level.cpp
+  ACCEPTS pins/accepts_document.cpp)
+loka_compile_pin(document-live-state
+  REFUSES pins/refuses_document_live.cpp
+  ACCEPTS pins/accepts_document.cpp)
+
+add_executable(documentLevelsRelease pins/document_levels_release.cpp)
+target_link_libraries(documentLevelsRelease PRIVATE LokaContractTestEnvironment)
+target_compile_definitions(documentLevelsRelease PRIVATE NDEBUG)
+set_target_properties(documentLevelsRelease PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+loka_enable_warnings(documentLevelsRelease)
+add_test(NAME documentLevelsRelease COMMAND documentLevelsRelease)
+
+foreach(pin IN ITEMS document-heading-level document-live-state)
+  foreach(kind IN ITEMS accepts refuses)
+    if(MSVC)
+      target_compile_options(compilePin_${pin}_${kind} PRIVATE /GR-)
+    else()
+      target_compile_options(compilePin_${pin}_${kind} PRIVATE -fno-rtti -fno-exceptions)
+    endif()
+  endforeach()
+endforeach()

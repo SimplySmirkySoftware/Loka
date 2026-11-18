@@ -2362,3 +2362,73 @@ Avoid black boxes.
 
 If application code reads naturally while ownership and lifecycle remain
 inspectable, it is moving in the right direction for Loka.
+
+## Documents
+
+Include `app/doc/Heading.hpp`, `Paragraph.hpp`, `CodeBlock.hpp`, and `Inline.hpp`
+from the same directory. Document blocks keep their meaning in the scene tree
+and display through the existing text and Card nodes:
+
+```cpp
+using namespace loka::app;
+Column()
+  << doc::Heading(1, "Loka")
+  << doc::Paragraph(Styled("Read ", TextStyle())
+       + doc::Link("the guide", "https://example.com/guide")
+       + Styled(" or try ", TextStyle()) + doc::Code("Column()"))
+  << doc::CodeBlock("Column() << Text(\"hello\")");
+```
+
+Inline content is `AttributedString`. Use `Styled` for bold, italic, and other
+styles; `doc::Link` contributes a linked segment and `doc::Code` contributes
+monospace text. The latter is a visual convention, indistinguishable from
+`Styled(text, Monospace)`, and promises no lossless source round trip.
+
+| Heading level | Default size | Default weight |
+|---|---|---|
+| 1 | 24 | Bold |
+| 2 | 18 | Bold |
+| 3 | 14 | Bold |
+| 4–6 | 12 | Bold |
+
+Levels outside 1–6 assert in debug builds and clamp in release builds. A segment's
+explicit style axes override heading defaults. Headings and paragraphs wrap at
+words. Code blocks preserve explicit line breaks, do not automatically wrap,
+and clip horizontally.
+
+Changing documents are values: the owner reapplies block props, for example by
+editing a LazyView's list of block props. A direct definition application also
+updates an existing block. `For` constructs its items initially; it does not
+provide subsequent props updates. Live `State<AttributedString>*` input is not
+accepted by document blocks.
+
+Both Heading and Paragraph accept `.activatedLink(box)`. The box belongs to the
+application. A Boundary can route its result through a lifecycle-owned Flow:
+
+```cpp
+this->open_.set(Flow() | Match<LinkTarget, bool>(0)
+    .otherwise(&OpenWebLink, this->props.opener))
+    .bindTrigger(this->activated_.state())
+    .withTracker(this->tracker());
+c.declare(doc::Paragraph(doc::Link("Visit the guide", "https://example.com/guide"))
+    .activatedLink(this->activated_));
+```
+
+Here `activated_` is a declared `NodeState<LinkTarget>`, `open_` is a
+`FlowSlot<FlowChain<LinkTarget, bool> >`, and `opener` borrows the config-owned
+URL opener registered with the app. `OpenWebLink` posts a request; its boolean
+result reports queuing, not successful OS opening. The complete Boundary is
+[compiled as a C++98 sample](../tests/compile/pins/accepts_document.cpp).
+
+On Web, a code block shows its text at the framed position. The frame and
+shadow are not drawn yet. Web links display link styling but do not activate. Heading height in aligned Row/Grid layouts
+has the same limitations as AttributedText.
+
+An accepted update always becomes the block's current semantic value. Invalid
+text, including failure to allocate the lowered styled value, refuses projection;
+a later successful props application can restore it. This is not a promise of
+immediate pixel erasure. A valid value with an unreadable String body follows
+the existing rail behavior: native projections clear, while Web may keep the
+previous snapshot and retry until the body can be read. Structural allocation
+refusal follows ordinary subtree admission; applying props to a childless block
+does not itself create its missing children.

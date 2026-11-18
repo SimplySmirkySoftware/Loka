@@ -1,4 +1,5 @@
 #include "AttributedFixture.hpp"
+#include "DocumentFixture.hpp"
 #include "WebSession.hpp"
 #include "WebScenePlatformController.hpp"
 #include "WebAttributedTextContext.hpp"
@@ -43,6 +44,14 @@ namespace
     virtual void composeNode(NodeComposition &composition)
     {
       composition.declare(VStack().gap(0) << AttributedText(InvalidValue()) << Text("after"));
+    }
+  };
+  class UnreadableBody : public loka::platform::String
+  {
+  public:
+    virtual bool appendUtf8(std::string &) const
+    {
+      return false;
     }
   };
   void MountedInvalidSource()
@@ -128,6 +137,21 @@ namespace
         scene.flushInvalidation();
         LOKA_VERIFY(row.projected && row.text == "after invalid" && webtest::runsCalls == calls + 1);
         LOKA_VERIFY(!scene.hasPendingInvalidation());
+        if (mode == 0)
+        {
+          const loka::core::String unreadable =
+              loka::core::String::FromPlatform(loka::core::Managed<loka::platform::String>::Wrap(new UnreadableBody()));
+          const AttributedString unreadableValue = Styled(unreadable, Bold);
+          LOKA_VERIFY(unreadableValue.valid());
+          LOKA_VERIFY(AttributedText(unreadableValue).applyPropsToNode(node));
+          controller.requestRelayout();
+          scene.flushInvalidation();
+          LOKA_VERIFY(row.projected && row.text == "after invalid" && scene.hasPendingInvalidation());
+          LOKA_VERIFY(AttributedText(Styled("readable again", Blue)).applyPropsToNode(node));
+          controller.requestRelayout();
+          scene.flushInvalidation();
+          LOKA_VERIFY(row.projected && row.text == "readable again" && !scene.hasPendingInvalidation());
+        }
         SceneTestAccess::unmount(scene);
         controller.destroy();
       }
@@ -271,8 +295,39 @@ namespace
   }
 } // namespace
 
+void WebDocumentVocabularyFixture()
+{
+  webtest::reset();
+  WebSession session;
+  LOKA_VERIFY(session.start(&webtest::CreateDocument, 0) == WebSession::STARTED);
+  session.wake(loka::web::IMMEDIATE, 0);
+  std::vector<webtest::Resource> leaves;
+  for (std::map<uint32_t, webtest::Resource>::const_iterator it = webtest::resources.begin();
+       it != webtest::resources.end();
+       ++it)
+    if (it->second.kind == loka::web::ATTRIBUTED_TEXT)
+      leaves.push_back(it->second);
+  LOKA_VERIFY(leaves.size() == 4);
+  // One window and four text projections. The framed layout reserves the
+  // bands' geometry even though the Web rail creates no resources for them.
+  LOKA_VERIFY(webtest::resources.size() == 5);
+  const int x[] = {0, 0, 3, 0}, y[] = {0, 16, 35, 83};
+  const int widths[] = {240, 240, 231, 240}, heights[] = {13, 13, 39, 13};
+  const char *texts[] = {"Title codelink", "paragraph", "firstsecond", "after"};
+  for (unsigned i = 0; i < leaves.size(); ++i)
+  {
+    LOKA_VERIFY(leaves[i].x == x[i] && leaves[i].y == y[i]);
+    LOKA_VERIFY(leaves[i].width == widths[i] && leaves[i].height == heights[i]);
+    LOKA_VERIFY(leaves[i].projected && leaves[i].text == texts[i]);
+  }
+  session.dispose();
+  webtest::fire(webtest::task(loka::web::SHUTDOWN), 1000);
+  LOKA_VERIFY(webtest::resources.empty());
+}
+
 void WebAttributedDOMTests()
 {
+  WebDocumentVocabularyFixture();
   MountedInvalidSource();
   MountedLifecycleAndBottom();
   webtest::reset();

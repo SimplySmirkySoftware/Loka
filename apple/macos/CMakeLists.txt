@@ -126,6 +126,7 @@ if(NOT LOKA_MAC_OS_10_4)
     set(LOKA_MACOS_TEST_EXCLUDE_OPTION)
   endif()
   add_executable(LokaTestsMacOS ${LOKA_MACOS_TEST_EXCLUDE_OPTION}
+    ${PROJECT_SOURCE_DIR}/tests/compile/pins/document_sdk_order.cpp
     ${LOKA_SHARED_TEST_SOURCES}
     ${LOKA_MACOS_TEST_COMMON_SOURCES}
     ${PROJECT_SOURCE_DIR}/tests/MacDisplayAppearanceTests.mm

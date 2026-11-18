@@ -14,6 +14,7 @@ endif()
 if(CMAKE_SYSTEM_NAME MATCHES "^Retro(68|PPC)$")
   add_library(LokaToolboxDslNameCollisionProbe OBJECT
     src/DslNameCollisionProbe.cpp
+    ../compile/pins/document_sdk_order.cpp
   )
   loka_enable_warnings(LokaToolboxDslNameCollisionProbe)
   # The probe reaches ScrapbookUI's MainNode, whose package header includes
