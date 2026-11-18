@@ -1203,3 +1203,47 @@ namespace loka
   } // namespace win32
 } // namespace loka
 #endif
+
+#if defined(TEST_BUILD) && defined(__APPLE__)
+#include "../apple/macos/src/text/MacTextStore.hpp"
+namespace loka
+{
+  namespace macos
+  {
+    namespace testing
+    {
+      namespace
+      {
+        unsigned storeAllocationFailures[STORE_ALLOCATION_COUNT] = {};
+        const MacTextStore *observedRow = 0;
+        unsigned deliveredCalls = 0;
+      } // namespace
+      void failStoreAllocation(StoreAllocation stage, unsigned count)
+      {
+        storeAllocationFailures[stage] = count;
+      }
+      bool refuseStoreAllocation(StoreAllocation stage)
+      {
+        if (!storeAllocationFailures[stage])
+          return false;
+        --storeAllocationFailures[stage];
+        return true;
+      }
+      void observeStoreCalls(const MacTextStore *row)
+      {
+        observedRow = row;
+        deliveredCalls = 0;
+      }
+      unsigned observedStoreCalls()
+      {
+        return deliveredCalls;
+      }
+      void recordStoreCall(const MacTextStore *row)
+      {
+        if (row == observedRow)
+          ++deliveredCalls;
+      }
+    } // namespace testing
+  } // namespace macos
+} // namespace loka
+#endif

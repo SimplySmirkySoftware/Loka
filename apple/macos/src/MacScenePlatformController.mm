@@ -1,5 +1,6 @@
 #include "app/nodes/nestable/ScrollViewSettlement.hpp"
 #include "MacScenePlatformController.hpp"
+#include "text/MacTextStore.hpp"
 #include "platform/MacPushButton.hpp"
 #include "MacBitmapCapture.hpp"
 #include "MacInputDoor.hpp"
@@ -349,6 +350,7 @@ MacScenePlatformController::~MacScenePlatformController()
     }
   }
   clearContexts();
+  this->textStores_.retireAll();
   this->drainNativeRetirements();
 }
 
@@ -491,8 +493,9 @@ void MacScenePlatformController::queueNativeRetirement(void *primary, void *auxi
 void MacScenePlatformController::drainNativeRetirements()
 {
 #ifdef LOKA_LIFECYCLE_AUDIT
-    assert(!this->borrowPhase().open());
+  assert(!this->borrowPhase().open());
 #endif
+  this->textStores_.drain();
   for (size_t i = 0; i < this->nativeRetirements_.size(); ++i)
   {
     NativeRetirement &entry = this->nativeRetirements_[i];
@@ -514,6 +517,7 @@ void MacScenePlatformController::destroy()
     assert(!this->borrowPhase().open());
 #endif
   clearContexts();
+  this->textStores_.retireAll();
   this->drainNativeRetirements();
   rootNode_ = 0;
   lastChangeFlags_ = loka::app::scene::NODE_DIRTY_NONE;
@@ -1524,4 +1528,45 @@ void MacScenePlatformController::releaseMenu()
   MacApp *app = window ? window->macApp() : 0;
   if (app)
     app->menuAttachment().releaseFrom(window->scene());
+}
+
+// Store doors parallel the Null rail; each touches only its argument row.
+loka::app::scene::TextStoreBirth
+MacScenePlatformController::createTextStore(loka::app::TextStoreSource &source,
+                                            loka::app::scene::TextStoreRow *,
+                                            loka::app::scene::TextStoreRow *&fresh,
+                                            loka::app::scene::TextStoreReading &reading)
+{
+  return MacTextStore::create(this->textStores_, *this, source, fresh, reading);
+}
+void MacScenePlatformController::retireTextStore(loka::app::scene::TextStoreRow &row)
+{
+  static_cast<MacTextStore &>(row).stopMarks();
+}
+bool MacScenePlatformController::readTextStore(loka::app::scene::TextStoreRow &row,
+                                               loka::app::scene::TextStoreReading &out)
+{
+  return static_cast<MacTextStore &>(row).read(out);
+}
+bool MacScenePlatformController::peekTextStore(loka::app::scene::TextStoreRow &row)
+{
+  return static_cast<MacTextStore &>(row).pending();
+}
+bool MacScenePlatformController::applyTextRequest(loka::app::scene::TextStoreRow &row, unsigned long target)
+{
+  return static_cast<MacTextStore &>(row).apply(target);
+}
+loka::app::scene::TextChunkResult MacScenePlatformController::readTextChunk(loka::app::scene::TextStoreRow &row,
+                                                                            unsigned long &offset,
+                                                                            unsigned long end,
+                                                                            char *out,
+                                                                            unsigned long capacity,
+                                                                            unsigned long &written)
+{
+  return static_cast<MacTextStore &>(row).chunk(offset, end, out, capacity, written);
+}
+
+void MacScenePlatformController::commitMarkedText(loka::app::scene::TextStoreRow &row)
+{
+  static_cast<MacTextStore &>(row).commitMarkedText();
 }

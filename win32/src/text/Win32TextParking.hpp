@@ -35,6 +35,7 @@ private:
   Win32TextParking(const Win32TextParking &);
   Win32TextParking &operator=(const Win32TextParking &);
   static LRESULT CALLBACK procedure(HWND, UINT, WPARAM, LPARAM);
+  // Parking twin of MacScenePlatformController::textStores_. EDIT requires a native parent.
   HWND window_;
   loka::app::scene::TextStoreLedger ledger_;
 };

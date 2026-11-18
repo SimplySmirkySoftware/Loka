@@ -166,7 +166,7 @@ then plays the native role. It is still the only copy.
   uncommitted: its store reading reports MARKED only for the focused EDIT, and
   treats a failed composition query as marked. Committed characters can still
   be waiting for queued WM_CHAR delivery (see [Native facts](#native-facts)).
-  Win32 now creates parked stores; native views remain unsupported in this slice.
+  macOS creates parked stores and commits marked text directly on the parked view.
   The shipped `TextEditor` path is unchanged.
 
 `TextReader` pulls a revision's logical UTF-8 body in bounded chunks, with CR,
@@ -210,7 +210,7 @@ for creation, [SceneTextDocuments](../common/app/scene/SceneTextDocuments.hpp)
 for membership, and [TextDocumentPublisher](../common/app/text/TextDocument.cpp)
 for the single read/take/apply/read/write sequence. Controller doors in
 [IPlatformController](../common/app/scene/projection/PlatformController.hpp)
-refuse by default; Null and Win32 supply stores. The
+refuse by default; Null, Win32 and macOS supply stores. The
 `commitMarkedText` operation defaults to doing nothing. `TextStoreReading`
 reports marked text; the latest reading determines `MARKED`, with positions
 assembled just as in `READY`.
@@ -260,7 +260,7 @@ documented behavior that no Loka probe has observed yet.
 |---|---|---|---|
 | Toolbox Unicode | MLTE `TXNObject`, created with no window | attaching it to an offscreen GWorld | the object |
 | Toolbox TextEdit | the `hText` handle † | swapping it for an empty handle before `TEDispose` † | the TE record † |
-| macOS | `NSTextStorage` | exists without a view † | the view's undo manager † |
+| macOS | row-owned TextKit 1 network | the text view has no superview or window | the row supplies its own undo manager through the view delegate |
 | Win32 | a store-owned EDIT, born with an `HLOCAL` through `EM_SETHANDLE` | parked under a controller-owned message-only window; view attachment is deferred | the EDIT; `EM_SETHANDLE` clears it |
 | Null | a host string | not needed | none |
 
@@ -473,8 +473,34 @@ Other presentation and focus-binding changes remain compatible and update the
 retained context. The kernel and Null pins
 are in `tests/TextDocumentViewTests.cpp`. macOS and Toolbox keep the refusing/default
 view doors; their native implementations and runtime evidence belong to their rail pages.
-The Win32 implementation is described below.
+The macOS and Win32 store rows are described below.
 
+
+### macOS store row and parking (4m-1)
+
+The controller's `TextStoreLedger` owns one `MacTextStore` for each live native
+document. The row owns the TextKit 1 network. Parking leaves the text view without
+a superview or window. Birth streams the source once, places the caret in
+UTF-16 units and seeds the storage directly, outside undo. A replacement
+builds a fresh row with its own empty undo manager. The kernel retires the
+old row after connecting the new row to the document.
+
+Only character edits contribute to the change note. The storage delegate
+captures the processed range and signed length delta during the callback.
+Reading takes this note and samples the current marked state and both ends
+of the selection. A caret request preserves pending edits. A bounded chunk
+reads UTF-16 directly from storage and emits complete logical UTF-8 scalars.
+The command commit door asks the parked view to unmark and leaves its edit
+for the publisher.
+
+Retirement cuts the delegate's borrowed row pointer and clears both native
+delegate slots synchronously. At the controller's drain the row clears undo,
+removes the layout manager from storage and releases the network. Both
+controller exits retire live rows before that drain. View attachment remains
+deferred and splice returns the inherited `UNAVAILABLE`. The Tahoe probes
+cover native mechanisms. Candidate runtime verification on Tahoe and legacy
+build verification on the 10.9 SDK are pending. macOS 10.4–10.6 behavior is
+not runtime-verified.
 
 ### Win32 store row and parking (4w-1)
 
