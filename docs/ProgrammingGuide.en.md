@@ -2384,6 +2384,15 @@ styles; `doc::Link` contributes a linked segment and `doc::Code` contributes
 monospace text. The latter is a visual convention, indistinguishable from
 `Styled(text, Monospace)`, and promises no lossless source round trip.
 
+Markdown export includes the attached document blocks in declaration order. Ordinary
+controls such as `Text` contribute nothing. Underline, color and font size are
+omitted. Bold and italic use stars or inline `<strong>` and `<em>` tags depending
+on the surrounding text. Export preserves document meaning within these conventions.
+Reading Markdown back into a tree and preserving the original spelling are outside
+this contract. Export leaves the destination untouched if it cannot read a string
+or preserve its meaning. This includes ambiguous padding in whitespace-only
+inline code and unprotected separators that readers would strip at block edges.
+
 | Heading level | Default size | Default weight |
 |---|---|---|
 | 1 | 24 | Bold |

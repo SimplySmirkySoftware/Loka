@@ -968,3 +968,17 @@ foreach(target IN ITEMS documentBoundarySample
     target_compile_options(${target} PRIVATE -fno-rtti -fno-exceptions)
   endif()
 endforeach()
+
+loka_compile_pin(document-block-reader
+  REFUSES pins/refuses_document_block_reader.cpp
+  ACCEPTS pins/accepts_document_block_reader.cpp)
+
+# This link probe shares the headless contract binary's configured common library.
+# The native test binaries include the header in the SDK-order and contract-test TUs.
+if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
+  add_executable(documentMarkdownLink pins/document_markdown_link.cpp pins/document_markdown_second.cpp)
+  target_link_libraries(documentMarkdownLink PRIVATE LokaCommonTesting)
+  set_target_properties(documentMarkdownLink PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  loka_enable_warnings(documentMarkdownLink)
+  add_test(NAME documentMarkdownLink COMMAND documentMarkdownLink)
+endif()

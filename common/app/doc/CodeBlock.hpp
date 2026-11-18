@@ -2,7 +2,7 @@
 #define LOKA_APP_DOC_CODEBLOCK_HPP
 #include "app/doc/Lowering.hpp"
 #include "app/style/AttributedTextRead.hpp"
-#include "app/scene/node/ComponentNode.hpp"
+#include "app/doc/BlockReader.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "core/util/OwnedDef.hpp"
 
@@ -52,11 +52,11 @@ namespace loka
       }
       /** Semantic identity with a fixed projected subtree; props are its only state.
           Cost: constructor only copies props, including node-kind probes. */
-      class CodeBlockNode : public scene::ComponentNodeWithProps<CodeBlockProps>
+      class CodeBlockNode : public BlockNode<CodeBlockProps>
       {
       public:
         explicit CodeBlockNode(const CodeBlockProps &props)
-            : scene::ComponentNodeWithProps<CodeBlockProps>(props)
+            : BlockNode<CodeBlockProps>(props)
         {
         }
 

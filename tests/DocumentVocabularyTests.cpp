@@ -4,9 +4,8 @@
 #include "app/doc/Paragraph.hpp"
 #include "app/doc/CodeBlock.hpp"
 #include "app/doc/Inline.hpp"
-#include "platform/null/NullScenePlatformController.hpp"
+#include "support/DocumentFixture.hpp"
 #include "platform/null/context/NullAttributedTextContext.hpp"
-#include "support/PropsReconciliation.hpp"
 #include "support/LokaAllocFailure.hpp"
 #include "support/TestVerify.hpp"
 #include "app/nodes/nestable/LazyView.hpp"
@@ -31,25 +30,6 @@ namespace
   using loka::dsl::testing::SceneTestAccess;
   using namespace PropsReconciliationSupport;
 
-  template <class D> struct Fixture
-  {
-    NullScenePlatformController controller;
-    D definition;
-    Scene scene;
-    explicit Fixture(const D &d, bool validProjection = true)
-        : definition(d),
-          scene((Boundary<Tree<D> >(Props<D>(&this->definition))))
-    {
-      this->scene.mount(&this->controller);
-      SceneTestAccess::updateAttached(this->scene, true);
-      if (validProjection)
-        settle(this->scene);
-    }
-    Node *node()
-    {
-      return root(this->scene)->childrenHead();
-    }
-  };
   AttributedTextNode *leaf(Node *node)
   {
     Node *child = node->asNestable()->childrenHead();

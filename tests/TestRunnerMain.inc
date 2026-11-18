@@ -180,6 +180,11 @@ int main(int argc, char **argv)
   loka::core::LokaAllocAuditCheckpoint("test runner startup");
 #endif
 
+#ifdef LOKA_TEST_RUNNER_CONTRACT
+  if (argc == 4 && std::strcmp(argv[1], "--document-markdown-cases") == 0)
+    return documentMarkdownCases(static_cast<unsigned>(std::strtoul(argv[2], 0, 10)),
+                                 static_cast<unsigned>(std::strtoul(argv[3], 0, 10)));
+#endif
   if (argc == 1)
   {
     lokaRunAllTests();
