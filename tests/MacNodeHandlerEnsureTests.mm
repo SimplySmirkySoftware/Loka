@@ -6,6 +6,7 @@
 #include "MacApp.hpp"
 #include "app/core/AppConfigurable.hpp"
 #include "testing/app/NativeResourceRetirementTestAccess.hpp"
+#include "support/ScrollViewSeat.hpp"
 #include "support/MacRetirementProbe.hpp"
 #include "support/TestVerify.hpp"
 #include "support/RailTextLayoutFixture.hpp"
@@ -2492,6 +2493,7 @@ namespace
       MacScenePlatformController controller(root, scale.railMetrics());
       StackProps props(STACK_AXIS_COLUMN);
       props.gap(20);
+      loka::testing::ScrollViewSeat viewport;
       DirectGapStack column(props);
       scene::NestableNode *container = 0;
       switch (reset)
@@ -2499,7 +2501,9 @@ namespace
       case GAP_DOOR_BOX: container = new BoxNode((BoxProps())); break;
       case GAP_DOOR_ZSTACK: container = new ZStackNode((ZStackProps())); break;
       case GAP_DOOR_GRID: container = new GridNode(GridProps(1, 1)); break;
-      case GAP_DOOR_SCROLL: container = new ScrollViewNode((ScrollViewProps())); break;
+      case GAP_DOOR_SCROLL:
+        container = new ScrollViewNode(ScrollViewProps(viewport.state()));
+        break;
       case GAP_DOOR_COLUMN: container = new StackNode(StackProps(STACK_AXIS_COLUMN)); break;
       }
       LOKA_VERIFY(container != 0);
@@ -2633,8 +2637,9 @@ void testMacGapDoorScrollViewContent()
     MacScenePlatformController controller(root, scale.railMetrics());
     StackProps props(STACK_AXIS_COLUMN);
     props.gap(20);
+    loka::testing::ScrollViewSeat viewport;
     DirectGapStack column(props);
-    ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+    ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(viewport.state()));
     BoxNode *box = new BoxNode((BoxProps()));
     FragmentNode *fragment = new FragmentNode((FragmentProps()));
     TextNode *first = new TextNode(TextProps("Box first"));
