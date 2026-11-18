@@ -325,7 +325,8 @@ MacScenePlatformController::MacScenePlatformController(void *rootView,
       clientHeight_(0),
       focusedEditTextState_(0),
       focusedEditTextControlTag_(0),
-      relayoutPending_(false)
+      relayoutPending_(false),
+      textStoreBinding_(*this, this->textStores_)
 {
   RegisterMacBuiltInSupport(*this);
   if (rootView_)

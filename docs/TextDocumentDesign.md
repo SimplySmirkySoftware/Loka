@@ -240,7 +240,7 @@ The obligations are:
   Retired store rows make their window eligible for the next admission that passes
   the close and busy checks. Each participating rail declares one explicit binding
   after its ledger. Store-only work reaches the existing drain without requesting
-  platform synchronization. Null uses this binding. Win32 and macOS follow in 4r-2.
+  platform synchronization. Null, Win32, and macOS each bind their controller-owned ledger.
 
 - **IME commit:** `App::commitTextInput` opens an Operation (joining an outer turn),
   shares completion's live window walk, and enters each window's shared document
