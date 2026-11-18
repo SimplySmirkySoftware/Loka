@@ -9,6 +9,7 @@
 #include "RectSurfaceFixture.hpp"
 #include "AttributedFixture.hpp"
 #include "DocumentFixture.hpp"
+#include "CardFixture.hpp"
 #include "WebTestHooks.hpp"
 #include "WebTestAccess.hpp"
 #include "WebWindow.hpp"
@@ -44,6 +45,15 @@ namespace loka
       vehicle.roots = webtest::staged.roots;
       vehicle.destroy = webtest::staged.destroy;
       session = &testing::Access::session(static_cast<WebPlatformContext &>(*platform));
+      // Cost: once per Card fixture bootstrap; allocates one config, no row walk.
+      if (webtest::staged.roots == -800)
+        return new webtest::CardConfig<app::CARD_SHADOW_DROP, true>(platform);
+      if (webtest::staged.roots == -801)
+        return new webtest::CardConfig<app::CARD_SHADOW_DROP, false>(platform);
+      if (webtest::staged.roots == -802)
+        return new webtest::CardConfig<app::CARD_SHADOW_WIDE, true>(platform);
+      if (webtest::staged.roots == -803)
+        return new webtest::CardConfig<app::CARD_SHADOW_WIDE, false>(platform);
       if (webtest::staged.roots == -700)
         return webtest::CreateDocument(platform);
       if (webtest::staged.roots == -600)
