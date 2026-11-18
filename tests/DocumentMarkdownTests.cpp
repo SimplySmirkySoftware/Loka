@@ -169,6 +169,7 @@ void testDocumentMarkdownPhysicalLines()
   golden(doc::Paragraph(doc::Link(">x", "u")), "[>x](<u>)\n");
   golden(doc::Paragraph(plain("1") + Styled(". x", Underline)), "1\\. x\n");
   golden(doc::Paragraph(plain("!") + doc::Link("x", "y")), "\\![x](<y>)\n");
+  golden(doc::Paragraph("\xEF\xBB\xBFx\xEF\xBB\xBFy"), "&#xFEFF;x\xEF\xBB\xBFy\n");
   golden(doc::Paragraph("x\\\n\ny"), "x\\\\\\\n\\\ny\n");
   golden(doc::Paragraph(Styled("A\r", Underline) + doc::Code("\nB")), "A` B`\n");
   golden(doc::Paragraph("  x　\n\ty　"), "&#xA0;&#32;x&#x3000;\\\n&#9;y&#x3000;\n");

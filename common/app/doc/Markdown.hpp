@@ -321,6 +321,8 @@ namespace loka
                     return false;
                   if (v == '\n')
                     spelled += "\\\n";
+                  else if (v == 0xfeff && pos == first)
+                    spelled += "&#xFEFF;"; // Bare, a reader takes the fragment's first bytes as a signature.
                   else if (EdgeSpace(v) && edges.contains(this->bytes, pos, end))
                   {
                     char ref[16];

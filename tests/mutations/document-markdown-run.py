@@ -35,6 +35,7 @@ MUTATIONS = [
     ("code-padding", "if (i == end && !onlySpaces)\n                return false;",
      "if (i == end) break;", "Failure"),
     ("bare-strip-space", "&& ExtraStripSpace(v))", "&& v == 0)", "Failure"),
+    ("leading-signature", "else if (v == 0xfeff && pos == first)", "else if (v == 0xfeff && pos == end)", "PhysicalLines"),
 ]
 
 
