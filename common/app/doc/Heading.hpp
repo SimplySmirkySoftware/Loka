@@ -66,18 +66,26 @@ namespace loka
           return std::less<core::State<LinkTarget> *>()(this->activatedLink_.state(), other.activatedLink_.state());
         }
       };
+      /** Default heading look for a normalized level: 24 / 18 / 14 / 12 / 12 / 12, bold.
+          Built from explicit axes on each call, so it does not depend on the
+          initialization order of the style constants. Cost: O(1), no allocation. */
+      inline TextStyle DefaultStyle(int level)
+      {
+        const TextStyle bold = TextStyle().weight(TEXT_WEIGHT_BOLD);
+        if (level == 1)
+          return FontSize<24>() + bold;
+        if (level == 2)
+          return FontSize<18>() + bold;
+        if (level == 3)
+          return FontSize<14>() + bold;
+        return FontSize<12>() + bold;
+      }
       /** Shared leaf lowering for composition and retained application.
           Cost: once per materialization attempt or apply with a destination; folds this value's segments.
           Refusal remains an invalid child value; no eager body read or retry. */
       inline AttributedTextDefinitionWithAttr Lower(const HeadingProps &props)
       {
-        static const TextStyle styles[] = {FontSize<24>() + Bold,
-                                           FontSize<18>() + Bold,
-                                           FontSize<14>() + Bold,
-                                           FontSize<12>() + Bold,
-                                           FontSize<12>() + Bold,
-                                           FontSize<12>() + Bold};
-        return AttributedText(styles[props.level() - 1] + props.content).activatedLink(props.activatedLink_)
+        return AttributedText(DefaultStyle(props.level()) + props.content).activatedLink(props.activatedLink_)
                + BlockStyle().wrap(TEXT_WRAP_WORD);
       }
       /** Semantic identity with a fixed projected subtree; props are its only state.

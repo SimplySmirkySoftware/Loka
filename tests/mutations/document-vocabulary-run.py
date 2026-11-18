@@ -7,16 +7,16 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
 MUTATIONS = [
-    ('a', 'common/app/doc/Heading.hpp', 'styles[props.level() - 1] + props.content',
-     '(void(styles), props.content)', 'testDocumentVocabularyLowering'),
+    ('a', 'common/app/doc/Heading.hpp', 'DefaultStyle(props.level()) + props.content',
+     'props.content', 'testDocumentVocabularyLowering'),
     ('b', 'common/app/doc/Paragraph.hpp', 'doc::Lower(props).applyPropsToNode(leaf);',
      '(void)leaf;', 'testDocumentVocabularyRetainedApply'),
     ('c', 'common/app/doc/Heading.hpp', '.activatedLink(props.activatedLink_)',
      '.activatedLink(scene::NodeState<LinkTarget>())', 'testDocumentVocabularyActivationAndLayout'),
     ('d', 'common/app/doc/Heading.hpp', 'return level < 1 ? 1 : (level > 6 ? 6 : level);',
      'return level;', 'release'),
-    ('e', 'common/app/doc/Heading.hpp', 'FontSize<12>() + Bold',
-     'FontSize<10>() + Bold', 'testDocumentVocabularyLowering'),
+    ('e', 'common/app/doc/Heading.hpp', 'return FontSize<12>() + bold;',
+     'return FontSize<10>() + bold;', 'testDocumentVocabularyLowering'),
     ('f', 'common/app/doc/Heading.hpp', 'doc::Lower(props).applyPropsToNode(leaf);',
      '{ const AttributedTextDefinitionWithAttr lowered = doc::Lower(props); '
      'if (lowered.props.text_->get().valid()) lowered.applyPropsToNode(leaf); }',
@@ -46,7 +46,7 @@ def mutation(entry):
     path = ROOT / filename
     original = path.read_bytes()
     source = original.decode()
-    assert source.count(old) == (3 if letter == 'e' else 1), 'anchor mismatch: ' + letter
+    assert source.count(old) == 1, 'anchor mismatch: ' + letter
     logs = ROOT / 'build/document-vocabulary-mutations'
     logs.mkdir(parents=True, exist_ok=True)
     target = 'documentLevelsRelease' if test == 'release' else 'LokaContractTests'

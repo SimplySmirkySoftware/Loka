@@ -832,6 +832,9 @@ void testDocumentVocabularyInitialRefusalAndFor()
     BoundaryNode::composeSubtree(block, context, COMPOSE_EVENT_ATTACH, root(f.scene));
     LOKA_VERIFY(f.node() == block && value(leaf(block)).segment(0).text.equals(String("latest")));
   }
+#else
+  std::puts(
+      "[skip] CodeBlock leaf capture refusal needs the wrapped-new allocation hook (LOKA_CARD_CLONE_FAULT_PINS).");
 #endif
 #ifdef TEST_BUILD
   doc::HeadingDefinition heading = doc::Heading(1, "first");

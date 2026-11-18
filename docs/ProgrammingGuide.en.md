@@ -2431,4 +2431,5 @@ update shows it again; the old pixels are not necessarily erased at once. One
 exception: when the value is fine but its text cannot be read for the moment,
 native rails show nothing, while Web may keep showing the previous text until
 the read succeeds. A block whose children could not be created under memory
-pressure stays empty; updating its content does not create them.
+pressure is empty; updating its content alone does not create them, but the
+next time its owner attaches it they are created from the latest content.
