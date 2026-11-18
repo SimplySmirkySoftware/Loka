@@ -307,7 +307,6 @@ TextStoreBirth MacTextStore::create(TextStoreLedger &ledger,
   [view setUsesFontPanel:NO];
   [view setVerticallyResizable:YES];
   [view setMaxSize:NSMakeSize(CGFLOAT_MAX, CGFLOAT_MAX)];
-  [view setFont:(NSFont *)controller.textFont(TextStyle())];
   [row->delegate_ setOwner:row];
   [row->storage_ setDelegate:(id)row->delegate_];
   [view setDelegate:(id)row->delegate_];
@@ -316,6 +315,9 @@ TextStoreBirth MacTextStore::create(TextStoreLedger &ledger,
   [storage replaceCharactersInRange:NSMakeRange(0, 0) withString:body];
   [storage endEditing];
   [body release];
+  // After seeding: characters written straight to storage carry no font attribute, and a plain-text
+  // view's setFont: covers the whole body as well as the typing attributes (Tahoe 26.7.1).
+  [view setFont:(NSFont *)controller.textFont(TextStyle())];
   if (row->matches(view))
     [view setSelectedRange:NSMakeRange(caret, 0)];
   if (!row->matches(view))

@@ -203,7 +203,17 @@ void testMacTextStoreChanges()
   changed(controller, row, TextChangedRange(1, 2, 3));
   [view setSelectedRange:NSMakeRange(0, 0)];
   [view insertText:@"Z" replacementRange:NSMakeRange(NSNotFound, 0)];
-  changed(controller, row, TextChangedRange(0, 0, 1));
+  {
+    // A plain-text view fixes attributes over the paragraph while typing, so the native edited
+    // range widens to it (Tahoe 26.7.1: 0+5 -> 0+6 for one inserted unit). The note must cover
+    // the edit and carry its net size change; ranges are a guideline (page 2).
+    TextStoreReading typed;
+    TextChangedRange range;
+    LOKA_VERIFY(controller.peekTextStore(row) && controller.readTextStore(row, typed) && typed.changed()
+                && typed.queryRange(range));
+    LOKA_VERIFY(range.start() == 0 && range.insertedLength() == range.length() + 1);
+    LOKA_VERIFY(!controller.peekTextStore(row));
+  }
   [view setMarkedText:@"k" selectedRange:NSMakeRange(1, 0) replacementRange:NSMakeRange(NSNotFound, 0)];
   LOKA_VERIFY(controller.readTextStore(row, reading) && reading.marked());
   NSString *before = [[storage string] copy];
@@ -348,10 +358,12 @@ void testMacTextStoreBracket()
 {
   Pool pool;
   MacScenePlatformController controller(0, RailMetrics());
-  // The caret precedes each edited range, so undo and redo have an unambiguous native selection.
+  // The caret precedes each edited range; undo and redo selections are recorded native observations.
   NSString *inputs[] = {@"+", @"", @"d", @"reject"};
   NSString *results[] = {@"body+", @"boy", @"body", @"body"};
   const NSRange ranges[] = {NSMakeRange(4, 0), NSMakeRange(2, 1), NSMakeRange(2, 1), NSMakeRange(2, 1)};
+  const NSRange undoSelections[] = {NSMakeRange(4, 0), NSMakeRange(2, 1), NSMakeRange(2, 1), NSMakeRange(0, 0)};
+  const NSRange redoSelections[] = {NSMakeRange(5, 0), NSMakeRange(2, 0), NSMakeRange(3, 0), NSMakeRange(0, 0)};
   for (unsigned i = 0; i < 4; ++i)
   {
     Pool iteration;
@@ -384,19 +396,27 @@ void testMacTextStoreBracket()
     [undo endUndoGrouping];
     LOKA_VERIFY(accepted == (i != 3) && ![view isEditable] && [[view string] isEqualToString:results[i]]);
     LOKA_VERIFY(NSEqualRanges([view selectedRange], NSMakeRange(1, 0)));
-    LOKA_VERIFY([undo canUndo] == accepted);
+    // The test's own group stays on the stack even when empty, so canUndo is true in both cases.
+    LOKA_VERIFY([undo canUndo]);
     if (accepted)
     {
       [probe setPhase:2];
       [view setEditable:YES];
       [undo undo];
       LOKA_VERIFY([[view string] isEqualToString:@"body"] && ![undo canUndo] && [undo canRedo]);
-      LOKA_VERIFY(NSEqualRanges([view selectedRange], NSMakeRange(1, 0)));
+      // Observed on Tahoe 26.7.1: undo selects the restored range, redo collapses after the replacement.
+      LOKA_VERIFY(NSEqualRanges([view selectedRange], undoSelections[i]));
       [undo redo];
-      LOKA_VERIFY([[view string] isEqualToString:results[i]] && NSEqualRanges([view selectedRange], NSMakeRange(1, 0)));
+      LOKA_VERIFY([[view string] isEqualToString:results[i]] && NSEqualRanges([view selectedRange], redoSelections[i]));
     }
     else
+    {
       LOKA_VERIFY(!controller.peekTextStore(row));
+      // A refused approval registers nothing: undoing the empty group changes neither body nor selection.
+      [undo undo];
+      LOKA_VERIFY([[view string] isEqualToString:@"body"] && NSEqualRanges([view selectedRange], NSMakeRange(1, 0))
+                  && ![undo canUndo]);
+    }
     [probe checkResult:accepted];
     [center removeObserver:probe];
     [probe release];
