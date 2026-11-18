@@ -1,4 +1,5 @@
 #include "Win32ClipBoxTests.hpp"
+#include "support/ScrollViewSeat.hpp"
 #include "support/TestVerify.hpp"
 #include "support/LifecycleFactTestAccess.hpp"
 #include "support/WindowAdmissionTestApp.hpp"
@@ -59,6 +60,7 @@ namespace
   {
     Host host;
     Win32ScenePlatformController controller;
+    loka::testing::ScrollViewSeat viewportSeat;
     Node *tree;
     explicit Fixture(unsigned dpi = 96)
         : controller(this->host.window.hwnd(), loka::win32::Win32DisplayScale(dpi, RailMetrics())),
@@ -339,7 +341,7 @@ void testWin32ClipBoxMixing()
     }
     else if (arrangement == 1 || arrangement == 2)
     {
-      ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+      ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(f.viewportSeat.state()));
       if (arrangement == 1)
       {
         f.tree = clip;
@@ -496,7 +498,7 @@ void testWin32ClipBoxEntryRefusalKeepsLogicalHeight()
 void testWin32ClipBoxChannelRefusalKeepsPlacement()
 {
   Fixture f;
-  ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+  ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(f.viewportSeat.state()));
   f.tree = scroll;
   BoxNode *clip = box(100, 60);
   BoxNode *body = box(80, 40, false);
@@ -675,7 +677,7 @@ void testWin32ClipBoxEmptyAreaHitPassesThrough()
     ScrollViewNode *scroll = 0;
     if (insideScroll)
     {
-      scroll = new ScrollViewNode((ScrollViewProps()));
+      scroll = new ScrollViewNode(ScrollViewProps(f.viewportSeat.state()));
       scroll->addChild(clip);
       f.tree = scroll;
     }
@@ -720,7 +722,7 @@ void testWin32ClipBoxEmptyAreaRealClickPassesThrough()
     ScrollViewNode *scroll = 0;
     if (insideScroll)
     {
-      scroll = new ScrollViewNode((ScrollViewProps()));
+      scroll = new ScrollViewNode(ScrollViewProps(f.viewportSeat.state()));
       scroll->addChild(clip);
       f.tree = scroll;
     }

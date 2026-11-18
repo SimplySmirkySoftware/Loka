@@ -2,6 +2,7 @@
 #include "context/Win32ClipBoxContext.hpp"
 #include "context/Win32ZStackContext.hpp"
 #include "Win32WideApiTests.hpp"
+#include "support/ScrollViewSeat.hpp"
 #include "support/TestVerify.hpp"
 
 #include <cassert>
@@ -129,7 +130,8 @@ void testWin32CustomWindowClassesUseWideApiFamily()
     LOKA_VERIFY(GetWindowTextW(attributed.paintHwnd(), roundTrip, 8) == 3);
     LOKA_VERIFY(std::wcscmp(roundTrip, payload) == 0);
 
-    loka::app::ScrollViewNode scrollViewNode((loka::app::ScrollViewProps()));
+    loka::testing::ScrollViewSeat viewportSeat;
+    loka::app::ScrollViewNode scrollViewNode(loka::app::ScrollViewProps(viewportSeat.state()));
     Win32ScrollViewContext scrollView(
         &controller, root, 90, 0, 80, 60, &scrollViewNode);
     verifyWideChildWindow(root, L"LOKA_SCROLL_VIEW");

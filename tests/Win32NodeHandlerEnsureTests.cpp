@@ -16,6 +16,7 @@
 #include "platform/String.hpp"
 #include <cwchar>
 
+#include "support/ScrollViewSeat.hpp"
 #include "support/TestVerify.hpp"
 #include "support/RailTextLayoutFixture.hpp"
 #include <cassert>
@@ -2957,6 +2958,7 @@ namespace
       Win32ScenePlatformController controller(root, scale);
       StackProps props(STACK_AXIS_COLUMN);
       props.gap(20);
+      loka::testing::ScrollViewSeat viewportSeat;
       DirectNaturalWidthRow column(props);
       scene::NestableNode *container = 0;
       switch (reset)
@@ -2964,7 +2966,9 @@ namespace
       case GAP_DOOR_BOX: container = new BoxNode((BoxProps())); break;
       case GAP_DOOR_ZSTACK: container = new ZStackNode((ZStackProps())); break;
       case GAP_DOOR_GRID: container = new GridNode(GridProps(1, 1)); break;
-      case GAP_DOOR_SCROLL: container = new ScrollViewNode((ScrollViewProps())); break;
+      case GAP_DOOR_SCROLL:
+        container = new ScrollViewNode(ScrollViewProps(viewportSeat.state()));
+        break;
       case GAP_DOOR_COLUMN: container = new StackNode(StackProps(STACK_AXIS_COLUMN)); break;
       }
       LOKA_VERIFY(container != 0);
@@ -3085,8 +3089,9 @@ void testWin32GapDoorScrollViewContent()
     Win32ScenePlatformController controller(root, scale);
     StackProps props(STACK_AXIS_COLUMN);
     props.gap(20);
+    loka::testing::ScrollViewSeat viewportSeat;
     DirectNaturalWidthRow column(props);
-    ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+    ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(viewportSeat.state()));
     BoxNode *box = new BoxNode((BoxProps()));
     FragmentNode *fragment = new FragmentNode((FragmentProps()));
     TextNode *first = new TextNode(TextProps("Box first"));
