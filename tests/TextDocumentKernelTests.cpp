@@ -474,7 +474,7 @@ namespace
   class BindingProbe : public SceneTestSupport::RecordingPlatformController
   {
   public:
-    void bindTwice(const TextStoreLedger &ledger)
+    void bindTwice(TextStoreLedger &ledger)
     {
       TextStoreAdmissionBinding first(*this, ledger);
       TextStoreAdmissionBinding second(*this, ledger);
@@ -566,9 +566,18 @@ void testTextStoreUnboundAdmission()
   LOKA_VERIFY(!controller.hasRetiredTextStores());
 }
 
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define LOKA_TEXT_STORE_BINDING_PIN_ASAN 1
+#endif
+#endif
+#if defined(__SANITIZE_ADDRESS__)
+#define LOKA_TEXT_STORE_BINDING_PIN_ASAN 1
+#endif
+
 void testTextStoreDoubleAdmissionBinding()
 {
-#if defined(__linux__) && defined(LOKA_LIFECYCLE_AUDIT) && !defined(NDEBUG) && !defined(__SANITIZE_ADDRESS__)
+#if defined(__linux__) && defined(LOKA_LIFECYCLE_AUDIT) && !defined(NDEBUG) && !defined(LOKA_TEXT_STORE_BINDING_PIN_ASAN)
   const pid_t child = fork();
   LOKA_VERIFY(child >= 0);
   if (!child)

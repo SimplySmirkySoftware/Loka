@@ -122,7 +122,7 @@ namespace loka
         class TextStoreAdmissionBinding
         {
         public:
-          TextStoreAdmissionBinding(IPlatformController &controller, const TextStoreLedger &ledger)
+          TextStoreAdmissionBinding(IPlatformController &controller, TextStoreLedger &ledger)
               : controller_(controller)
           {
             assert(!controller.textStoreAdmission_);
