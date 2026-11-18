@@ -24,12 +24,14 @@ export async function runDocumentCells(client, navigate) {
     check(link && getComputedStyle(link).textDecorationLine==='underline','link style');
     const rectangles=leaves.map(e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}});
     check(rectangles[0].x===rectangles[1].x && rectangles[2].x-rectangles[1].x===3,'existing Card content inset');
-    check(document.querySelectorAll('[data-loka-token]').length===5,'one window and four leaves; no CardBand resources');
+    check(document.querySelectorAll('[data-loka-token]').length===9,'one window, four leaves and four frame strips');
     const root=heading.parentElement;
-    check(root.children.length===4 && leaves.every(e=>e.parentElement===root),'no frame or decoration elements');
+    check(root.children.length===8 && leaves.every(e=>e.parentElement===root),'leaves and frame share the root');
+    const strips=[...root.children].filter(e=>api.runsRow(+e.dataset.lokaToken).kind===8);
+    check(strips.length===4 && strips.every(e=>getComputedStyle(e.firstElementChild).borderTopStyle==='solid'),'Card frame paint');
     check(getComputedStyle(code).boxShadow==='none','no shadow drawn');
     check(rectangles[1].width-rectangles[2].width===9,'horizontal Card allowances');
-    check(rectangles[2].height>0 && rectangles[3].y-rectangles[2].y-rectangles[2].height===9,'code followed by refused band seats');
+    check(rectangles[2].height>0 && rectangles[3].y-rectangles[2].y-rectangles[2].height===9,'gap after framed code');
     for(const leaf of leaves) {
       const row=api.runsRow(+leaf.dataset.lokaToken), words=row.runs.words;
       const parent=leaf.getBoundingClientRect();

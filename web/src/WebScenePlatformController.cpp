@@ -7,6 +7,7 @@
 #include "WebPopupContext.hpp"
 #include "WebAttributedTextContext.hpp"
 #include "app/nodes/AttributedText.hpp"
+#include "WebCardBandContext.hpp"
 #include "WebRectSurfaceContext.hpp"
 #include "WebTextDescriptor.hpp"
 #include "WebScenePlatformController.hpp"
@@ -51,6 +52,7 @@ namespace
       return ctx;
     }
   };
+  Handler<CardBandNode, WebCardBandContext, loka::web::CARD_BAND> CardBandHandler;
   Handler<RectSurfaceNode, WebRectSurfaceContext, loka::web::RECT_SURFACE> RectSurfaceHandler;
   Handler<PopupMenuNode, WebPopupContext, loka::web::POPUP> PopupHandler;
   Handler<AttributedTextNode, WebAttributedTextContext, loka::web::ATTRIBUTED_TEXT> AttributedTextHandler;
@@ -61,8 +63,7 @@ namespace
   RefusedNodeHandler Refused[] = {RefusedNodeHandler(NodeTypeToken<EditTextNode>()),
                                   RefusedNodeHandler(NodeTypeToken<TextEditorNode>()),
                                   RefusedNodeHandler(NodeTypeToken<ImageViewNode>()),
-                                  RefusedNodeHandler(NodeTypeToken<ScrollBarNode>()),
-                                  RefusedNodeHandler(NodeTypeToken<CardBandNode>())};
+                                  RefusedNodeHandler(NodeTypeToken<ScrollBarNode>())};
   short Narrow(int n)
   {
     return static_cast<short>(n < SHRT_MIN ? SHRT_MIN : n > SHRT_MAX ? SHRT_MAX : n);
@@ -199,6 +200,8 @@ bool WebScenePlatformController::prepareProjectedLayout(Node *node, LayoutState 
     return PopupHandler.ensureContext(node, this, state) != 0;
   if (node->asCellNode())
     return CellHandler.ensureContext(node, this, state) != 0;
+  if (node->asCardBandNode())
+    return CardBandHandler.ensureContext(node, this, state) != 0;
   for (unsigned i = 0; i < sizeof(Refused) / sizeof(Refused[0]); ++i)
     if (Refused[i].nodeTypeKey() == node->nodeTypeKey())
     {
