@@ -70,7 +70,7 @@ using namespace loka::macos::testing;
 
 namespace
 {
-  /** Transient UTF-16 units, including embedded NUL. Ownership passes to the seeding string; only the storage survives birth. */
+  /** Transient UTF-16 units, including embedded NUL. The seeding string takes them; only the storage survives. */
   class BirthBuffer
   {
   public:
