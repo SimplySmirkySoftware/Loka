@@ -1,7 +1,7 @@
 #ifndef LOKA_APP_DOC_PARAGRAPH_HPP
 #define LOKA_APP_DOC_PARAGRAPH_HPP
 #include "app/doc/Lowering.hpp"
-#include "app/scene/node/ComponentNode.hpp"
+#include "app/doc/BlockReader.hpp"
 
 namespace loka
 {
@@ -52,11 +52,11 @@ namespace loka
       }
       /** Semantic identity with a fixed projected subtree; props are its only state.
           Cost: constructor only copies props, including node-kind probes. */
-      class ParagraphNode : public scene::ComponentNodeWithProps<ParagraphProps>
+      class ParagraphNode : public BlockNode<ParagraphProps>
       {
       public:
         explicit ParagraphNode(const ParagraphProps &props)
-            : scene::ComponentNodeWithProps<ParagraphProps>(props)
+            : BlockNode<ParagraphProps>(props)
         {
         }
 

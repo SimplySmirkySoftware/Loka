@@ -1,7 +1,7 @@
 #ifndef LOKA_APP_DOC_HEADING_HPP
 #define LOKA_APP_DOC_HEADING_HPP
 #include "app/doc/Lowering.hpp"
-#include "app/scene/node/ComponentNode.hpp"
+#include "app/doc/BlockReader.hpp"
 
 namespace loka
 {
@@ -90,11 +90,11 @@ namespace loka
       }
       /** Semantic identity with a fixed projected subtree; props are its only state.
           Cost: constructor only copies props, including node-kind probes. */
-      class HeadingNode : public scene::ComponentNodeWithProps<HeadingProps>
+      class HeadingNode : public BlockNode<HeadingProps>
       {
       public:
         explicit HeadingNode(const HeadingProps &props)
-            : scene::ComponentNodeWithProps<HeadingProps>(props)
+            : BlockNode<HeadingProps>(props)
         {
         }
 

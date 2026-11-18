@@ -53,9 +53,20 @@ namespace loka
     template <class ItemT, class FactoryT, class KeyExprT>
     class ForBuilder;
 
+    namespace doc
+    {
+      class BlockReader;
+    }
     namespace testing { class NodeObservedUsesTestAccess; }
     namespace scene
     {
+      enum DocumentBlockRead
+      {
+        DOCUMENT_BLOCK_NONE,
+        DOCUMENT_BLOCK_READ,
+        DOCUMENT_BLOCK_REFUSED
+      };
+
       template <typename T> class Reported;
       template <typename T> class Request;
       template <typename T> class RequestWithReply;
@@ -639,6 +650,13 @@ namespace loka
         {
           return NODE_KIND_UNKNOWN;
         }
+        /** Reads this node's semantic block during a synchronous owner borrow.
+            Cost: one dispatch per attached node visited by an explicit document exit, no child walk. */
+        virtual DocumentBlockRead readDocumentBlock(::loka::app::doc::BlockReader &) const
+        {
+          return DOCUMENT_BLOCK_NONE;
+        }
+
         virtual INestable *asNestable()
         {
           return 0;
