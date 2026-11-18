@@ -8,5 +8,9 @@ void testMacTextStoreReplacement();
 void testMacTextStoreRetirement();
 void testMacTextStoreExits();
 void testMacTextStoreConformance();
+void testMacTextStoreReplacementAdmission();
+void testMacTextStoreRefusedBirthAdmission();
+void testMacTextStoreBusyAdmission();
+void testMacTextStoreRemountAdmission();
 void testMacTextStoreWindowClose();
 #endif

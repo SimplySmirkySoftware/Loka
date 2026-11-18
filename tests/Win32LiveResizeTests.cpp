@@ -2,6 +2,7 @@
 #include "Win32LiveResizeTests.hpp"
 #include "Win32SceneLayout.hpp"
 
+#include "support/ScrollViewSeat.hpp"
 #include "support/TestVerify.hpp"
 
 #include <cassert>
@@ -197,7 +198,8 @@ namespace
     // One logical unit per native pixel, independent of the desktop's DPI.
     Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
     RegisterWin32BuiltInSupport(controller);
-    loka::app::ScrollViewNode viewport((loka::app::ScrollViewProps()));
+    loka::testing::ScrollViewSeat viewportSeat;
+    loka::app::ScrollViewNode viewport(loka::app::ScrollViewProps(viewportSeat.state()));
     loka::app::ButtonNode *button = new loka::app::ButtonNode(loka::app::ButtonProps().text("Content"));
     viewport.addChild(button);
     controller.onChange(&viewport, loka::app::scene::NODE_DIRTY_NONE, false);

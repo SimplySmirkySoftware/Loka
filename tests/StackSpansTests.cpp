@@ -1,6 +1,7 @@
 #include "app/layout/ColumnLayout.hpp"
 #include "support/LayoutY.hpp"
 #include "StackSpansTests.hpp"
+#include "support/ScrollViewSeat.hpp"
 #include "support/TestVerify.hpp"
 #include "support/LokaAllocFailure.hpp"
 #include "app/layout/StackSpans.hpp"
@@ -113,7 +114,8 @@ void testStackSpansAllocationRefusal()
 void testStackSpansColumnCollection()
 {
   NullScenePlatformController platform;
-  ScrollViewNode scroll((ScrollViewProps()));
+  loka::testing::ScrollViewSeat viewport;
+  ScrollViewNode scroll(ScrollViewProps(viewport.state()));
   StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
   scroll.addChild(column);
   for (int i = 0; i < 4; ++i)

@@ -1,3 +1,4 @@
+#include "support/ScrollViewSeat.hpp"
 /** Render-order press pins. Native contexts, render transaction and input door
     are production code; the host supplies fixed leaf geometry only. */
 namespace press_door
@@ -334,8 +335,11 @@ namespace press_door
   };
   void insetBarBoundary()
   {
+    const int topInset = 80;
+    loka::testing::ScrollViewSeat scrollSeat(-topInset);
     Fixture f(WindowProps().contentMargin(0));
-    ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps().contentInsets(ScrollViewContentInsets::of(80, 0)));
+    ScrollViewNode *scroll =
+        new ScrollViewNode(ScrollViewProps(scrollSeat.state()).contentInsets(ScrollViewContentInsets::of(topInset, 0)));
     scroll->setContext(new InsetScrollProjection(scroll));
     f.stack.addChild(scroll);
     NotifySubtreeNodeAttached(scroll);

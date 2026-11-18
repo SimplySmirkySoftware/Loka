@@ -1,3 +1,4 @@
+#include "support/ScrollViewSeat.hpp"
 #include "ToolboxHost.hpp"
 #include "ToolboxInputDoor.hpp"
 #include "ToolboxScrollViewDecisions.hpp"
@@ -219,7 +220,8 @@ namespace
   void clearControls()
   {
     Fixture f;
-    ScrollViewNode scroll((ScrollViewProps()));
+    loka::testing::ScrollViewSeat scrollSeat;
+    ScrollViewNode scroll(ScrollViewProps(scrollSeat.state()));
     const Rect viewport = {20, 20, 100, 180};
     f.controller.ensureViewportScrollBarControl(viewport, &scroll, 300, 64, 0, ToolboxScrollViewMetrics(50, 0), true);
     LOKA_VERIFY(f.controller.scrollControls().size() == 3);
@@ -247,7 +249,7 @@ namespace
     MutableState<Frame> value(Frame(7, 8, 90, 80));
     tracker.addState(&value);
     NodeState<Frame> seat(&value, &tracker);
-    ScrollViewNode scroll(ScrollViewProps().viewport(seat).contentInsets(ScrollViewContentInsets::of(12, 3)));
+    ScrollViewNode scroll(ScrollViewProps(seat).contentInsets(ScrollViewContentInsets::of(12, 3)));
     NotifySubtreeNodeAttached(&scroll);
     const Rect viewport = {0, 0, 80, 100};
     controller.ensureViewportScrollBarControl(
