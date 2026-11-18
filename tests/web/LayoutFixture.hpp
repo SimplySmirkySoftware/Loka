@@ -116,7 +116,7 @@ namespace webtest
         else if (layoutVariant() == 5)
           row << ScrollBar();
         else if (layoutVariant() == 6)
-          row << scene::NodeDefinition<CardBandProps, CardBandNode>(CardBandProps());
+          row << scene::NodeDefinition<CardBandProps, CardBandNode>(CardBandProps(CARD_BAND_TOP));
         else
           row << ImageView();
         c.declare(VStack().gap(0) << row << Text("after"));
