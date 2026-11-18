@@ -212,7 +212,7 @@ namespace smirkycard
   void CardScene::replaceWith(CardScene *next)
   {
     assert(next && this->getWindow());
-    this->getWindow()->sceneManager()->commitTransaction(this, next);
+    this->getWindow()->sceneManager()->requestReplacement(next);
   }
   bool JsCardProps::operator<(const loka::app::scene::PropsBase &rhs) const
   {

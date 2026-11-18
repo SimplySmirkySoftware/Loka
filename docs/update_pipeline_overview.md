@@ -89,7 +89,7 @@ The initial-mount pins in `PartialTreePublicationTests.cpp` cover these paths.
 atomicity gap (slice 3 of #144). Replacement and declaration staging are outside
 this initial-mount guarantee.
 
-Change the root's shape through `SceneManager::commitTransaction`, or put a
+Change the root's shape through `SceneManager::requestReplacement`, or put a
 `Match` one level below it. Scene adoption updates a desired identity;
 `Window::scene()` continues to expose the installed scene until the next App
 admission. Pending replacement is the comparison of those identities.

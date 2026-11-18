@@ -243,7 +243,7 @@ void testSceneMenuBarCloneRefusalKeepsOldScene()
   LOKA_VERIFY(attachment.open(*oldBar));
   Scene *candidate = new Scene(Boundary<Root>());
   loka::app::testing::failMenuBarDefinitionClones(100);
-  LOKA_VERIFY(window.sceneManager()->commitTransaction(0, candidate));
+  LOKA_VERIFY(window.sceneManager()->requestReplacement(candidate));
   app.operationLoop();
   LOKA_VERIFY(window.scene() == old && old->menuBar() == oldBar);
   LOKA_VERIFY(!Access::composed(*candidate) && !candidate->menuBar());
@@ -262,7 +262,7 @@ void testSceneMenuBarCloneRefusalKeepsOldScene()
   f.refuseNode = true;
   Scene *nodeRefusal = new Scene(Boundary<Root>());
   const MenuBarDefinition *installed = candidate->menuBar();
-  LOKA_VERIFY(window.sceneManager()->commitTransaction(0, nodeRefusal));
+  LOKA_VERIFY(window.sceneManager()->requestReplacement(nodeRefusal));
   app.operationLoop();
   LOKA_VERIFY(window.scene() == candidate && candidate->menuBar() == installed);
   LOKA_VERIFY(!Access::composed(*nodeRefusal) && !nodeRefusal->menuBar());
@@ -364,7 +364,7 @@ void testMenuAttachmentDispatchAfterSceneReplacement()
   attachment.dispatch(1);
   LOKA_VERIFY(f.calls == 1);
   Scene *replacement = new Scene(Boundary<Root>());
-  LOKA_VERIFY(window.sceneManager()->commitTransaction(0, replacement));
+  LOKA_VERIFY(window.sceneManager()->requestReplacement(replacement));
   app.operationLoop();
   LOKA_VERIFY(window.scene() == replacement && f.disconnectedAtDetach);
   attachment.dispatch(1);
