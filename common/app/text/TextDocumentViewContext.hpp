@@ -31,10 +31,14 @@ namespace loka
           return this->link_.remote();
         }
 
+        /** Terminal cleanup only. Derived destructors may call this nonvirtual, idempotent door
+            while their resources and controller are live. Detaches without kernel reentry and
+            leaves Scene publication, independent of destructor-time onFactChanged delivery. */
+        void retireView();
+
       private:
         IPlatformController &controller_;
         void attachView();
-        void retireView();
         friend class ::loka::app::detail::TextDocumentViewAccess;
         friend class ::loka::app::detail::TextDocumentPublisher;
       };

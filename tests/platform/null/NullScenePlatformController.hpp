@@ -185,6 +185,7 @@ public:
   {
     enum Kind
     {
+      SETTLE,
       ATTACH,
       DETACH,
       PRESENT,
@@ -195,20 +196,23 @@ public:
         : kind(ATTACH),
           row(0),
           borrowed(false),
-          links(0)
+          links(0),
+          marked(false)
     {
     }
     TextViewCall(Kind k, loka::app::scene::TextStoreRow &r, bool b, unsigned linked = 0)
         : kind(k),
           row(&r),
           borrowed(b),
-          links(linked)
+          links(linked),
+          marked(static_cast<NullTextStore &>(r).marked())
     {
     }
     Kind kind;
     const loka::app::scene::TextStoreRow *row;
     bool borrowed;
     unsigned links;
+    bool marked;
   };
   /** Bounded fixture evidence: recording detach must not allocate. */
   class TextViewCalls
@@ -257,6 +261,7 @@ public:
   {
     static_cast<NullTextStore &>(row).commit();
   }
+  virtual void settleTextComposition(loka::app::scene::TextStoreRow &row);
   virtual bool readTextStore(loka::app::scene::TextStoreRow &row, loka::app::scene::TextStoreReading &out)
   {
 #ifdef TEST_BUILD

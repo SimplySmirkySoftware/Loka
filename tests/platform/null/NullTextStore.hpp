@@ -134,18 +134,19 @@ public:
     this->commitProbe_.callback = 0;
     if (callback)
       callback(data);
-    if (this->composition_.marked)
-    {
-      const unsigned long added = static_cast<unsigned long>(this->composition_.text.size());
-      if (added)
-      {
-        const loka::app::TextChangedRange range(this->length(), 0, added);
-        this->committedText_ += this->composition_.text;
-        this->caret_ = this->anchor_ = this->length();
-        this->changes_.noteEdit(&range);
-      }
-      this->composition_ = Composition();
-    }
+    this->foldComposition();
+  }
+  void settle()
+  {
+    this->foldComposition();
+  }
+  bool marked() const
+  {
+    return this->composition_.marked;
+  }
+  loka::app::scene::TextDocumentViewContext *attachedContext() const
+  {
+    return this->attachedView();
   }
   bool pending() const
   {
@@ -206,6 +207,21 @@ public:
   }
 
 private:
+  void foldComposition()
+  {
+    if (this->composition_.marked)
+    {
+      const unsigned long added = static_cast<unsigned long>(this->composition_.text.size());
+      if (added)
+      {
+        const loka::app::TextChangedRange range(this->length(), 0, added);
+        this->committedText_ += this->composition_.text;
+        this->caret_ = this->anchor_ = this->length();
+        this->changes_.noteEdit(&range);
+      }
+      this->composition_ = Composition();
+    }
+  }
   static std::string materialize(loka::app::TextStoreSource &source)
   {
     std::string out;

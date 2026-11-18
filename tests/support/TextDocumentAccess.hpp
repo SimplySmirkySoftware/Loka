@@ -15,6 +15,20 @@ namespace loka
       bool consumeTextStoreCreationFailure();
       struct TextDocumentAccess
       {
+        struct ClaimCount
+        {
+          unsigned value;
+          void visit(scene::TextViewClaim &)
+          {
+            ++this->value;
+          }
+        };
+        static unsigned claimCount(scene::SceneTextDocuments &documents)
+        {
+          ClaimCount count = {0};
+          static_cast<scene::MemberList<scene::TextViewClaim> &>(documents).visit(count);
+          return count.value;
+        }
         static void complete(scene::SceneTextDocuments &documents, scene::IPlatformController &controller)
         {
           detail::TextDocumentPublisher::complete(documents, controller);

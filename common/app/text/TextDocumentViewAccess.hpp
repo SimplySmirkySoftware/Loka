@@ -1,5 +1,6 @@
 #ifndef LOKA_APP_TEXT_DOCUMENT_VIEW_ACCESS_HPP
 #define LOKA_APP_TEXT_DOCUMENT_VIEW_ACCESS_HPP
+#include "app/text/TextStore.hpp"
 #include "app/text/TextViewValues.hpp"
 namespace loka
 {
@@ -16,6 +17,8 @@ namespace loka
       /** Private kernel admission and projection doors; no app mutation authority. */
       class TextDocumentViewAccess
       {
+        static scene::TextDocumentViewContext *fromClaim(scene::TextViewClaim *);
+        friend scene::TextDocumentViewContext *scene::TextStoreRow::attachedView() const;
         static void attach(scene::TextViewClaim &, TextDocument &, scene::TextDocumentViewContext &);
         static void detach(scene::TextViewClaim &);
         static void present(scene::TextViewClaim &, const TextViewPresentation &);

@@ -823,6 +823,11 @@ namespace loka
   {
     namespace scene
     {
+      TextDocumentViewContext *TextStoreRow::attachedView() const
+      {
+        return ::loka::app::detail::TextDocumentViewAccess::fromClaim(this->view_.remote());
+      }
+
       void TextStoreRow::retire()
       {
         if (this->phase_ == RETIRED)
@@ -901,6 +906,10 @@ namespace loka
     } // namespace scene
     namespace detail
     {
+      scene::TextDocumentViewContext *TextDocumentViewAccess::fromClaim(scene::TextViewClaim *claim)
+      {
+        return static_cast<scene::TextDocumentViewContext *>(claim);
+      }
       void TextDocumentViewAccess::attach(scene::TextViewClaim &claim,
                                           TextDocument &document,
                                           scene::TextDocumentViewContext &context)
@@ -939,6 +948,8 @@ namespace loka
         bool attached;
         {
           BorrowScope borrow(context.controller_);
+          if (presentation.readOnly())
+            context.controller_.settleTextComposition(*store);
           attached = context.controller_.attachTextView(*store, context, presentation);
         }
         if (!attached)
@@ -955,6 +966,7 @@ namespace loka
         if (store)
         {
           scene::BorrowScope borrow(store->controller());
+          store->controller().settleTextComposition(*store);
           store->controller().detachTextView(*store);
         }
         claim.unlink();
@@ -965,6 +977,8 @@ namespace loka
         if (!store)
           return;
         scene::BorrowScope borrow(store->controller());
+        if (presentation.readOnly())
+          store->controller().settleTextComposition(*store);
         store->controller().applyTextViewPresentation(*store, presentation);
       }
     } // namespace detail

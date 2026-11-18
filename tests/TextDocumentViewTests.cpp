@@ -156,9 +156,18 @@ namespace
       return this->composition().root();
     }
   };
-  template <class Root> struct ViewFixture
+  class DefaultSettleController : public NullScenePlatformController
   {
-    NullScenePlatformController controller;
+  public:
+    virtual void settleTextComposition(TextStoreRow &row)
+    {
+      this->textViewCalls.push_back(TextViewCall(TextViewCall::SETTLE, row, this->borrowPhase().open()));
+      IPlatformController::settleTextComposition(row);
+    }
+  };
+  template <class Root, class Controller = NullScenePlatformController> struct ViewFixture
+  {
+    Controller controller;
     Scene scene;
     ViewFixture()
         : scene(Boundary<Root>())
@@ -922,7 +931,7 @@ void testTextViewReentryIdentityAndRefusal()
 }
 void testTextViewDetachPreservesNativeFacts()
 {
-  Fixture f;
+  ViewFixture<ViewRoot, DefaultSettleController> f;
   ViewRoot &root = f.root();
   TextDocumentAccess::body(root.first, "body");
   TextDocumentAccess::selection(root.first, 3, 1);
@@ -1004,12 +1013,265 @@ void testTextViewInitialObserverAndOtherClaim()
   SceneAccess::unmount(scene);
 }
 
+namespace
+{
+  typedef NullScenePlatformController::TextViewCall Call;
+  /** Read only this operation's trace, including native mark state at each entry. */
+  class ViewTrace
+  {
+  public:
+    explicit ViewTrace(const NullScenePlatformController &controller)
+        : calls_(controller.textViewCalls),
+          next_(this->calls_.size())
+    {
+    }
+    void expect(Call::Kind kind, const TextStoreRow &row, bool marked, bool borrowed = true)
+    {
+      LOKA_VERIFY(this->next_ < this->calls_.size());
+      const Call &call = this->calls_[this->next_++];
+      LOKA_VERIFY(call.kind == kind && call.row == &row && call.marked == marked && call.borrowed == borrowed);
+    }
+    void end() const
+    {
+      LOKA_VERIFY(this->next_ == this->calls_.size());
+    }
+
+  private:
+    const NullScenePlatformController::TextViewCalls &calls_;
+    std::size_t next_;
+  };
+
+  void expectFold(TextDocument &document, const char *body = "ime")
+  {
+    LOKA_VERIFY(!TextDocumentAccess::store(document)->marked());
+    LOKA_VERIFY(TextDocumentAccess::committedText(document) == body);
+    LOKA_VERIFY(TextDocumentAccess::commitCalls(document) == 0);
+  }
+
+  void applyPresentation(TextDocumentEditorNode &node, bool readOnly)
+  {
+    TextDocumentEditor next(
+        TextDocumentEditorProps(node.props).presentation(TextViewPresentation(TextStyle(), 1, readOnly)));
+    LOKA_VERIFY(next.applyPropsToNode(&node));
+  }
+
+  class EarlyRetiringContext : public NullTextDocumentViewContext
+  {
+  public:
+    EarlyRetiringContext(Fixture &fixture, TextDocumentEditorNode &node)
+        : NullTextDocumentViewContext(fixture.controller, fixture.scene.textDocuments(), node),
+          fixture_(fixture)
+    {
+    }
+    virtual ~EarlyRetiringContext()
+    {
+      TextStoreRow *row = this->attachedStore();
+      LOKA_VERIFY(row);
+      ViewTrace trace(this->fixture_.controller);
+      this->retireView();
+      trace.expect(Call::SETTLE, *row, true);
+      trace.expect(Call::DETACH, *row, false);
+      trace.end();
+    }
+
+  private:
+    Fixture &fixture_;
+  };
+
+} // namespace
+
+void testTextViewSettleLifecycleDetach()
+{
+  Fixture f;
+  TextDocument &document = f.root().first;
+  NullTextStore &row = *TextDocumentAccess::store(document);
+  TextDocumentEditorNode *node = editor(&f.root());
+  ViewTrace trace(f.controller);
+  TextDocumentAccess::uncommitted(document, "ime");
+  NotifySubtreeNodeDetached(node);
+  LOKA_VERIFY(!f.controller.borrowPhase().open());
+  LifecycleFactTestAccess::DeliverFacts(node);
+  trace.expect(Call::SETTLE, row, true);
+  trace.expect(Call::DETACH, row, false);
+  trace.end();
+  expectFold(document);
+}
+
+void testTextViewSettleEviction()
+{
+  Fixture f;
+  TextDocument &document = f.root().first;
+  NullTextStore &row = *TextDocumentAccess::store(document);
+  TextDocumentEditorNode *old = editor(&f.root());
+  TextDocumentEditorNode incoming(TextDocumentEditorProps(document).attachment(f.root().otherResult));
+  TextDocumentAccess::uncommitted(document, "ime");
+  NotifySubtreeNodeDetached(old);
+  ViewTrace trace(f.controller);
+  install(f.controller, f.scene, incoming);
+  trace.expect(Call::SETTLE, row, true);
+  trace.expect(Call::DETACH, row, false);
+  trace.expect(Call::ATTACH, row, false);
+  trace.expect(Call::PRESENT, row, false);
+  LifecycleFactTestAccess::DeliverFacts(old);
+  trace.end();
+  LOKA_VERIFY(row.attachedContext() == incoming.getContext());
+  expectFold(document);
+}
+
+void testTextViewSettleRetiredDelivery()
+{
+  Fixture f;
+  TextDocument &document = f.root().first;
+  NullTextStore &row = *TextDocumentAccess::store(document);
+  TextDocumentEditorNode *node = editor(&f.root());
+  LOKA_VERIFY(TextDocumentAccess::claimCount(f.scene.textDocuments()) == 1);
+  TextDocumentAccess::uncommitted(document, "ime");
+  ViewTrace trace(f.controller);
+  LifecycleFactTestAccess::MarkSubtreeRetired(node);
+  LifecycleFactTestAccess::DeliverFacts(node);
+  trace.expect(Call::SETTLE, row, true);
+  trace.expect(Call::DETACH, row, false);
+  trace.end();
+  LOKA_VERIFY(node->getContext() && TextDocumentAccess::claimCount(f.scene.textDocuments()) == 0);
+  expectFold(document);
+}
+
+void testTextViewSettleContextDestruction()
+{
+  Fixture f;
+  TextDocument &document = f.root().first;
+  TextDocumentEditorNode *node = editor(&f.root());
+  NullTextStore &row = *TextDocumentAccess::store(document);
+  LOKA_VERIFY(node->lifecycleFact() == NODE_FACT_ATTACHED && node->getContext()->deliveredFact() == NODE_FACT_ATTACHED);
+  TextDocumentAccess::uncommitted(document, "ime");
+  ViewTrace trace(f.controller);
+  node->setContext(0);
+  trace.expect(Call::SETTLE, row, true);
+  trace.expect(Call::DETACH, row, false);
+  trace.end();
+  expectFold(document);
+}
+
+void testTextViewSettleDerivedRetirement()
+{
+  Fixture f;
+  TextDocument &document = f.root().first;
+  TextDocumentEditorNode *node = editor(&f.root());
+  NullTextStore &row = *TextDocumentAccess::store(document);
+  node->setContext(0);
+  EarlyRetiringContext *context = new EarlyRetiringContext(f, *node);
+  LOKA_VERIFY(node->adoptContext(context));
+  context->readLifecycleFactOnAttach();
+  LOKA_VERIFY(row.attachedContext() == context && node->lifecycleFact() == NODE_FACT_ATTACHED
+              && context->deliveredFact() == NODE_FACT_ATTACHED);
+  TextDocumentAccess::uncommitted(document, "ime");
+  ViewTrace trace(f.controller);
+  node->setContext(0);
+  trace.expect(Call::SETTLE, row, true);
+  trace.expect(Call::DETACH, row, false);
+  trace.end();
+  expectFold(document);
+}
+
+void testTextViewSettleReadOnlyAttach()
+{
+  for (unsigned refusal = 0; refusal != 2; ++refusal)
+  {
+    Fixture f;
+    TextDocument &document = f.root().first;
+    NullTextStore &row = *TextDocumentAccess::store(document);
+    TextDocumentEditorNode *node = editor(&f.root());
+    node->setContext(0);
+    applyPresentation(*node, true);
+    TextDocumentAccess::uncommitted(document, "ime");
+    if (refusal)
+      failTextViewAttaches(1);
+    ViewTrace trace(f.controller);
+    LOKA_VERIFY(!f.controller.borrowPhase().open());
+    install(f.controller, f.scene, *node);
+    trace.expect(Call::SETTLE, row, true);
+    trace.expect(Call::ATTACH, row, false);
+    if (!refusal)
+    {
+      trace.expect(Call::SETTLE, row, false);
+      trace.expect(Call::PRESENT, row, false);
+    }
+    trace.end();
+    expectFold(document);
+  }
+}
+
+void testTextViewSettleReadOnlyProps()
+{
+  Fixture f;
+  TextDocument &document = f.root().first;
+  NullTextStore &row = *TextDocumentAccess::store(document);
+  TextDocumentAccess::uncommitted(document, "ime");
+  ViewTrace trace(f.controller);
+  LOKA_VERIFY(!f.controller.borrowPhase().open());
+  applyPresentation(*editor(&f.root()), true);
+  trace.expect(Call::SETTLE, row, true);
+  trace.expect(Call::PRESENT, row, false);
+  trace.end();
+  expectFold(document);
+}
+
+void testTextViewSettleEditableAndRefusedClaim()
+{
+  Fixture f;
+  TextDocument &document = f.root().first;
+  NullTextStore &row = *TextDocumentAccess::store(document);
+  TextDocumentEditorNode *node = editor(&f.root());
+  node->setContext(0);
+  TextDocumentAccess::uncommitted(document, "ime");
+  ViewTrace trace(f.controller);
+  install(f.controller, f.scene, *node);
+  trace.expect(Call::ATTACH, row, true);
+  trace.expect(Call::PRESENT, row, true);
+  applyPresentation(*node, false);
+  trace.expect(Call::PRESENT, row, true);
+  TextDocumentEditorNode refused(TextDocumentEditorProps(document).attachment(f.root().otherResult));
+  install(f.controller, f.scene, refused);
+  f.complete();
+  LOKA_VERIFY(f.root().otherResult.get().value() == TextViewAttachment::VIEW_REFUSED_OCCUPIED);
+  NotifySubtreeNodeDetached(&refused);
+  LifecycleFactTestAccess::DeliverFacts(&refused);
+  trace.end();
+  LOKA_VERIFY(row.marked() && TextDocumentAccess::committedText(document).empty());
+  LOKA_VERIFY(TextDocumentAccess::commitCalls(document) == 0);
+}
+
+void testTextViewSettleDefaultLeavesMarked()
+{
+  ViewFixture<ViewRoot, DefaultSettleController> f;
+  ViewRoot &root = f.root();
+  TextDocumentEditorNode *node = editor(&root);
+  NullTextStore &row = *TextDocumentAccess::store(root.first);
+  TextDocumentAccess::uncommitted(root.first, "ime");
+  ViewTrace trace(f.controller);
+  NotifySubtreeNodeDetached(node);
+  LifecycleFactTestAccess::DeliverFacts(node);
+  trace.expect(Call::SETTLE, row, true);
+  trace.expect(Call::DETACH, row, true);
+  trace.end();
+  f.complete();
+  LOKA_VERIFY(root.first.fact()->get().state() == TEXT_DOCUMENT_MARKED
+              && TextDocumentAccess::commitCalls(root.first) == 0);
+  LOKA_VERIFY(TextDocumentAccess::committedText(root.first).empty());
+  TextReader reader(root.first);
+  char out[8];
+  unsigned long written;
+  LOKA_VERIFY(reader.read(out, sizeof out, written) == TEXT_READ_REFUSED && written == 0
+              && reader.refusal() == TEXT_READ_NOT_READY);
+}
+
 void testTextViewStoreRetirementDoor()
 {
   Fixture f;
   NullTextStore *row = TextDocumentAccess::store(f.root().first);
   LOKA_VERIFY(row && row->view.place);
   const std::size_t before = f.controller.textViewCalls.size();
+  TextDocumentAccess::uncommitted(f.root().first, "discard");
   row->retire();
   row->retire();
   LOKA_VERIFY(f.controller.textViewCalls.size() == before + 2);
@@ -1017,6 +1279,7 @@ void testTextViewStoreRetirementDoor()
   const NullScenePlatformController::TextViewCall &retire = f.controller.textViewCalls[before + 1];
   LOKA_VERIFY(detach.kind == NullScenePlatformController::TextViewCall::DETACH && detach.borrowed);
   LOKA_VERIFY(retire.kind == NullScenePlatformController::TextViewCall::RETIRE && !retire.borrowed);
+  LOKA_VERIFY(detach.marked && retire.marked && row->marked());
   LOKA_VERIFY(detach.row == row && retire.row == row && retire.links == 2);
   LOKA_VERIFY(!row->view.place && !TextDocumentAccess::store(f.root().first));
 }
@@ -1045,33 +1308,45 @@ void testTextViewClaimDerivedReads()
   ClaimReadContext *context = new ClaimReadContext(f.controller, f.scene.textDocuments(), *node);
   LOKA_VERIFY(node->adoptContext(context));
   NullTextStore *old = TextDocumentAccess::store(root.first);
-  LOKA_VERIFY(!context->store() && !TextStoreTestAccess::viewAttached(*old));
+  LOKA_VERIFY(!context->store() && !old->attachedContext() && !TextStoreTestAccess::viewAttached(*old));
   context->readLifecycleFactOnAttach();
   f.complete();
-  LOKA_VERIFY(context->store() == old && TextStoreTestAccess::viewAttached(*old));
+  LOKA_VERIFY(context->store() == old && old->attachedContext() == context && TextStoreTestAccess::viewAttached(*old));
   LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_ATTACHED);
   // Native place is not attachment authority: temporarily disagree without calling lifecycle doors.
   old->view.place = 0;
-  LOKA_VERIFY(context->store() == old && TextStoreTestAccess::viewAttached(*old));
+  LOKA_VERIFY(context->store() == old && old->attachedContext() == context && TextStoreTestAccess::viewAttached(*old));
   old->view.place = context;
   f.show(false);
   f.complete();
-  LOKA_VERIFY(!context->store() && !TextStoreTestAccess::viewAttached(*old));
+  LOKA_VERIFY(!context->store() && !old->attachedContext() && !TextStoreTestAccess::viewAttached(*old));
   LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_DETACHED);
   old->view.place = context;
-  LOKA_VERIFY(!context->store() && !TextStoreTestAccess::viewAttached(*old));
+  LOKA_VERIFY(!context->store() && !old->attachedContext() && !TextStoreTestAccess::viewAttached(*old));
   old->view.place = 0;
   f.show(true);
   f.complete();
-  LOKA_VERIFY(context->store() == old && TextStoreTestAccess::viewAttached(*old));
+  LOKA_VERIFY(context->store() == old && old->attachedContext() == context && TextStoreTestAccess::viewAttached(*old));
   LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_ATTACHED);
+  ViewTrace transfer(f.controller);
   LOKA_VERIFY(root.first.replace(replacement("transferred")) == POST_ACCEPTED);
   f.complete();
   NullTextStore *fresh = TextDocumentAccess::store(root.first);
+  transfer.expect(Call::TRANSFER, *fresh, false);
+  transfer.expect(Call::RETIRE, *old, false);
+  transfer.end();
+  LOKA_VERIFY(!old->attachedContext() && fresh->attachedContext() == context);
   LOKA_VERIFY(fresh != old && context->store() == fresh);
   LOKA_VERIFY(!TextStoreTestAccess::viewAttached(*old) && TextStoreTestAccess::viewAttached(*fresh));
   LOKA_VERIFY(root.result.get().value() == TextViewAttachment::VIEW_ATTACHED);
   LOKA_VERIFY(TextDocumentAccess::committedText(root.first) == "transferred");
+  TextDocumentAccess::uncommitted(root.first, "ime");
+  ViewTrace present(f.controller);
+  applyPresentation(*node, true);
+  present.expect(Call::SETTLE, *fresh, true);
+  present.expect(Call::PRESENT, *fresh, false);
+  present.end();
+  expectFold(root.first, "transferredime");
   fresh->retire();
   f.complete();
   LOKA_VERIFY(!context->store() && !TextStoreTestAccess::viewAttached(*fresh));
@@ -1079,4 +1354,16 @@ void testTextViewClaimDerivedReads()
   const std::size_t callsBeforeDrain = f.controller.textViewCalls.size();
   f.controller.drainNativeRetirements();
   LOKA_VERIFY(!context->store() && f.controller.textViewCalls.size() == callsBeforeDrain);
+}
+
+void testTextViewParkedRowIgnoresNativePlace()
+{
+  Fixture f;
+  TextDocumentEditorNode *node = editor(&f.root());
+  NullTextStore &row = *TextDocumentAccess::store(f.root().first);
+  f.show(false);
+  LOKA_VERIFY(!row.view.place && !row.attachedContext());
+  row.view.place = node->getContext();
+  LOKA_VERIFY(row.view.place && !row.attachedContext());
+  row.view.place = 0;
 }
