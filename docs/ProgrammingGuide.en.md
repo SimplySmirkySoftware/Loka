@@ -2384,7 +2384,9 @@ styles; `doc::Link` contributes a linked segment and `doc::Code` contributes
 monospace text. The latter is a visual convention, indistinguishable from
 `Styled(text, Monospace)`, and promises no lossless source round trip.
 
-Markdown export includes the attached document blocks in declaration order. Ordinary
+Document blocks can be written out as Markdown. There is no app-facing export
+call yet; rails and tools that hold the mounted tree use it. The output
+includes the attached document blocks in declaration order. Ordinary
 controls such as `Text` contribute nothing. Underline, color and font size are
 omitted. Bold and italic use stars or inline `<strong>` and `<em>` tags depending
 on the surrounding text. Export preserves document meaning within these conventions.
