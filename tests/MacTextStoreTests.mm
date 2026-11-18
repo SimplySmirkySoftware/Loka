@@ -705,11 +705,11 @@ void testMacTextStoreConformance()
   const std::string logical = "a\n\xf0\x9f\x98\x80";
   loka::app::testing::checkTextStoreConformance(
       controller, app, root.text, *controller.fresh, replacement(logical, TextPlacement::End()), 4, 4);
-  // Known gap, shared with the Win32 parking ledger: a replacement retires the old row at the
-  // outer completion, after this turn's drain, and hasPendingSync() does not count retired rows,
-  // so an idle window keeps it until other work admits the window (instrumented on macOS 26.7.1:
-  // two further App flushes left it retired). The retired-row clock gets its own design page;
-  // until then the pin drains at the controller's safe point directly.
+  // Known gap, shared with the Win32 and Null ledgers: a replacement retires the old row at the
+  // outer completion, after this turn's drain, and no rail's hasPendingSync() counts retired rows,
+  // so an idle production window keeps it until other work admits the window. This fixture's
+  // window does not forward the pending query or the drain, so the pin cannot observe admission;
+  // it drains at the controller's safe point directly. The admission fix has its own design page.
   controller.drainNativeRetirements();
   LOKA_VERIFY(loka::app::testing::TextStoreTestAccess::retiredCount(*controller.fresh) == 0);
   const unsigned long revision = root.text.fact()->get().textRevision();
