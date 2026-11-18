@@ -68,7 +68,7 @@ PR 1 initially projected one-line Text through INaturalSizeSource with fixed met
 
 Buttons are native `<button type="button">` elements. Mouse, Space and Enter use the same click export. Browser focus is read at completion; no keyboard or focus-event export is added. Layout containers other than ScrollView have no DOM elements.
 
-EditText, TextEditor, ImageView, ScrollBar and CardBand are explicit refused handlers. A reached ScrollView visit settles once after projection, including refusal; a deferred visit leaves its request pending. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. IME, general pointer input and hot reload remain outside this increment. Skin spacing and inline paint are specified below.
+EditText, TextEditor, ImageView and ScrollBar are explicit refused handlers. Each Card projects four clipped strips around its content. Each strip owns one transparent rounded body whose border uses the skin's button border colour and whose shadow follows the Card extent. A reached ScrollView visit settles once after projection, including refusal; a deferred visit leaves its request pending. Menus use the default no-op, dialogs the existing Window refusal seam. Title is unsupported: document.title is not a per-Window projection. IME, general pointer input and hot reload remain outside this increment. Skin spacing and inline paint are specified below.
 
 ## Host contract
 
