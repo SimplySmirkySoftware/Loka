@@ -60,6 +60,7 @@ set(LOKA_MACOS_CORE_SOURCES
   src/MacReceiveURL.mm
   src/MacProfiler.cpp
   src/MacScenePlatformController.mm
+  src/text/MacTextStore.mm
   src/MacWindow.mm
   src/platform/MacProjection.mm
   src/platform/MacAppLocation.mm
@@ -138,6 +139,7 @@ if(NOT LOKA_MAC_OS_10_4)
     ${PROJECT_SOURCE_DIR}/tests/MacNodeHandlerEnsureTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacNaturalWidthTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacInputDoorTests.mm
+    ${PROJECT_SOURCE_DIR}/tests/MacTextStoreTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacTextEditorTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacScrollViewTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacClipBoxTests.mm
@@ -170,6 +172,7 @@ if(NOT LOKA_MAC_OS_10_4)
     ${CMAKE_CURRENT_LIST_DIR}/src/MacMenuAttachment.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacBuiltInSupport.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacScenePlatformController.mm
+    ${CMAKE_CURRENT_LIST_DIR}/src/text/MacTextStore.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacButtonContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacRetirableContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacCellContext.mm

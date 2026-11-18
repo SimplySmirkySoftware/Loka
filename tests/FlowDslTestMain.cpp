@@ -45,6 +45,7 @@
 #include "MacImageBlobTests.hpp"
 #include "MacImageViewTests.hpp"
 #include "MacTextEditorTests.hpp"
+#include "MacTextStoreTests.hpp"
 #include "MacInputDoorTests.hpp"
 #include "MacFocusTests.hpp"
 #endif

@@ -144,6 +144,17 @@ public:
   {
     return true;
   }
+  virtual loka::app::scene::TextStoreBirth createTextStore(loka::app::TextStoreSource &,
+                                                           loka::app::scene::TextStoreRow *,
+                                                           loka::app::scene::TextStoreRow *&,
+                                                           loka::app::scene::TextStoreReading &);
+  virtual void retireTextStore(loka::app::scene::TextStoreRow &);
+  virtual bool readTextStore(loka::app::scene::TextStoreRow &, loka::app::scene::TextStoreReading &);
+  virtual bool peekTextStore(loka::app::scene::TextStoreRow &);
+  virtual bool applyTextRequest(loka::app::scene::TextStoreRow &, unsigned long);
+  virtual loka::app::scene::TextChunkResult readTextChunk(
+      loka::app::scene::TextStoreRow &, unsigned long &, unsigned long, char *, unsigned long, unsigned long &);
+  virtual void commitMarkedText(loka::app::scene::TextStoreRow &);
   virtual bool readNativeFocus(loka::app::scene::NodeContext *&out);
   virtual bool applyNativeFocus(loka::app::scene::NodeContext &ctx);
   virtual void synchronize();
@@ -283,6 +294,8 @@ private:
     void *primary;
     void *auxiliary;
   };
+  // Parking twin of Win32TextParking. A parked NSTextView has no superview or window.
+  loka::app::scene::TextStoreLedger textStores_;
   std::vector<NativeRetirement> nativeRetirements_;
 };
 
