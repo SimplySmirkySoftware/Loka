@@ -410,6 +410,8 @@ public:
 
 private:
   loka::app::scene::TextStoreLedger textStores_;
+  // A rail declares one binding after its ledger.
+  TextStoreAdmissionBinding textStoreBinding_;
   NullMenuAttachment menuAttachment_;
   friend class loka::testing::LazyViewAccess;
   friend class loka::testing::NullClipAccess;

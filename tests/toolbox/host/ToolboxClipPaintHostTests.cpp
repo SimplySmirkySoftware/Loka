@@ -1,3 +1,4 @@
+#include "support/ScrollViewSeat.hpp"
 #include "ToolboxHost.hpp"
 #include "ToolboxNodeDispatch.hpp"
 #include "ToolboxInputDoor.hpp"
@@ -238,6 +239,7 @@ namespace
   void viewportOrUnit(bool unit)
   {
     Fixture f;
+    loka::testing::ScrollViewSeat scrollSeat;
     BoxNode outer(Box().clipChildren().props);
     BoxNode *inner = new BoxNode(Box().height(25).props);
     Ink *ink = new Ink();
@@ -250,7 +252,7 @@ namespace
     }
     else
     {
-      ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps());
+      ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(scrollSeat.state()));
       scroll->addChild(ink);
       BoxNode *tall = new BoxNode(Box().height(100).props);
       tall->addChild(scroll);
@@ -533,9 +535,10 @@ namespace
     SetRect(&f.window.port.portRect, 0, 0, 220, 160);
     MutableState<String> value(String::Literal("Clipped edit"));
     NodeState<String> text(&value, 0);
+    loka::testing::ScrollViewSeat scrollSeat;
     StackNode root(Column().props);
     BoxNode *viewportSeat = new BoxNode(Box().size(180, 62).props);
-    ScrollViewNode *viewport = new ScrollViewNode(ScrollViewProps());
+    ScrollViewNode *viewport = new ScrollViewNode(ScrollViewProps(scrollSeat.state()));
     StackNode *contents = new StackNode(Column().props);
     contents->addChild(new BoxNode(Box().size(150, 40).props));
     PlacedEdit *scrolled = new PlacedEdit(text);

@@ -1,3 +1,4 @@
+#include "support/ScrollViewSeat.hpp"
 #include "ToolboxHost.hpp"
 #include "context/ToolboxScrollBarContext.hpp"
 #include "ToolboxInputDoor.hpp"
@@ -304,7 +305,8 @@ namespace
     HostPortScope port(window.window());
     ControlCleanupCheck cleanup(window);
     ToolboxScenePlatformController controller(&window);
-    ScrollViewNode scroll((ScrollViewProps()));
+    loka::testing::ScrollViewSeat scrollSeat;
+    ScrollViewNode scroll(ScrollViewProps(scrollSeat.state()));
     scroll.addChild(new RectSurfaceNode(RectSurfaceProps()));
     ButtonNode *button = new ButtonNode(ButtonProps().text("Inside"));
     ToolboxButtonContext *context = new ToolboxButtonContext(button, &controller);

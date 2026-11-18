@@ -196,7 +196,8 @@ unsigned NullScenePlatformController::RefusedProjectedNodeHandlers::cellCount() 
 }
 
 NullScenePlatformController::NullScenePlatformController(std::size_t bucketDepthCap, loka::app::TextShaping shaping)
-    : leafLayoutVisits_(0),
+    : textStoreBinding_(*this, this->textStores_),
+      leafLayoutVisits_(0),
       textShaping_(shaping),
       layoutState_(),
       paintScope_(),
