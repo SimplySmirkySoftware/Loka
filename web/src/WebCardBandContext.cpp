@@ -12,6 +12,8 @@ short WebCardBandContext::layout(IPlatformController *, LayoutState &state)
       || !this->controller_.checkCoordinate(state.y) || !this->controller_.checkCoordinate(state.x + state.width)
       || !this->controller_.checkCoordinate(bottom) || !this->controller_.project(state, projected))
   {
+    // A hidden box still extends the scrollable area; an unplaced strip keeps no rectangle.
+    web_set_rect(this->token(), 0, 0, 0, 0);
     web_set_projected(this->token(), 0);
     return state.y;
   }

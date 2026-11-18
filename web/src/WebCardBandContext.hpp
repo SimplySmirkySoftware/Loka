@@ -11,7 +11,7 @@ public:
   {
   }
   /** Cost: controller once per reached strip (four per Card); own props only.
-      Three placement imports on success, one on refusal; no row walk. */
+      Three placement imports on success, two on refusal; no row walk. */
   virtual short layout(loka::app::scene::IPlatformController *, loka::app::scene::LayoutState &state);
 };
 #endif

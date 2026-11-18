@@ -14,6 +14,7 @@ MUTATIONS = [
      '(void)body;', 'row.cardBody.first'),
     ('c', 'web_set_projected(this->token(), 1);', '', 'projected =='),
     ('d', 'web_set_projected(this->token(), 0);', '', 'projected =='),
+    ('e', 'web_set_rect(this->token(), 0, 0, 0, 0);', '', 'emptied =='),
 ]
 
 def run(command, log):

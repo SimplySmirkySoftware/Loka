@@ -62,6 +62,8 @@ namespace
       {
         LOKA_VERIFY(webtest::resources.count(bands[role]));
         LOKA_VERIFY(webtest::resources[bands[role]].projected == (pass != 0));
+        const bool emptied = webtest::resources[bands[role]].width == 0 && webtest::resources[bands[role]].height == 0;
+        LOKA_VERIFY(emptied == (pass == 0));
       }
     }
     for (int attached = 0; attached < 2; ++attached)
