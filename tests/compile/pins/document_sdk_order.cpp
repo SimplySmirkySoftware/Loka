@@ -11,6 +11,7 @@
 #include "app/doc/Paragraph.hpp"
 #include "app/doc/CodeBlock.hpp"
 #include "app/doc/Inline.hpp"
+#include "app/doc/Markdown.hpp"
 
 void documentVocabularyAfterSdk(loka::app::scene::NodeComposition &composition)
 {

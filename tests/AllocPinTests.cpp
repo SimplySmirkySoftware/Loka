@@ -20,6 +20,8 @@
 // for the full census table and family breakdown.
 
 #include "support/AllocCensus.hpp"
+#include "support/DocumentFixture.hpp"
+#include "app/doc/Markdown.hpp"
 #include "app/core/App.hpp"
 #include "platform/null/NullWindow.hpp"
 #include "platform/null/NullPlatformContext.hpp"
@@ -562,4 +564,30 @@ void allocpin::RunFocusCompletionAllocPin()
       LOKA_VERIFY(allocations == 0);
     }
   }
+}
+
+void allocpin::RunDocumentMarkdownAllocPin()
+{
+  using namespace loka::app;
+  const std::size_t length = 32 * 1024;
+  const std::string ascii(length, 'x');
+  std::string wide;
+  for (std::size_t i = 0; i < length / 2; ++i)
+    wide += "\xc3\xa9";
+  for (int i = 0; i < 2; ++i)
+  {
+    const std::string &text = i ? wide : ascii;
+    PropsReconciliationSupport::Fixture<doc::ParagraphDefinition> fixture(doc::Paragraph(text.c_str()), false);
+    std::string output;
+    BeginCapture(i);
+    const bool ok = doc::WriteMarkdown(fixture.node(), output);
+    EndCapture();
+    LOKA_VERIFY(ok && output == text + "\n");
+    std::printf("Markdown one-run %s: %lu allocated bytes\n", i ? "UTF-8" : "ASCII", CaptureAllocBytes(i));
+    std::fflush(stdout);
+    // Includes staging and destination growth, measured cumulatively across all allocations.
+    LOKA_VERIFY(CaptureAllocBytes(i) <= 10 * length);
+  }
+  // Equal byte and run counts, but twice as many ASCII scalars.
+  LOKA_VERIFY(CaptureAllocBytes(0) <= CaptureAllocBytes(1) + 1024);
 }

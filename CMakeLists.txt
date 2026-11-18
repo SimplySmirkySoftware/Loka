@@ -1450,6 +1450,11 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   # The pin binary runs whole (single scenario), matching the per-test
   # working-directory convention of the registered suites.
   loka_add_whole_binary_test(testZeroAllocationPin LokaAllocPinTests)
+  if(NOT CMAKE_CROSSCOMPILING)
+    add_test(NAME testDocumentMarkdownArguments
+      COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/DocumentMarkdownArgumentsTest.py
+        $<TARGET_FILE:LokaContractTests>)
+  endif()
 
   # One-process runs (#922). The per-test entries above give every test a
   # fresh process. With no arguments a runner executes every test it

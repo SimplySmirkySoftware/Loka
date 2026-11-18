@@ -207,6 +207,7 @@
 #include "AttributedStringTests.hpp"
 #include "AttributedTextTests.hpp"
 #include "DocumentVocabularyTests.hpp"
+#include "DocumentMarkdownTests.hpp"
 #include "TextSpanWin32Tests.hpp"
 #include "RectSurfaceSeatExtentTests.hpp"
 #include "NullPlatformContractTests.hpp"
