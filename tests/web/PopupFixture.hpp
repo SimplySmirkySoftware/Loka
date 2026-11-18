@@ -20,6 +20,7 @@ namespace webtest
   class PopupFixture : public loka::app::scene::BoundaryNodeFor<PopupFixture>
   {
   public:
+    loka::app::scene::NodeState<loka::core::Frame> viewport;
     loka::app::scene::NodeState<int> selected;
     loka::app::scene::NodeState<bool> enabled, shown;
     loka::Vector<loka::core::String> items;
@@ -34,6 +35,7 @@ namespace webtest
           watchAction(0)
     {
       popupFixture() = this;
+      this->state(this->viewport, loka::core::Frame(0, 0, 0, 0));
       this->state(this->selected, 0);
       this->state(this->enabled, true);
       this->state(this->shown, true);
@@ -65,7 +67,8 @@ namespace webtest
       if (popupMode() == 1)
         c.declare(HStack().alignVertical(VERTICAL_ALIGNMENT_CENTER) << Button("peer") << popup);
       else if (popupMode() == 2)
-        c.declare(ScrollView() << (VStack().gap(1) << Box().height(1) << (Show(*this->shown.state()) << popup)));
+        c.declare(ScrollView(this->viewport)
+                  << (VStack().gap(1) << Box().height(1) << (Show(*this->shown.state()) << popup)));
       else
         c.declare(Show(*this->shown.state()) << popup);
     }

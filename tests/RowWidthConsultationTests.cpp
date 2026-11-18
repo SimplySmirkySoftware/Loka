@@ -30,6 +30,7 @@
 #include "core/StateTracker.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
+#include "support/ScrollViewSeat.hpp"
 #include "support/TestVerify.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 
@@ -865,7 +866,8 @@ void testContentOverflowNestedMaximumAndOverflow()
 void testContentOverflowBoxPaddingIsOfferBound()
 {
   using namespace loka::app;
-  ScrollViewNode scroll((ScrollViewProps()));
+  loka::testing::ScrollViewSeat viewport;
+  ScrollViewNode scroll(ScrollViewProps(viewport.state()));
   BoxProps props;
   props.padding = loka::app::layout::LayoutGap::of(8);
   BoxNode *box = new BoxNode(props);
@@ -883,7 +885,8 @@ void testContentOverflowPassThroughIsTransparent()
   using namespace loka::app;
   // A Fragment (the shape a Show arm materializes as) lays its children out
   // in place under the same offer, so its declared-width child overflows.
-  ScrollViewNode scroll((ScrollViewProps()));
+  loka::testing::ScrollViewSeat viewport;
+  ScrollViewNode scroll(ScrollViewProps(viewport.state()));
   FragmentNode *fragment = new FragmentNode(FragmentProps());
   scroll.addChild(fragment);
   fragment->addChild(new TextNode(TextProps("offer-bound")));
@@ -911,7 +914,8 @@ void testNaturalRowSeesThroughPassThroughWrapper()
   // A natural-width Row whose seat is a pass-through wrapper (a component such
   // as a JS Button, a Fragment) measures the wrapper as its widest child; a
   // declared width inside wins before the rail is asked, as in the stack paths.
-  ScrollViewNode scroll((ScrollViewProps()));
+  loka::testing::ScrollViewSeat viewport;
+  ScrollViewNode scroll(ScrollViewProps(viewport.state()));
   StackNode *row = widthRow(ROW_UNDECLARED_WIDTH_NATURAL);
   scroll.addChild(row);
   FragmentNode *wrapper = new FragmentNode(FragmentProps());
@@ -1026,11 +1030,12 @@ void testBoxWidthParentOffersAndHeight()
   using namespace loka::app;
   for (int parent = 0; parent < 4; ++parent)
   {
+    loka::testing::ScrollViewSeat viewport;
     scene::NestableNode *root = 0;
     if (parent == 0)
       root = new FragmentNode(FragmentProps());
     else if (parent == 1)
-      root = new ScrollViewNode(ScrollViewProps());
+      root = new ScrollViewNode(ScrollViewProps(viewport.state()));
     else if (parent == 2)
       root = new CardNode(CardProps(CardStyle(CARD_SHADOW_DROP)));
     else
@@ -1072,7 +1077,8 @@ void testBoxWidthOverflowEstimates()
   using namespace loka::app;
   for (int parent = 0; parent < 4; ++parent)
   {
-    ScrollViewNode scroll((ScrollViewProps()));
+    loka::testing::ScrollViewSeat viewport;
+    ScrollViewNode scroll(ScrollViewProps(viewport.state()));
     scene::NestableNode *content = &scroll;
     if (parent == 1)
       content = new StackNode(Column().props);
@@ -1378,16 +1384,17 @@ void testMountedNullToolbarShrinksInsideFixedBoxes()
       title.props.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
       RowDefinition row = Row().naturalWidth();
       row << Button("< Back") << title << Button("Main");
+      loka::testing::ScrollViewSeat viewport;
       NodeDefinitionBase *definition = 0;
       if (container == 0)
-        definition = scrolling ? (ScrollView() << row).clone() : row.clone();
+        definition = scrolling ? (ScrollView(viewport.state()) << row).clone() : row.clone();
       else
       {
         BoxDefinition box = container == 1 ? Box().width(160) : Box().size(160, 20);
         box << row;
         RowDefinition outer;
         outer << box;
-        definition = scrolling ? (ScrollView() << outer).clone() : outer.clone();
+        definition = scrolling ? (ScrollView(viewport.state()) << outer).clone() : outer.clone();
       }
       LOKA_VERIFY(definition);
       Scene scene(definition);
@@ -1763,6 +1770,7 @@ void testRowSingleLiveLeafWidthShapes()
   using namespace loka::app::layout;
   for (int shape = 0; shape < 8; ++shape)
   {
+    loka::testing::ScrollViewSeat viewport;
     loka::core::EmitterState dialogResult;
     FragmentNode wrapper((FragmentProps()));
     scene::NestableNode *content = &wrapper;
@@ -1787,7 +1795,7 @@ void testRowSingleLiveLeafWidthShapes()
     scene::Node *terminal = text;
     if (shape == 5)
     {
-      ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps());
+      ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(viewport.state()));
       content->addChild(scroll);
       scroll->addChild(text);
       terminal = scroll;

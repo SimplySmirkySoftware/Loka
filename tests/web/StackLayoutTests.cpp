@@ -37,7 +37,7 @@ namespace
   class CountingController : public WebScenePlatformController
   {
   public:
-    std::vector<LayoutState> refusedSeats;
+    std::vector<LayoutState> fixtureSeats;
     CountingController(WebSession &session, int width, int height)
         : WebScenePlatformController(session, 0, width, height, 0)
     {
@@ -45,7 +45,7 @@ namespace
     virtual bool prepareProjectedLayout(Node *node, LayoutState &state)
     {
       if (node && !node->asTextNode() && !node->asButtonNode() && !node->asCellNode() && !node->asPopupMenuNode())
-        this->refusedSeats.push_back(state);
+        this->fixtureSeats.push_back(state);
       return WebScenePlatformController::prepareProjectedLayout(node, state);
     }
   };
@@ -609,7 +609,7 @@ namespace
       Rig rig(webtest::REFUSED_ROW);
       rig.flush();
       LOKA_VERIFY(Label("after").y == heights[variant]);
-      LOKA_VERIFY(webtest::resources.size() == (variant == 4 ? 2u : 1u));
+      LOKA_VERIFY(webtest::resources.size() == (variant == 4 || variant == 6 ? 2u : 1u));
       if (variant == 4)
       {
         const webtest::Resource &surface = webtest::resources[webtest::token(RECT_SURFACE)];
@@ -622,14 +622,20 @@ namespace
         LOKA_VERIFY(surface.kind == RECT_SURFACE && surface.projected);
         LOKA_VERIFY(surface.x == 0 && surface.y == 0 && surface.width == 20 && surface.height == 40);
       }
-      const unsigned visits = static_cast<unsigned>(rig.controller.refusedSeats.size());
+      if (variant == 6)
+      {
+        const webtest::Resource &band = webtest::resources[webtest::token(CARD_BAND)];
+        LOKA_VERIFY(band.kind == CARD_BAND && band.projected);
+        LOKA_VERIFY(band.x == 0 && band.y == 0 && band.width == 220 && band.height == 13);
+      }
+      const unsigned visits = static_cast<unsigned>(rig.controller.fixtureSeats.size());
       rig.controller.requestRelayout();
       rig.flush();
       // RectSurface takes its dedicated placement path without preparation.
-      LOKA_VERIFY(rig.controller.refusedSeats.size() - visits == (variant == 4 ? 0u : variant == 2 ? 2u : 1u));
+      LOKA_VERIFY(rig.controller.fixtureSeats.size() - visits == (variant == 4 ? 0u : variant == 2 ? 2u : 1u));
       if (variant != 4)
       {
-        const LayoutState &seat = rig.controller.refusedSeats.back();
+        const LayoutState &seat = rig.controller.fixtureSeats.back();
         LOKA_VERIFY(seat.width == (variant == 2 ? 107 : variant == 3 ? 20 : 220));
         LOKA_VERIFY(seat.x == (variant == 2 ? 113 : 0));
       }

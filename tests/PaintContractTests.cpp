@@ -227,6 +227,7 @@ namespace
     explicit PaintTree(const TreeProps &props)
         : StdCompositionBoundaryNodeBase<TreeProps>(props)
     {
+      this->state(this->viewport_, loka::core::Frame(0, 0, 0, 0));
     }
 
     virtual bool flushViewDirtyImmediately(NodeDirtyFlags) const
@@ -266,11 +267,14 @@ namespace
         if (d.refusal == 2)
           stack << image;
         if (d.scroll)
-          c.declare(Box().size(90, 40) << (ScrollView() << stack));
+          c.declare(Box().size(90, 40) << (ScrollView(this->viewport_) << stack));
         else
           c.declare(stack);
       }
     }
+
+  private:
+    loka::app::scene::NodeState<loka::core::Frame> viewport_;
   };
   void mount(Scene &scene, PaintPlatform &platform)
   {

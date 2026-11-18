@@ -1,6 +1,8 @@
 #ifndef LOKA_WEB_FAKE_BOUNDARY_HPP
 #define LOKA_WEB_FAKE_BOUNDARY_HPP
 #include "WebBoundary.hpp"
+#include "core/Frame.hpp"
+#include <utility>
 #include <map>
 #include <string>
 #include <vector>
@@ -54,6 +56,7 @@ namespace webtest
     int x, y, documentWidth, extent, originX, originY;
     std::string text;
     std::vector<int> runs;
+    std::pair<loka::core::Frame, int> cardBody;
     PopupSelection selection;
     std::vector<std::string> options;
     std::vector<bool> optionDisabled;
