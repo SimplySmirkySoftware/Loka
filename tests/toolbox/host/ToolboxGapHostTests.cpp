@@ -1,3 +1,4 @@
+#include "support/ScrollViewSeat.hpp"
 #include "context/ToolboxClipBoxContext.hpp"
 #include "context/ToolboxCardBandContext.hpp"
 #include "context/ToolboxPaintSupport.hpp"
@@ -939,7 +940,8 @@ namespace
       LOKA_VERIFY(c->offer.y - b->offer.y == 27 && d->offer.y - c->offer.y == 27);
     }
     Fixture f;
-    ScrollViewNode scroll((ScrollViewProps()));
+    loka::testing::ScrollViewSeat scrollSeat;
+    ScrollViewNode scroll(ScrollViewProps(scrollSeat.state()));
     GapText *a, *b, *c, *d;
     BoxNode *box = new BoxNode(Box().gap(20).props);
     box->addChild(pair(a, b));
@@ -961,6 +963,7 @@ namespace
     for (int kind = 0; kind != 6; ++kind)
     {
       Fixture f;
+      loka::testing::ScrollViewSeat scrollSeat;
       StackNode outer(Column().gap(20).props);
       NestableNode *container = 0;
       if (kind == 0)
@@ -974,7 +977,7 @@ namespace
       if (kind == 4)
         container = new CardNode(CardProps());
       if (kind == 5)
-        container = new ScrollViewNode(ScrollViewProps());
+        container = new ScrollViewNode(ScrollViewProps(scrollSeat.state()));
       GapText *a, *b;
       container->addChild(pair(a, b));
       outer.addChild(container);
@@ -1184,7 +1187,8 @@ namespace
   void overflowPin(bool edge)
   {
     Fixture f;
-    ScrollViewNode scroll((ScrollViewProps()));
+    loka::testing::ScrollViewSeat scrollSeat;
+    ScrollViewNode scroll(ScrollViewProps(scrollSeat.state()));
     StackNode *row = new StackNode(Row().gap(SHRT_MAX).props);
     CountedBox *a = new CountedBox(), *b = new CountedBox();
     row->addChild(a);
@@ -1214,7 +1218,8 @@ namespace
     for (int band = 0; band != 3; ++band)
     {
       Fixture f;
-      ScrollViewNode scroll((ScrollViewProps()));
+      loka::testing::ScrollViewSeat scrollSeat;
+      ScrollViewNode scroll(ScrollViewProps(scrollSeat.state()));
       StackNode *column = new StackNode(Column().props);
       column->setPropsTypeId(StackProps::staticTypeId());
       GapText *leaves[5];
@@ -1264,7 +1269,8 @@ namespace
     // Direct entry intentionally bypasses dispatch: horizontal measurement must
     // depend on the named horizontal default, not this offered vertical transport.
     Fixture f;
-    ScrollViewNode scroll((ScrollViewProps()));
+    loka::testing::ScrollViewSeat scrollSeat;
+    ScrollViewNode scroll(ScrollViewProps(scrollSeat.state()));
     StackProps props = Row().props;
     props.rowUndeclaredWidth_ = ROW_UNDECLARED_WIDTH_NATURAL;
     StackNode *row = new StackNode(props);
@@ -1344,7 +1350,8 @@ namespace
     for (unsigned i = 0; i != 3; ++i)
     {
       Fixture f(i != 1 ? WindowProps().contentMargin(0) : WindowProps());
-      ScrollViewNode root((ScrollViewProps()));
+      loka::testing::ScrollViewSeat scrollSeat;
+      ScrollViewNode root(ScrollViewProps(scrollSeat.state()));
       ScrollOffer *child = new ScrollOffer(i == 2);
       root.addChild(child);
       f.controller.rootNode_ = &root;

@@ -1,5 +1,6 @@
 #ifndef LOKA_TOOLBOX_SCROLL_VIEW_PINS_HPP
 #define LOKA_TOOLBOX_SCROLL_VIEW_PINS_HPP
+#include "support/ScrollViewSeat.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/ImageView.hpp"
 #include "core/StateTracker.hpp"
@@ -27,7 +28,7 @@ namespace
           controller(&window),
           offset(loka::core::Frame(0, 0, 0, 0)),
           fact(&offset, &tracker),
-          scroll(ScrollViewProps().viewport(fact)),
+          scroll(ScrollViewProps(fact)),
           column(new StackNode(StackProps(STACK_AXIS_COLUMN)))
     {
       tracker.addState(&offset);
@@ -164,7 +165,8 @@ namespace
       ToolboxWindow window;
       window.answersSizeBox = mode == 0;
       ToolboxScenePlatformController controller(mode != 2 ? &window : 0);
-      ScrollViewNode scroll((ScrollViewProps()));
+      loka::testing::ScrollViewSeat scrollSeat;
+      ScrollViewNode scroll(ScrollViewProps(scrollSeat.state()));
       const Rect seat = {0, 0, 260, 370};
       LOKA_VERIFY(
           controller.ensureViewportScrollBarControl(seat, &scroll, 500, 244, 0, ToolboxScrollViewMetrics(46, 0), true)
@@ -725,7 +727,8 @@ namespace
       HostPortScope port(window.window());
       LOKA_VERIFY(!controller.paintSuppressClipRgn_);
       LOKA_VERIFY(toolbox_host::failRegions == 0);
-      ScrollViewNode scroll((ScrollViewProps()));
+      loka::testing::ScrollViewSeat scrollSeat;
+      ScrollViewNode scroll(ScrollViewProps(scrollSeat.state()));
       const Rect previous = {2, 3, 90, 120};
       const Rect viewport = {0, 0, 34, 100};
       ClipRect(&previous);
@@ -810,7 +813,7 @@ namespace
       LOKA_VERIFY(f.step(0) == 20);
       LOKA_VERIFY(f.step(17, 101) == 20);
       LOKA_VERIFY(f.step(34, 101) == 3);
-      LOKA_VERIFY(ScrollView().viewport(f.fact).applyPropsToNode(&f.scroll));
+      LOKA_VERIFY(ScrollView(f.fact).applyPropsToNode(&f.scroll));
       LOKA_VERIFY(f.step(51, 101) == 20);
       f.controller.requestStructurePresent();
       LOKA_VERIFY(!f.controller.scrollSpans()->valid());
