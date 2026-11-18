@@ -164,7 +164,7 @@ namespace
         break;
       }
       case APPLY_REPLACE:
-        seat->commitTransaction(observation->scene, observation->replacement);
+        seat->requestReplacement(observation->replacement);
         break;
       case APPLY_DETACH:
         seat->requestDetach();
@@ -340,9 +340,9 @@ namespace
       loka::app::scene::Node *root = Access::rootNode(*scene);
       loka::app::scene::Scene *oldTarget = this->target->scene();
       // Keep an eligible retiree so the nested admission also tests reclaim exclusion.
-      LOKA_VERIFY(this->target->sceneManager()->commitTransaction(
-          0, new loka::app::scene::Scene(loka::app::Button("Superseded").clone())));
-      LOKA_VERIFY(this->target->sceneManager()->commitTransaction(0, this->candidate));
+      LOKA_VERIFY(this->target->sceneManager()->requestReplacement(
+          new loka::app::scene::Scene(loka::app::Button("Superseded").clone())));
+      LOKA_VERIFY(this->target->sceneManager()->requestReplacement(this->candidate));
       typedef loka::app::testing::SceneManagerTestAccess SeatAccess;
       const size_t retirees = SeatAccess::retiredSceneCount(*this->target->sceneManager());
       LOKA_VERIFY(retirees == 1);
@@ -489,7 +489,7 @@ void testSeatRequestAppliesToReplacementInstalledAtAdmission()
   WindowAdmissionTestApp app(window);
   loka::app::scene::Scene *next = new loka::app::scene::Scene(loka::app::Button("B").clone());
   window.sceneManager()->requestDetach();
-  LOKA_VERIFY(window.sceneManager()->commitTransaction(window.scene(), next));
+  LOKA_VERIFY(window.sceneManager()->requestReplacement(next));
   app.flush();
   LOKA_VERIFY(window.scene() == next);
   LOKA_VERIFY(!next->getAttachedState()->get());

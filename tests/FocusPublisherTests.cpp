@@ -729,7 +729,7 @@ void testFocusSceneReplacement()
   }
   cardData = &replacementData;
   Scene *next = new Scene(Boundary<Card>());
-  LOKA_VERIFY(window.sceneManager()->commitTransaction(0, next));
+  LOKA_VERIFY(window.sceneManager()->requestReplacement(next));
   events.clear();
   data.facts.first.state()->bind(&cardCleared, &events, false, true);
   ApplyingProbe probe = {&window, &app, &controller, 0};

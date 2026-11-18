@@ -522,7 +522,7 @@ namespace
   {
     SeatScene &f = *static_cast<SeatScene *>(data);
     f.root().width.set(30);
-    LOKA_VERIFY(f.window.sceneManager()->commitTransaction(0, new Scene(Boundary<SeatRoot>())));
+    LOKA_VERIFY(f.window.sceneManager()->requestReplacement(new Scene(Boundary<SeatRoot>())));
   }
 }
 void testSeatOwnerDestroyedDuringApplyLeavesClock()

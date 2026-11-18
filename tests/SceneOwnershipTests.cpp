@@ -113,7 +113,7 @@ namespace
 
     virtual ~ReentrantSceneRetirementProbe()
     {
-      this->window_->sceneManager()->commitTransaction(this->retiree_, this->replacement_);
+      this->window_->sceneManager()->requestReplacement(this->replacement_);
       this->window_->flushSceneInvalidation();
       *this->scenesAliveAfterNestedFlush_ = g_sceneOwnershipScenesAlive;
       --g_sceneOwnershipScenesAlive;
@@ -616,7 +616,7 @@ void testWindowRetiresDetachedSceneAtFlushBoundary()
   Window *window = new Window(&context, props);
   WindowAdmissionTestApp admission(*window);
 
-  window->sceneManager()->commitTransaction(first, second);
+  window->sceneManager()->requestReplacement(second);
   LOKA_VERIFY(window->scene() == first);
   assert(g_sceneOwnershipScenesAlive == 2);
 
@@ -627,14 +627,14 @@ void testWindowRetiresDetachedSceneAtFlushBoundary()
   assert(g_sceneOwnershipScenesAlive == 1);
 
   SceneOwnershipProbe *third = new SceneOwnershipProbe();
-  window->sceneManager()->commitTransaction(second, third);
+  window->sceneManager()->requestReplacement(third);
   LOKA_VERIFY(window->scene() == second);
   assert(g_sceneOwnershipScenesAlive == 2);
 
   admission.flush();
   LOKA_VERIFY(window->scene() == third);
   SceneOwnershipProbe *fourth = new SceneOwnershipProbe();
-  window->sceneManager()->commitTransaction(third, fourth);
+  window->sceneManager()->requestReplacement(fourth);
   LOKA_VERIFY(g_sceneOwnershipScenesAlive == 3);
   // Teardown owns the retired second, applied third, and unapplied fourth.
   delete window;
@@ -658,7 +658,7 @@ void testWindowRecommittingCurrentSceneIsNoOp()
   loka::app::scene::Scene *installed = window->scene();
   LOKA_VERIFY(installed == scene);
 
-  window->sceneManager()->commitTransaction(scene, scene);
+  window->sceneManager()->requestReplacement(scene);
 
   installed = window->scene();
   LOKA_VERIFY(installed == scene);
@@ -694,9 +694,9 @@ void testWindowDefersSceneRetiredDuringDrainUntilNextFlush()
   ReentrantSceneRetirementProbe *first =
       new ReentrantSceneRetirementProbe(window, second, third, &scenesAliveAfterNestedFlush);
 
-  window->sceneManager()->commitTransaction(0, first);
+  window->sceneManager()->requestReplacement(first);
   admission.flush();
-  window->sceneManager()->commitTransaction(first, second);
+  window->sceneManager()->requestReplacement(second);
   assert(g_sceneOwnershipScenesAlive == 3);
 
   admission.flush();
@@ -739,7 +739,7 @@ void testWindowDoesNotReclaimSceneDuringDetachNotification()
   flushContext.window = window;
   first->getAttachedState()->bind(&FlushWindowDuringDetach, &flushContext, false);
 
-  window->sceneManager()->commitTransaction(first, second);
+  window->sceneManager()->requestReplacement(second);
   LOKA_VERIFY(flushContext.callbackCalls == 0);
   admission.flush();
   assert(flushContext.callbackCalls == 1);
@@ -787,7 +787,7 @@ void testWindowReclaimDoesNotNotifySceneLifecycleObservers()
 
   second->getLifecycleState()->bind(&RecordSceneLifecycleNotification, &secondObservation, false);
   assert(secondObservation.notificationCount == 0);
-  window->sceneManager()->commitTransaction(first, second);
+  window->sceneManager()->requestReplacement(second);
   admission.flush();
   assert(first->getLifecycleState()->get() == ON_DETACH);
   assert(firstObservation.notificationCount == 2);
@@ -837,7 +837,7 @@ void testWindowReclaimFiresNoSceneCompositionCallbacks()
   first->mount(&firstPlatform);
   assert(firstObservation.compositionAttachCalls == 1);
   assert(firstObservation.contextAttachCalls == 1);
-  window->sceneManager()->commitTransaction(first, second);
+  window->sceneManager()->requestReplacement(second);
   admission.flush();
   assert(firstObservation.compositionDetachCalls == 1);
   assert(firstObservation.contextDetachCalls == 1);
@@ -982,7 +982,7 @@ void testAppWindowReclaimDrainsRetiredScenesExactlyOnce()
   SceneRetirementCountProbe *current = new SceneRetirementCountProbe(&currentSceneDestructions);
   props.scene(retired);
   WindowRetirementProbe *window = new WindowRetirementProbe(&context, props);
-  window->sceneManager()->commitTransaction(retired, current);
+  window->sceneManager()->requestReplacement(current);
   WindowRetirementTestApp app;
   app.install(window);
   app.flush();
@@ -1146,10 +1146,10 @@ namespace
 
   void RunSceneCensusRoundTrip(NullWindow *window, WindowAdmissionTestApp &admission)
   {
-    window->sceneManager()->commitTransaction(window->scene(), new SceneCensusProbe("Two"));
+    window->sceneManager()->requestReplacement(new SceneCensusProbe("Two"));
     admission.flush();
     admission.flush();
-    window->sceneManager()->commitTransaction(window->scene(), new SceneCensusProbe("One"));
+    window->sceneManager()->requestReplacement(new SceneCensusProbe("One"));
     admission.flush();
     admission.flush();
   }
@@ -1226,8 +1226,8 @@ namespace
     static void adopt(void *data)
     {
       ReplacementAdoptions *request = static_cast<ReplacementAdoptions *>(data);
-      LOKA_VERIFY(request->window.sceneManager()->commitTransaction(0, request->intermediate));
-      LOKA_VERIFY(request->window.sceneManager()->commitTransaction(0, request->finalScene));
+      LOKA_VERIFY(request->window.sceneManager()->requestReplacement(request->intermediate));
+      LOKA_VERIFY(request->window.sceneManager()->requestReplacement(request->finalScene));
     }
     Window &window;
     loka::app::scene::Scene *intermediate;
@@ -1265,7 +1265,7 @@ namespace
     LOKA_VERIFY(loka::app::testing::SceneManagerTestAccess::desiredScene(*window->sceneManager()) == last);
     LOKA_VERIFY(first->getAttachedState()->get());
     LOKA_VERIFY(loka::app::testing::SceneManagerTestAccess::retiredSceneCount(*window->sceneManager()) == 1);
-    LOKA_VERIFY(!window->sceneManager()->commitTransaction(0, middle));
+    LOKA_VERIFY(!window->sceneManager()->requestReplacement(middle));
     LOKA_VERIFY(middleCount.attaches == 0);
     LOKA_VERIFY(window->sceneManager()->hasPendingReplacement() == !returnToApplied);
     admission.flush();
@@ -1351,7 +1351,7 @@ namespace
         ? new loka::app::scene::Scene(new loka::app::scene::BoundaryDefinition<
               ReplacementRefusableProps, ReplacementRearmingRefusableRoot>(ReplacementRefusableProps(&refusal)))
         : new loka::app::scene::Scene(new ReplacementRefusableDefinition(ReplacementRefusableProps(&refusal)));
-    LOKA_VERIFY(window.sceneManager()->commitTransaction(0, candidate));
+    LOKA_VERIFY(window.sceneManager()->requestReplacement(candidate));
     window.sceneManager()->requestDetach();
     admission.flush();
     const bool refused = SeatAccess::lastPrepareRefusal(*window.sceneManager()) == candidate;
@@ -1388,12 +1388,12 @@ namespace
         return;
       ++request->calls;
       LOKA_VERIFY(request->window.scene() == request->applying);
-      LOKA_VERIFY(request->window.sceneManager()->commitTransaction(0, request->next));
+      LOKA_VERIFY(request->window.sceneManager()->requestReplacement(request->next));
       // An applying identity can be adopted again without retiring it.
-      LOKA_VERIFY(request->window.sceneManager()->commitTransaction(0, request->applying));
-      LOKA_VERIFY(!request->window.sceneManager()->commitTransaction(0, request->next));
+      LOKA_VERIFY(request->window.sceneManager()->requestReplacement(request->applying));
+      LOKA_VERIFY(!request->window.sceneManager()->requestReplacement(request->next));
       request->next = new SceneCensusProbe("C");
-      LOKA_VERIFY(request->window.sceneManager()->commitTransaction(0, request->next));
+      LOKA_VERIFY(request->window.sceneManager()->requestReplacement(request->next));
       LOKA_VERIFY(!request->window.flushSceneInvalidation());
       LOKA_VERIFY(request->window.scene() == request->applying);
     }
@@ -1487,7 +1487,7 @@ void testSceneReplacementPreservesAppliedOnPrepareRefusal()
   const SceneRoundTripCensus baseline(*window);
   loka::app::scene::Node *root = loka::dsl::testing::SceneTestAccess::rootNode(*window->scene());
   loka::app::scene::Scene *next = new loka::app::scene::Scene(new ReplacementRefusableDefinition(ReplacementRefusableProps(&refusal)));
-  LOKA_VERIFY(window->sceneManager()->commitTransaction(0, next));
+  LOKA_VERIFY(window->sceneManager()->requestReplacement(next));
   const unsigned long projections = window->scenePlatformController()->onChangeCallCount();
   LOKA_VERIFY(loka::app::testing::SceneManagerTestAccess::lastPrepareRefusal(*window->sceneManager()) == 0);
   admission.flush();
@@ -1524,10 +1524,10 @@ void testSceneReplacementPreservesAppliedOnPrepareRefusal()
   refusal = true;
   loka::app::scene::Scene *superseded = new loka::app::scene::Scene(
       new ReplacementRefusableDefinition(ReplacementRefusableProps(&refusal)));
-  LOKA_VERIFY(window->sceneManager()->commitTransaction(0, superseded));
+  LOKA_VERIFY(window->sceneManager()->requestReplacement(superseded));
   admission.flush();
   LOKA_VERIFY(loka::app::testing::SceneManagerTestAccess::lastPrepareRefusal(*window->sceneManager()) == superseded);
-  LOKA_VERIFY(window->sceneManager()->commitTransaction(0, next));
+  LOKA_VERIFY(window->sceneManager()->requestReplacement(next));
   LOKA_VERIFY(loka::app::testing::SceneManagerTestAccess::lastPrepareRefusal(*window->sceneManager()) == superseded);
   LOKA_VERIFY(loka::app::testing::SceneManagerTestAccess::retiredSceneCount(*window->sceneManager()) == 1);
   admission.flush();
@@ -1633,7 +1633,7 @@ void testSceneReplacementRefusesControllerLostDuringPrepare()
   loka::app::scene::Scene *applied = window.scene();
   loka::app::scene::Scene *candidate = new loka::app::scene::Scene(
       LoseRailDuringPrepareDefinition(LoseRailDuringPrepareProps(&lossEnabled)));
-  LOKA_VERIFY(window.sceneManager()->commitTransaction(0, candidate));
+  LOKA_VERIFY(window.sceneManager()->requestReplacement(candidate));
   admission.flush();
   LOKA_VERIFY(window.visibilityState().get());
   LOKA_VERIFY(window.scenePlatformController() == 0);
@@ -1679,7 +1679,7 @@ void testSceneReplacementHideDuringAttachWaitsForNextAdmission()
   NullScenePlatformController *controller = window.scenePlatformController();
   loka::app::scene::Scene *candidate = new loka::app::scene::Scene(
       HideWindowOnAttachDefinition(SceneCensusProps("Candidate")));
-  LOKA_VERIFY(window.sceneManager()->commitTransaction(0, candidate));
+  LOKA_VERIFY(window.sceneManager()->requestReplacement(candidate));
   admission.flush();
   typedef loka::app::testing::SceneManagerTestAccess SeatAccess;
   typedef loka::dsl::testing::SceneTestAccess SceneAccess;
@@ -1721,7 +1721,7 @@ void testSceneReplacementAdoptedDuringAttachWaitsForNextAdmission()
   SceneCensusProbe *second = new SceneCensusProbe("B");
   AttachReplacementRequest request(*window, second, new SceneCensusProbe("superseded"));
   second->getLifecycleState()->bind(&AttachReplacementRequest::adopt, &request, false);
-  LOKA_VERIFY(window->sceneManager()->commitTransaction(0, second));
+  LOKA_VERIFY(window->sceneManager()->requestReplacement(second));
   app.flush();
   LOKA_VERIFY(request.calls == 1);
   LOKA_VERIFY(loka::app::testing::SceneManagerTestAccess::retiredSceneCount(*window->sceneManager()) == 2);
@@ -1752,7 +1752,7 @@ namespace
       if (request->outgoing->getAttachedState()->get())
         return;
       ++request->calls;
-      LOKA_VERIFY(request->window.sceneManager()->commitTransaction(0, request->outgoing));
+      LOKA_VERIFY(request->window.sceneManager()->requestReplacement(request->outgoing));
       LOKA_VERIFY(!request->window.flushSceneInvalidation());
     }
     Window &window;
@@ -1776,7 +1776,7 @@ void testSceneReplacementReadoptsOutgoingDuringDetach()
   ReadoptOutgoingRequest request(*window, first);
   first->getAttachedState()->bind(&ReadoptOutgoingRequest::adopt, &request, false);
   SceneCensusProbe *second = new SceneCensusProbe("B");
-  LOKA_VERIFY(window->sceneManager()->commitTransaction(0, second));
+  LOKA_VERIFY(window->sceneManager()->requestReplacement(second));
   admission.flush();
   LOKA_VERIFY(request.calls == 1);
   LOKA_VERIFY(window->scene() == second);
@@ -1880,7 +1880,7 @@ void testClosedAdmittedWindowIsNotRecreatedByEarlierSeatCallback()
   app.install(first, second);
   CloseLaterAdmittedWindow request = {app, *second};
   first->scene()->getAttachedState()->bind(&CloseLaterAdmittedWindow::onDetach, &request, false);
-  LOKA_VERIFY(first->sceneManager()->commitTransaction(0, new SceneCensusProbe("replacement")));
+  LOKA_VERIFY(first->sceneManager()->requestReplacement(new SceneCensusProbe("replacement")));
   second->scene()->requestInvalidate(loka::app::scene::NODE_DIRTY_PROPS);
   app.flush();
   // The App still owns the close-queued identity, but visibility=true must not
@@ -1986,7 +1986,7 @@ namespace
     PreparedNotification probe(window, observeAttach ? *b : *a, *b, observeAttach, reveal);
     if (!ordinary) probe.observed.getAttachedState()->bind(&PreparedNotification::run, &probe, false);
     const unsigned long before = window.scenePlatformController()->onChangeCallCount();
-    LOKA_VERIFY(window.sceneManager()->commitTransaction(0, b));
+    LOKA_VERIFY(window.sceneManager()->requestReplacement(b));
     loka::core::ScopedPtr<loka::core::Operation> turn(clocked ? new loka::core::Operation : 0);
     app.flush();
     LOKA_VERIFY(window.scene() == b);
@@ -2110,7 +2110,7 @@ void testSceneReplacementDetectsControllerLostDuringInstall()
     Scene *incoming = new Scene(Boundary<PreparedReveal>());
     LoseRailDuringInstall probe = {window, *outgoing, *incoming};
     outgoing->getAttachedState()->bind(&LoseRailDuringInstall::run, &probe, false);
-    LOKA_VERIFY(window.sceneManager()->commitTransaction(0, incoming));
+    LOKA_VERIFY(window.sceneManager()->requestReplacement(incoming));
     app.flush();
 #ifdef NDEBUG
     LOKA_VERIFY(window.scene() == incoming);
@@ -2297,7 +2297,7 @@ void testWindowAdmissionTestAppOperationLoopReclaimsOncePerTail()
   const int reclaims = delivery.reclaims;
   const int deliveries = delivery.deliveries;
   const int alive = g_sceneOwnershipScenesAlive;
-  LOKA_VERIFY(window.sceneManager()->commitTransaction(0, new SceneCensusProbe("second")));
+  LOKA_VERIFY(window.sceneManager()->requestReplacement(new SceneCensusProbe("second")));
   app.operationLoop();
   // Second admission captures the Scene retired by the first; one suffix drain.
   LOKA_VERIFY(delivery.deliveries == deliveries + 2);
@@ -2341,7 +2341,7 @@ void testWindowReclaimDefersBusyCapturedScene()
   WindowAdmissionTestApp app(window);
   app.flush();
   const int alive = g_sceneOwnershipScenesAlive;
-  LOKA_VERIFY(window.sceneManager()->commitTransaction(0, new SceneCensusProbe("busy")));
+  LOKA_VERIFY(window.sceneManager()->requestReplacement(new SceneCensusProbe("busy")));
   app.admitAndApplyWindows();
   app.admitAndApplyWindows();
   {
@@ -2409,7 +2409,7 @@ void testSceneReplacementTearsDownEnrolledRootWithoutAssert()
   Operation turn;
   LOKA_VERIFY(Operation::openActive(tracker) == OPEN_OK);
   Scene *incoming = new Scene(new loka::app::Box());
-  LOKA_VERIFY(window.sceneManager()->commitTransaction(0, incoming));
+  LOKA_VERIFY(window.sceneManager()->requestReplacement(incoming));
   app.admitAndApplyWindows();
   LOKA_VERIFY(window.scene() == incoming);
   LOKA_VERIFY(loka::dsl::testing::SceneTestAccess::rootNode(*outgoing) == 0);

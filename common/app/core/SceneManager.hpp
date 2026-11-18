@@ -124,12 +124,12 @@ public:
   SceneManager();
   ~SceneManager();
 
-  /** Adopts the desired scene for the next Window admission. Returns false
-      for a retired identity; retirement cannot be reversed. ignoredFrom is
-      retained for source compatibility. Null requests and requests without a
-      live Window owner are refused; a refused new target remains caller-owned. */
-  bool commitTransaction(loka::app::scene::Scene *ignoredFrom,
-                         loka::app::scene::Scene *to);
+  /** Adopts the desired scene for the next Window admission; opens no
+      transaction, and the last request before an admission wins. Returns false
+      for a retired identity; retirement cannot be reversed. Null requests and
+      requests without a live Window owner are refused; a refused new target
+      remains caller-owned. */
+  bool requestReplacement(loka::app::scene::Scene *to);
   /** Records detach for the next App admission; the last request wins.
       Callback callers do O(1) work and walk no composition rows. */
   void requestDetach();
