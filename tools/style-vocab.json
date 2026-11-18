@@ -48,6 +48,7 @@
     {"name": "macos", "spacing": [6, 6, 16], "look": {"scheme": "light", "ground": "#ececec", "text": "#262626", "secondary": "#6e6e6e", "face": "#ffffff", "border": "#c3c3c3", "radius": 6, "disabledText": "#a9a9a9", "cellFace": "#ffffff", "cellBorder": "#c3c3c3"}},
     {"name": "classic", "spacing": [8, 8, 12], "look": {"scheme": "light", "ground": "#dddddd", "text": "#000000", "secondary": "#555555", "face": "#dddddd", "border": "#000000", "radius": 4, "disabledText": "#888888", "cellFace": "#dddddd", "cellBorder": "#000000"}}
   ],
+  "webRunsStatus": {"APPLIED": 0, "REFUSED": 1, "PROTOCOL": 2},
   "webMeasureStatus": {"OK": 0, "REFUSED": 1, "PROTOCOL": 2},
   "webButtonGeometry": {"insetX": 8, "insetY": 4, "border": 1},
   "wire": {

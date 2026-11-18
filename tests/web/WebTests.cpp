@@ -1227,6 +1227,8 @@ namespace
     LOKA_VERIFY(session.resize(roots[0], 10, 10, 3) == WebSession::REFUSED_CLOSED);
   }
 } // namespace
+void WebAttributedDOMTests();
+void WebAttributedDOMProtocolDeath();
 void WebAttributedBuildTests();
 void WebAttributedProtocolDeath(bool advance);
 void WebTextProjectionTests();
@@ -1241,6 +1243,16 @@ void WebCellTests();
 void WebCellProtocolDeath();
 int main(int argc, char **argv)
 {
+  if (argc > 1 && std::strcmp(argv[1], "attributed-dom-protocol-death") == 0)
+  {
+    WebAttributedDOMProtocolDeath();
+    return 0;
+  }
+  if (argc > 1 && std::strcmp(argv[1], "attributed-dom-only") == 0)
+  {
+    WebAttributedDOMTests();
+    return 0;
+  }
   if (argc == 2 && std::strcmp(argv[1], "attributed-only") == 0)
   {
     WebAttributedBuildTests();
@@ -1323,6 +1335,7 @@ int main(int argc, char **argv)
   RUN(WebGridLayoutTests);
   RUN(WebStackLayoutTests);
   RUN(WebTextProjectionTests);
+  RUN(WebAttributedDOMTests);
   RUN(WebAttributedBuildTests);
   RUN(CounterTest);
   RUN(ScrollTest);

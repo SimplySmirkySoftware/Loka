@@ -15,6 +15,7 @@ namespace loka
       CELL,
       POPUP,
       RECT_SURFACE,
+      ATTRIBUTED_TEXT,
       KIND_COUNT
     };
     enum ScrollCommit
@@ -76,6 +77,8 @@ extern "C"
   /** Cost: popup render once after options; writes one owned select row. */
   void web_set_selected(uint32_t token, int controlled, int index);
   void web_set_text(uint32_t token, const char *bytes, unsigned length);
+  /** Cost: attributed render once; validates/copies this snapshot and stages its own row fragments. */
+  int web_set_runs(uint32_t token, const int *words, unsigned wordCount, const char *bytes, unsigned byteLength);
   bool web_set_text_style(uint32_t token, const int *descriptor, unsigned count);
   /** Cost: breaker miss or natural width once; measures the borrowed range only. */
   int web_measure(const int *descriptor, const char *ptr, unsigned len, int *out);

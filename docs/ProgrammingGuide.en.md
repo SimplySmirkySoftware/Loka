@@ -1476,14 +1476,24 @@ the combined text; splitting the same styled content into more segments does
 not change its layout.
 
 Fold character styles into the value before passing it to `AttributedText`;
-the node has no separate character-style input. An invalid value displays as
-empty and refuses projection. Every rail draws it: Toolbox and Win32 run by
-run, macOS as one attributed line, and the Null rail deterministically for the
+the node has no separate character-style input. An invalid value displays as empty on every rail.
+Every rail draws it: Toolbox, Win32 and Web run by run, macOS as one attributed
+line, and the Null rail deterministically for the
 headless suite. Every rail wraps the combined text, never one segment at a
 time, but the wrap positions are the rail's: Toolbox, Win32 and Null break at
-ASCII spaces and tabs through the shared breaker, while macOS lets AppKit
+ASCII spaces and tabs through the shared breaker (also used by Web), while macOS lets AppKit
 choose its word breaks, so hyphens and non-Latin scripts can wrap differently
 across rails.
+
+Web shapes each run separately: style or link boundaries can break kerning, ligatures,
+combining sequences and Arabic joining. Wrapping still follows the combined
+text. ELLIPSIS displays only the first logical line, clipped at the edge of
+the text, without drawing an ellipsis glyph. Links do not activate. Fixed Grid cells
+can be overrun by tall content; aligned Rows use a default single-line height
+estimate and cannot reliably center taller attributed content. The DOM is a
+visual projection: hard/soft breaks, empty lines and truncated suffixes are not
+represented as source text. Source-faithful copy, selection and accessibility
+reading order are not promised.
 
 On Win32, pressing and releasing over the same link run activates it: the
 app's `activatedLink` box receives the target. Links have no hover or pressed
