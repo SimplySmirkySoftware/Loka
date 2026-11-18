@@ -2,6 +2,9 @@
 
 ## Highly recommended
 
+- **macOS AttributedText VoiceOver regression.** The TextKit leaf loses the static text role and value AppKit supplied for the label. Restore both, decide whether links are individual accessibility elements, and cover the legacy `accessibilityAttributeValue:` interface and the 10.10+ protocol.
+- **Plain Text and AttributedText appearance.** The plain NSTextField label has slightly heavier glyphs on Tahoe and a 1 pt taller line in the sampled Mavericks fixtures. Revisit sharing the TextKit renderer when plain Text needs hit testing or presentation tracking.
+
 - **#642 tracker entry growth (2026-09-10)**: an unreserved tracker keeps its
   first registration as a single row and grows by 16-row chunks afterwards, so
   MineSweeper's 64 singleton owners no longer pay a 16-row array each (about

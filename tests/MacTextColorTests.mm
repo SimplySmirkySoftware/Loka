@@ -1,3 +1,4 @@
+#include "support/MacAttributedTextTestAccess.hpp"
 #define LOKA_STYLE_VOCAB_DEFINE_NAMES
 #include "MacTextColorTests.hpp"
 #include "MacGround.hpp"
@@ -224,15 +225,14 @@ namespace
     return Styled("R", first) + Styled("U", TextStyle()) + Styled("B", Blue);
   }
 
-  void verifyRuns(NSTextField *label, TextColor first)
+  void verifyRuns(NSView *leaf, TextColor first)
   {
-    NSAttributedString *value = [label attributedStringValue];
+    using loka::dsl::testing::TextAttribute;
+    NSTextStorage *value = loka::dsl::testing::MacAttributedTextTestAccess::storage(leaf);
     LOKA_VERIFY([[value string] isEqualToString:@"RUB"]);
-    LOKA_VERIFY([[value attribute:NSForegroundColorAttributeName atIndex:0 effectiveRange:0] isEqual:expected(first)]);
-    LOKA_VERIFY([[value attribute:NSForegroundColorAttributeName atIndex:1
-                   effectiveRange:0] isEqual:loka::macos::MacLabelTextColor()]);
-    LOKA_VERIFY([[value attribute:NSForegroundColorAttributeName atIndex:2
-                   effectiveRange:0] isEqual:expected(TEXT_COLOR_BLUE)]);
+    LOKA_VERIFY([TextAttribute(value, NSForegroundColorAttributeName, 0) isEqual:expected(first)]);
+    LOKA_VERIFY([TextAttribute(value, NSForegroundColorAttributeName, 1) isEqual:loka::macos::MacLabelTextColor()]);
+    LOKA_VERIFY([TextAttribute(value, NSForegroundColorAttributeName, 2) isEqual:expected(TEXT_COLOR_BLUE)]);
   }
 } // namespace
 
@@ -464,7 +464,7 @@ void testMacAttributedTextColors()
     LOKA_VERIFY(scene.mount(&controller));
     SceneTestAccess::updateAttached(scene, true);
     controller.relayout(160, 100);
-    NSTextField *label = field(parent);
+    NSView *label = loka::dsl::testing::MacAttributedTextTestAccess::leaf(parent);
     verifyRuns(label, TEXT_COLOR_RED);
     NSRect frame = [label frame];
     {
@@ -485,7 +485,10 @@ void testMacAttributedTextColors()
     node.setPropsTypeId(AttributedTextProps::staticTypeId());
     controller.onChange(&node, NODE_DIRTY_NONE, false);
     controller.relayout(160, 100);
-    NSTextField *label = field(parent);
+    NSView *label = loka::dsl::testing::MacAttributedTextTestAccess::leaf(parent);
+    LOKA_VERIFY(label
+                == loka::dsl::testing::MacAttributedTextTestAccess::view(
+                    *static_cast<MacAttributedTextContext *>(node.getContext())));
     verifyRuns(label, TEXT_COLOR_RED);
     LOKA_VERIFY(AttributedText(runs(Green)).applyPropsToNode(&node));
     MacScenePlatformController::flushPendingRelayouts();

@@ -118,6 +118,25 @@ typedef float CGFloat;
 @end
 #endif
 
+// Late selectors are declared for type checking. Callers test runtime availability.
+@interface NSView (LokaSubviewsCompat)
+- (void)setSubviews:(NSArray *)views;
+@end
+#if !defined(MAC_OS_X_VERSION_MAX_ALLOWED) || MAC_OS_X_VERSION_MAX_ALLOWED < 1060
+@interface NSView (LokaLayerRedrawCompat)
+- (void)setLayerContentsRedrawPolicy:(NSInteger)policy;
+- (NSInteger)layerContentsRedrawPolicy;
+@end
+#define LOKA_MAC_LAYER_REDRAW_DURING_VIEW_RESIZE ((NSInteger)2)
+#else
+#define LOKA_MAC_LAYER_REDRAW_DURING_VIEW_RESIZE NSViewLayerContentsRedrawDuringViewResize
+#endif
+// Public in the macOS 14 SDK, answered by NSView since 10.9.
+@interface NSView (LokaBoundsClipCompat)
+- (void)setClipsToBounds:(BOOL)flag;
+- (BOOL)clipsToBounds;
+@end
+
 // backingScaleFactor arrived in 10.7, so the legacy SDK does not declare it and
 // Objective-C++ would infer an id return and reject the conversion to a number.
 // Declared and never implemented: this supplies a return type so the call
