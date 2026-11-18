@@ -199,7 +199,7 @@ namespace
     AdmissionAction &action = *static_cast<AdmissionAction *>(data);
     LOKA_VERIFY(action.current->isBusy());
     LOKA_VERIFY(!action.current->isRunInProgress());
-    LOKA_VERIFY(action.window->sceneManager()->commitTransaction(0, action.replacement));
+    LOKA_VERIFY(action.window->sceneManager()->requestReplacement(action.replacement));
     action.app->flush();
     LOKA_VERIFY(action.window->scene() == action.current);
     LOKA_VERIFY(*action.deaths == 0);
@@ -368,7 +368,7 @@ void testSceneFocusRefusedCandidate()
   f.loseRail = true;
   f.external = &external;
   Scene *candidate = new Scene(Boundary<Root>());
-  LOKA_VERIFY(window.sceneManager()->commitTransaction(0, candidate));
+  LOKA_VERIFY(window.sceneManager()->requestReplacement(candidate));
   app.flush();
   LOKA_VERIFY(loka::app::testing::SceneManagerTestAccess::lastPrepareRefusal(*window.sceneManager()) == candidate);
   LOKA_VERIFY(window.scene() == applied);
@@ -494,7 +494,7 @@ void testSceneFocusBusyAdmission()
   WindowAdmissionTestApp app(window);
   app.flush();
   Scene *current = new CountedScene(deaths);
-  LOKA_VERIFY(window.sceneManager()->commitTransaction(0, current));
+  LOKA_VERIFY(window.sceneManager()->requestReplacement(current));
   app.flush();
   LOKA_VERIFY(window.scene() == current);
   LOKA_VERIFY(deaths == 0);

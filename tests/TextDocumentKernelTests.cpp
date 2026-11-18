@@ -258,7 +258,7 @@ void testTextKernelCandidate()
   Scene *old = f.window.scene();
   refuseCandidate = true;
   Scene *candidate = new Scene(Boundary<Root>());
-  LOKA_VERIFY(f.window.sceneManager()->commitTransaction(0, candidate));
+  LOKA_VERIFY(f.window.sceneManager()->requestReplacement(candidate));
   f.app.flush();
   refuseCandidate = false;
   railLive = true;
@@ -272,7 +272,7 @@ void testTextKernelReplacement()
   TextDocumentAccess::edit(f.text(), TextChangedRange(0, 0, 9));
   f.app.reconcileAtCompletion();
   Scene *candidate = new Scene(Boundary<Root>());
-  LOKA_VERIFY(f.window.sceneManager()->commitTransaction(0, candidate));
+  LOKA_VERIFY(f.window.sceneManager()->requestReplacement(candidate));
   f.app.flush();
   f.app.reconcileAtCompletion();
   LOKA_VERIFY(f.window.scene() == candidate && f.controller.creates == 2);
@@ -581,7 +581,7 @@ namespace
       TextDocumentAccess::edit(f.text(), TextChangedRange(0, 0, 2));
       Scene *original = f.window.scene();
       Scene *candidate = new Scene(Boundary<Root>());
-      LOKA_VERIFY(f.window.sceneManager()->commitTransaction(0, candidate));
+      LOKA_VERIFY(f.window.sceneManager()->requestReplacement(candidate));
       f.app.flush();
       LOKA_VERIFY(f.window.scene() == original);
       original->requestInvalidate(NODE_DIRTY_PROPS);
@@ -824,7 +824,7 @@ void testTextCommitAdmissionGate()
   NullWindow window(&context, props(), &controller);
   WindowAdmissionTestApp app(window, &other.window);
   controller.app = &app;
-  LOKA_VERIFY(window.sceneManager()->commitTransaction(0, new Scene(Boundary<Root>())));
+  LOKA_VERIFY(window.sceneManager()->requestReplacement(new Scene(Boundary<Root>())));
   app.flush();
   LOKA_VERIFY(controller.creates == 2 && controller.result == TEXT_INPUT_UNAVAILABLE);
   LOKA_VERIFY(TextDocumentAccess::commitCalls(other.text()) == 0);
@@ -848,7 +848,7 @@ void testTextCommitRetainedRequestInvalidation()
   replaced.app.reconcileAtCompletion();
   LOKA_VERIFY(TextDocumentAccess::pending(replaced.text()));
   Scene *candidate = new Scene(Boundary<Root>());
-  LOKA_VERIFY(replaced.window.sceneManager()->commitTransaction(0, candidate));
+  LOKA_VERIFY(replaced.window.sceneManager()->requestReplacement(candidate));
   replaced.app.flush();
   replaced.app.reconcileAtCompletion();
   LOKA_VERIFY(replaced.window.scene() == candidate);
@@ -863,7 +863,7 @@ namespace
     static void run(void *data)
     {
       ReplaceOtherScene &self = *static_cast<ReplaceOtherScene *>(data);
-      LOKA_VERIFY(self.other.window.sceneManager()->commitTransaction(0, self.candidate));
+      LOKA_VERIFY(self.other.window.sceneManager()->requestReplacement(self.candidate));
       self.other.app.flush();
       LOKA_VERIFY(self.other.window.scene() == self.candidate);
       TextDocumentAccess::uncommitted(self.other.text(), "replacement");
@@ -1401,7 +1401,7 @@ namespace
       else
       {
         Scene *candidate = new Scene(Boundary<Root>());
-        LOKA_VERIFY(f.window.sceneManager()->commitTransaction(0, candidate));
+        LOKA_VERIFY(f.window.sceneManager()->requestReplacement(candidate));
         f.app.flush();
         f.app.reconcileAtCompletion();
         LOKA_VERIFY(f.window.scene() == candidate);
@@ -1965,7 +1965,7 @@ namespace
         else
         {
           Scene *candidate = new Scene(Boundary<Root>());
-          LOKA_VERIFY(f.window.sceneManager()->commitTransaction(0, candidate));
+          LOKA_VERIFY(f.window.sceneManager()->requestReplacement(candidate));
           f.app.flush();
           f.app.reconcileAtCompletion();
           LOKA_VERIFY(TextDocumentAccess::committedText(f.text()).empty());

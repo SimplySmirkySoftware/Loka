@@ -1026,8 +1026,8 @@ namespace
           WebScenePlatformController *controller = window.controller();
           {
             loka::core::Operation turn;
-            LOKA_VERIFY(window.sceneManager()->commitTransaction(
-                0, new loka::app::scene::Scene(loka::app::scene::Boundary<MarginBody>().clone())));
+            LOKA_VERIFY(window.sceneManager()->requestReplacement(
+                new loka::app::scene::Scene(loka::app::scene::Boundary<MarginBody>().clone())));
           }
           session.wake(IMMEDIATE, 3);
           LOKA_VERIFY(window.controller() == controller);
