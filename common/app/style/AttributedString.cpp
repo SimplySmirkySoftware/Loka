@@ -393,6 +393,32 @@ namespace loka
       return true;
     }
 
+    int AttributedString::compareSegmentValues(const AttributedString &other) const
+    {
+      if (this->valid_ != other.valid_)
+        return this->valid_ ? 1 : -1;
+      if (this->storage_ == other.storage_)
+        return 0;
+      const std::size_t leftCount = this->segmentCount();
+      const std::size_t rightCount = other.segmentCount();
+      for (std::size_t i = 0; i < leftCount && i < rightCount; ++i)
+      {
+        const Segment &a = this->segment(i);
+        const Segment &b = other.segment(i);
+        const int body = style_internal::CompareLinkTargets(LinkTarget(a.text), LinkTarget(b.text));
+        if (body)
+          return body;
+        if (a.style != b.style)
+          return a.style < b.style ? -1 : 1;
+        const int link = style_internal::CompareLinkTargets(a.link, b.link);
+        if (link)
+          return link;
+      }
+      if (leftCount == rightCount)
+        return 0;
+      return leftCount < rightCount ? -1 : 1;
+    }
+
     bool AttributedString::equals(const AttributedString &other) const
     {
       return this->compare(other) == 0;

@@ -8,6 +8,7 @@
 #include "PopupFixture.hpp"
 #include "RectSurfaceFixture.hpp"
 #include "AttributedFixture.hpp"
+#include "DocumentFixture.hpp"
 #include "WebTestHooks.hpp"
 #include "WebTestAccess.hpp"
 #include "WebWindow.hpp"
@@ -43,6 +44,8 @@ namespace loka
       vehicle.roots = webtest::staged.roots;
       vehicle.destroy = webtest::staged.destroy;
       session = &testing::Access::session(static_cast<WebPlatformContext &>(*platform));
+      if (webtest::staged.roots == -700)
+        return webtest::CreateDocument(platform);
       if (webtest::staged.roots == -600)
         return webtest::CreateAttributed(platform);
       if (webtest::staged.roots == -500)

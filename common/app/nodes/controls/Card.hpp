@@ -184,6 +184,22 @@ namespace loka
       {
         return this;
       }
+      /** Borrows the first content child, never a decoration; absent/empty is 0.
+          Cost: CodeBlock calls once per props apply; O(1), Card's own children only. */
+      scene::Node *contentHead()
+      {
+        scene::Node *column = this->childrenHead();
+        if (!column)
+          return 0;
+        StackNode *stack = column->asStackNode();
+        const bool expected = stack && stack->props.axis_ == STACK_AXIS_COLUMN;
+        assert(expected && "Card content must be a column");
+        if (!expected)
+          return 0;
+        scene::Node *content = stack->childrenHead();
+        assert((!content || !content->asCardBandNode()) && "Card content is not a band");
+        return content && content->asCardBandNode() ? 0 : content;
+      }
       virtual layout::FrameGeometry frameGeometry() const
       {
         const detail::CardShadowTable &g = this->props.style.geometry();

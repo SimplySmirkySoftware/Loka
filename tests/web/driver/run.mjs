@@ -9,6 +9,7 @@ const driverDir=fileURLToPath(new URL('.',import.meta.url));
 import assert from 'node:assert/strict';
 import {runStackCells, runHelloRoundTrip} from './stack-cells.mjs';
 import {runSkinCells} from './skin-cells.mjs';
+import {runDocumentCells} from './document-cells.mjs';
 import {runAttributedCells} from './attributed-cells.mjs';
 import {runRectSurfaceCells} from './rect-surface-cells.mjs';
 import {runPopupCells} from './popup-cells.mjs';
@@ -319,6 +320,7 @@ try {
   await runGridCells(client, navigate);
   await runRectSurfaceCells(client, navigate);
   await runAttributedCells(client, navigate);
+  await runDocumentCells(client, navigate);
   await runPopupCells(client, navigate);
   await runCellCells(client, navigate);
   await runSkinCells(client, navigate);
