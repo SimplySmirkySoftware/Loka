@@ -99,12 +99,10 @@ namespace
   {
   public:
     ReentrantSceneRetirementProbe(Window *window,
-                                  loka::app::scene::Scene *retiree,
                                   loka::app::scene::Scene *replacement,
                                   int *scenesAliveAfterNestedFlush)
         : loka::app::scene::Scene(new SceneOwnershipDefinition()),
           window_(window),
-          retiree_(retiree),
           replacement_(replacement),
           scenesAliveAfterNestedFlush_(scenesAliveAfterNestedFlush)
     {
@@ -121,7 +119,6 @@ namespace
 
   private:
     Window *window_;
-    loka::app::scene::Scene *retiree_;
     loka::app::scene::Scene *replacement_;
     int *scenesAliveAfterNestedFlush_;
   };
@@ -692,7 +689,7 @@ void testWindowDefersSceneRetiredDuringDrainUntilNextFlush()
   SceneOwnershipProbe *second = new SceneOwnershipProbe();
   SceneOwnershipProbe *third = new SceneOwnershipProbe();
   ReentrantSceneRetirementProbe *first =
-      new ReentrantSceneRetirementProbe(window, second, third, &scenesAliveAfterNestedFlush);
+      new ReentrantSceneRetirementProbe(window, third, &scenesAliveAfterNestedFlush);
 
   window->sceneManager()->requestReplacement(first);
   admission.flush();
