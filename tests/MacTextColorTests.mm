@@ -1,3 +1,4 @@
+#include "support/MacAttributedTextTestAccess.hpp"
 #define LOKA_STYLE_VOCAB_DEFINE_NAMES
 #include "MacTextColorTests.hpp"
 #include "MacGround.hpp"
@@ -224,9 +225,9 @@ namespace
     return Styled("R", first) + Styled("U", TextStyle()) + Styled("B", Blue);
   }
 
-  void verifyRuns(NSTextField *label, TextColor first)
+  void verifyRuns(const AttributedTextNode &node, TextColor first)
   {
-    NSAttributedString *value = [label attributedStringValue];
+    NSAttributedString *value = loka::dsl::testing::MacAttributedTextTestAccess::installedValue(node);
     LOKA_VERIFY([[value string] isEqualToString:@"RUB"]);
     LOKA_VERIFY([[value attribute:NSForegroundColorAttributeName atIndex:0 effectiveRange:0] isEqual:expected(first)]);
     LOKA_VERIFY([[value attribute:NSForegroundColorAttributeName atIndex:1
@@ -464,8 +465,11 @@ void testMacAttributedTextColors()
     LOKA_VERIFY(scene.mount(&controller));
     SceneTestAccess::updateAttached(scene, true);
     controller.relayout(160, 100);
-    NSTextField *label = field(parent);
-    verifyRuns(label, TEXT_COLOR_RED);
+    Node *child = SceneTestAccess::rootBoundary(scene)->childrenHead();
+    LOKA_VERIFY(child && child->asAttributedTextNode());
+    AttributedTextNode &node = *child->asAttributedTextNode();
+    NSView *label = loka::dsl::testing::MacAttributedTextTestAccess::leaf(parent);
+    verifyRuns(node, TEXT_COLOR_RED);
     NSRect frame = [label frame];
     {
       StateTrackerGuard guard(SceneTestAccess::rootBoundary(scene)->tracker());
@@ -475,7 +479,7 @@ void testMacAttributedTextColors()
       LOKA_VERIFY(SceneTestAccess::flushInvalidation(scene));
     LOKA_VERIFY(!scene.hasPendingInvalidation());
     MacScenePlatformController::flushPendingRelayouts();
-    verifyRuns(label, TEXT_COLOR_GREEN);
+    verifyRuns(node, TEXT_COLOR_GREEN);
     LOKA_VERIFY(NSEqualRects([label frame], frame));
     SceneTestAccess::unmount(scene);
   }
@@ -485,11 +489,13 @@ void testMacAttributedTextColors()
     node.setPropsTypeId(AttributedTextProps::staticTypeId());
     controller.onChange(&node, NODE_DIRTY_NONE, false);
     controller.relayout(160, 100);
-    NSTextField *label = field(parent);
-    verifyRuns(label, TEXT_COLOR_RED);
+    LOKA_VERIFY(loka::dsl::testing::MacAttributedTextTestAccess::leaf(parent)
+                == loka::dsl::testing::MacAttributedTextTestAccess::view(
+                    *static_cast<MacAttributedTextContext *>(node.getContext())));
+    verifyRuns(node, TEXT_COLOR_RED);
     LOKA_VERIFY(AttributedText(runs(Green)).applyPropsToNode(&node));
     MacScenePlatformController::flushPendingRelayouts();
-    verifyRuns(label, TEXT_COLOR_GREEN);
+    verifyRuns(node, TEXT_COLOR_GREEN);
     controller.onChange(0, NODE_DIRTY_NONE, false);
   }
   [parent release];

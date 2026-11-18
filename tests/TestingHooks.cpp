@@ -898,6 +898,15 @@ namespace loka
     {
       unsigned refusedAttributedDraws = 0;
     }
+    static unsigned macTextKitAllocationCountdown = 0;
+    void failMacTextKitAllocation(unsigned ordinal)
+    {
+      macTextKitAllocationCountdown = ordinal;
+    }
+    bool refuseMacTextKitAllocation()
+    {
+      return macTextKitAllocationCountdown && --macTextKitAllocationCountdown == 0;
+    }
     void failToolboxAttributedDraws(unsigned count)
     {
       refusedAttributedDraws = count;

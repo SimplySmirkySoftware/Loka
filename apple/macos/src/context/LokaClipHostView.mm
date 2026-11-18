@@ -1,10 +1,5 @@
 #include "LokaClipHostView.hpp"
 
-// The selector exists from 10.9; older SDKs still compile the guarded send.
-@interface NSView (LokaClipHostCompatibility)
-- (void)setClipsToBounds:(BOOL)clips;
-@end
-
 @implementation LokaClipHostView
 - (id)initWithFrame:(NSRect)frame
 {
