@@ -1,6 +1,7 @@
 #include "FakeBoundary.hpp"
 #include "WebStyleWire.hpp"
 #include "WebTextConstants.hpp"
+#include "WebRunsStatus.hpp"
 #include <sstream>
 namespace webtest
 {
@@ -14,8 +15,16 @@ namespace webtest
   int skinSelection = 0;
   unsigned skinPulls = 0;
   static unsigned nextHandle = 1;
+  std::map<MetricKey, std::pair<int, int> > descriptorMetrics;
+  std::map<RangeKey, int> rangeWidths;
+  int runsStatus = WEB_RUNS_APPLIED;
+  unsigned runsCalls = 0;
   void reset()
   {
+    runsStatus = WEB_RUNS_APPLIED;
+    runsCalls = 0;
+    descriptorMetrics.clear();
+    rangeWidths.clear();
     textService = false;
     skinSelection = 0;
     skinPulls = 0;
@@ -71,6 +80,21 @@ namespace webtest
 } // namespace webtest
 extern "C"
 {
+  int web_set_runs(uint32_t token, const int *words, unsigned count, const char *bytes, unsigned length)
+  {
+    ++webtest::runsCalls;
+    webtest::record("runs", token);
+    if (webtest::runsStatus != WEB_RUNS_APPLIED)
+      return webtest::runsStatus;
+    std::map<uint32_t, webtest::Resource>::iterator it = webtest::resources.find(token);
+    if (it == webtest::resources.end())
+      return WEB_RUNS_APPLIED;
+    if (it->second.kind != loka::web::ATTRIBUTED_TEXT)
+      return WEB_RUNS_PROTOCOL;
+    it->second.runs.assign(words, words + count);
+    it->second.text.assign(bytes ? bytes : "", length);
+    return WEB_RUNS_APPLIED;
+  }
   int web_create(int kind, uint32_t token, uint32_t parent, int *width, int *height)
   {
     std::ostringstream args;
@@ -347,7 +371,13 @@ extern "C" int web_measure(const int *descriptor, const char *text, unsigned len
   const int status =
       webtest::ScheduledFailure(webtest::failAdvance) ? webtest::measureStatus : webtest::MeasureStatus();
   if (status == WEB_MEASURE_OK)
-    *out = webtest::measuredWidth >= 0 ? webtest::measuredWidth : static_cast<int>(len * 7);
+  {
+    const webtest::RangeKey key(webtest::MetricKey(descriptor, descriptor + 9), std::string(text, len));
+    const std::map<webtest::RangeKey, int>::const_iterator found = webtest::rangeWidths.find(key);
+    *out = found != webtest::rangeWidths.end() ? found->second
+           : webtest::measuredWidth >= 0       ? webtest::measuredWidth
+                                               : static_cast<int>(len * 7);
+  }
   return status;
 }
 extern "C" int web_metrics(const int *descriptor, int *ascent, int *descent)
@@ -359,8 +389,11 @@ extern "C" int web_metrics(const int *descriptor, int *ascent, int *descent)
       webtest::ScheduledFailure(webtest::failMetrics) ? webtest::measureStatus : webtest::MeasureStatus();
   if (status == WEB_MEASURE_OK)
   {
-    *ascent = webtest::metricAscent;
-    *descent = webtest::metricDescent;
+    const webtest::MetricKey key(descriptor, descriptor + 9);
+    const std::map<webtest::MetricKey, std::pair<int, int> >::const_iterator found =
+        webtest::descriptorMetrics.find(key);
+    *ascent = found == webtest::descriptorMetrics.end() ? webtest::metricAscent : found->second.first;
+    *descent = found == webtest::descriptorMetrics.end() ? webtest::metricDescent : found->second.second;
   }
   return status;
 }

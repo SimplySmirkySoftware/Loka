@@ -53,6 +53,7 @@ namespace webtest
     int width, height;
     int x, y, documentWidth, extent, originX, originY;
     std::string text;
+    std::vector<int> runs;
     PopupSelection selection;
     std::vector<std::string> options;
     std::vector<bool> optionDisabled;
@@ -87,6 +88,14 @@ namespace webtest
   extern bool geometryMeasurable, textService;
   extern int skinSelection;
   extern unsigned skinPulls;
+  /** Opt-in oracle rows owned by the fake; reset removes all overrides.
+      Cost: test setup writes one row; each measurement does one keyed lookup. */
+  typedef std::vector<int> MetricKey;
+  typedef std::pair<MetricKey, std::string> RangeKey;
+  extern std::map<MetricKey, std::pair<int, int> > descriptorMetrics;
+  extern std::map<RangeKey, int> rangeWidths;
+  extern int runsStatus;
+  extern unsigned runsCalls;
   void reset();
   void fire(unsigned handle, double now);
   unsigned task(int kind);

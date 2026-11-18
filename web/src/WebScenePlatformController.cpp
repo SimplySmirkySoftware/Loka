@@ -5,6 +5,8 @@
 #include "WebGridLayoutHandler.hpp"
 #include "WebScrollContext.hpp"
 #include "WebPopupContext.hpp"
+#include "WebAttributedTextContext.hpp"
+#include "app/nodes/AttributedText.hpp"
 #include "WebRectSurfaceContext.hpp"
 #include "WebTextDescriptor.hpp"
 #include "WebScenePlatformController.hpp"
@@ -51,6 +53,7 @@ namespace
   };
   Handler<RectSurfaceNode, WebRectSurfaceContext, loka::web::RECT_SURFACE> RectSurfaceHandler;
   Handler<PopupMenuNode, WebPopupContext, loka::web::POPUP> PopupHandler;
+  Handler<AttributedTextNode, WebAttributedTextContext, loka::web::ATTRIBUTED_TEXT> AttributedTextHandler;
   Handler<TextNode, WebElementContext, loka::web::TEXT> TextHandler;
   Handler<ButtonNode, WebElementContext, loka::web::BUTTON> ButtonHandler;
   Handler<CellNode, WebElementContext, loka::web::CELL> CellHandler;
@@ -185,6 +188,9 @@ bool WebScenePlatformController::prepareProjectedLayout(Node *node, LayoutState 
 {
   if (!node)
     return false;
+  // Cost: projected visit once; one typed handler lookup, no resource rows.
+  if (node->asAttributedTextNode())
+    return AttributedTextHandler.ensureContext(node, this, state) != 0;
   if (node->asTextNode())
     return TextHandler.ensureContext(node, this, state) != 0;
   if (node->asButtonNode())

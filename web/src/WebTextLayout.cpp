@@ -1,5 +1,7 @@
 #include "WebTextLayout.hpp"
 #include "WebUtf8Bytes.hpp"
+#include "WebTextScalar.hpp"
+#include "WebRangeWidthMemo.hpp"
 #include "WebBoundary.hpp"
 #include "WebTestHooks.hpp"
 #include <cstdlib>
@@ -19,25 +21,6 @@ namespace
       return 0;
     return static_cast<T *>(loka::core::LokaAllocRaw((count ? count : 1) * sizeof(T), Storage));
   }
-  /** WHATWG error consumption around the shared strict decoder. Cost: normalizer
-      once per invalid scalar, consumes only the borrowed prefix (at least one byte). */
-  void ConsumeError(const char *bytes, std::size_t length, std::size_t &index)
-  {
-    const unsigned char lead = static_cast<unsigned char>(bytes[index++]);
-    unsigned need = lead >= 0xc2 && lead <= 0xdf   ? 1
-                    : lead >= 0xe0 && lead <= 0xef ? 2
-                    : lead >= 0xf0 && lead <= 0xf4 ? 3
-                                                   : 0;
-    for (unsigned n = 0; n < need && index < length; ++n)
-    {
-      const unsigned char c = static_cast<unsigned char>(bytes[index]);
-      const unsigned low = n == 0 && lead == 0xe0 ? 0xa0 : n == 0 && lead == 0xf0 ? 0x90 : 0x80;
-      const unsigned high = n == 0 && lead == 0xed ? 0x9f : n == 0 && lead == 0xf4 ? 0x8f : 0xbf;
-      if (c < low || c > high)
-        break;
-      ++index;
-    }
-  }
   /** Cost: build or equality once; one scan of borrowed bytes. Build writes its
       own prepared buffer; equality uses the identical normalizer without storage. */
   bool Normalize(const WebUtf8Bytes &source,
@@ -52,12 +35,7 @@ namespace
     {
       const std::size_t start = i;
       unsigned int value = 0;
-      const bool valid = loka::core::detail::DecodeUtf8Codepoint(source.bytes(), source.length(), i, value);
-      if (!valid)
-      {
-        ConsumeError(source.bytes(), source.length(), i);
-        value = 0xfffd;
-      }
+      const bool valid = WebTextScalar(source.bytes(), source.length(), i, value);
       const char *bytes = source.bytes() + start;
       std::size_t count = i - start;
       char single = 0;
@@ -184,11 +162,7 @@ class WebTextMeasure : public TextWidthSource
 public:
   explicit WebTextMeasure(const WebTextSnapshot &snapshot)
       : snapshot_(snapshot),
-        descriptor_(WebMetricDescriptor(snapshot.constraint_.fontKey)),
-        rows_(0),
-        capacity_(0),
-        used_(0),
-        status_(WEB_MEASURE_OK)
+        memo_(snapshot.prepared_, Storage)
   {
     this->span_.start = 0;
     this->span_.end = snapshot.characterCount_;
@@ -199,20 +173,14 @@ public:
           this->span_.end = i;
           break;
         }
-    if (!this->grow())
-      this->status_ = WEB_MEASURE_REFUSED;
-  }
-  ~WebTextMeasure()
-  {
-    loka::core::LokaFreeRaw(this->rows_, Storage);
   }
   int status() const
   {
-    return this->status_;
+    return this->memo_.status();
   }
   virtual bool valid() const
   {
-    return this->status_ == WEB_MEASURE_OK;
+    return this->status() == WEB_MEASURE_OK;
   }
   virtual std::size_t length() const
   {
@@ -236,72 +204,13 @@ public:
   }
   virtual bool width(std::size_t start, std::size_t end, std::size_t, int &out) const
   {
-    if (!this->valid())
-      return false;
-    if (this->used_ >= this->capacity_ / 2 && !this->grow())
-    {
-      this->status_ = WEB_MEASURE_REFUSED;
-      return false;
-    }
-    std::size_t index = this->find(start, end, this->rows_, this->capacity_);
-    if (this->rows_[index].occupied)
-    {
-      out = this->rows_[index].width;
-      return true;
-    }
-    int measured = 0;
-    this->status_ = CheckedStatus(web_measure(
-        this->descriptor_.data(), this->snapshot_.prepared_ + start, static_cast<unsigned>(end - start), &measured));
-    if (!this->valid())
-      return false;
-    Row &row = this->rows_[index];
-    row.start = start;
-    row.end = end;
-    row.width = measured;
-    row.occupied = true;
-    ++this->used_;
-    out = measured;
-    return true;
+    return this->memo_.width(start, end, this->snapshot_.constraint_.fontKey, out);
   }
 
 private:
-  struct Row
-  {
-    std::size_t start, end;
-    int width;
-    bool occupied;
-  };
   const WebTextSnapshot &snapshot_;
-  WebTextDescriptor descriptor_;
+  WebRangeWidthMemo memo_;
   TextStyleSpan span_;
-  mutable Row *rows_;
-  mutable std::size_t capacity_, used_;
-  mutable int status_;
-  std::size_t find(std::size_t start, std::size_t end, Row *rows, std::size_t capacity) const
-  {
-    std::size_t index = (start * 33 + end) & (capacity - 1);
-    while (rows[index].occupied && (rows[index].start != start || rows[index].end != end))
-      index = (index + 1) & (capacity - 1);
-    return index;
-  }
-  bool grow() const
-  {
-    if (this->capacity_ > (std::numeric_limits<std::size_t>::max)() / 2)
-      return false;
-    const std::size_t capacity = this->capacity_ ? this->capacity_ * 2 : 64;
-    Row *rows = Allocate<Row>(capacity);
-    if (!rows)
-      return false;
-    for (std::size_t i = 0; i < capacity; ++i)
-      rows[i].occupied = false;
-    for (std::size_t i = 0; i < this->capacity_; ++i)
-      if (this->rows_[i].occupied)
-        rows[this->find(this->rows_[i].start, this->rows_[i].end, rows, capacity)] = this->rows_[i];
-    loka::core::LokaFreeRaw(this->rows_, Storage);
-    this->rows_ = rows;
-    this->capacity_ = capacity;
-    return true;
-  }
   WebTextMeasure(const WebTextMeasure &);
   WebTextMeasure &operator=(const WebTextMeasure &);
 };
