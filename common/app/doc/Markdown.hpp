@@ -23,10 +23,11 @@ namespace loka
         /** Cost: one collection and strict scan of the current body or target per export. */
         inline bool CollectMarkdownText(const core::String &source, std::string &bytes)
         {
+          const size_t first = bytes.size();
           if (!platform::CollectUtf8(source, bytes))
             return false;
           unsigned scalar;
-          for (size_t i = 0; i < bytes.size();)
+          for (size_t i = first; i < bytes.size();)
             if (!core::detail::DecodeUtf8Codepoint(bytes.data(), bytes.size(), i, scalar) || !scalar)
               return false;
           return true;
@@ -52,33 +53,39 @@ namespace loka
           size_t link;
           unsigned marks;
           bool code;
-          /** Cost: grouping compares neighboring styles once per scalar, without re-reading targets. */
+          /** Cost: one constant-time comparison per interval contribution, without re-reading targets. */
           bool operator==(const MarkdownStyle &rhs) const
           {
             return this->link == rhs.link && this->marks == rhs.marks && this->code == rhs.code;
           }
         };
-        /** A scalar references its original bytes even when its projected value changes. */
-        struct MarkdownChar
-        {
-          MarkdownStyle style;
-          size_t offset;
-          unsigned scalar;
-          unsigned length;
-          bool edge;
-        };
-        /** Nonempty span of equal projected style with its escaped or fenced body. */
+        /** Half-open byte interval in the current buffer. No per-character storage. */
         struct MarkdownRun
         {
           MarkdownStyle style;
-          std::string body;
+          size_t first;
+          size_t end;
         };
 
-        /** Cost: one pass over each byte in the run being fenced. */
-        inline std::string Backticks(const std::string &body, size_t minimum)
+        /** Cost: O(1) amortized per interval contributed during collection, folding or edge splitting. */
+        inline void AppendRun(std::vector<MarkdownRun> &runs, MarkdownStyle style, size_t first, size_t end)
+        {
+          if (first == end)
+            return;
+          if (runs.empty() || !(runs.back().style == style))
+          {
+            MarkdownRun run = {style, first, end};
+            runs.push_back(run);
+          }
+          else
+            runs.back().end = end;
+        }
+
+        /** Cost: one bounded scan of the byte interval being fenced. */
+        inline std::string Backticks(const std::string &body, size_t first, size_t end, size_t minimum)
         {
           size_t length = minimum, current = 0;
-          for (size_t i = 0; i < body.size(); ++i)
+          for (size_t i = first; i < end; ++i)
           {
             current = body[i] == '`' ? current + 1 : 0;
             if (current >= length)
@@ -86,184 +93,258 @@ namespace loka
           }
           return std::string(length, '`');
         }
-        /** Cost: the speller fences one code run, scanning its bytes for delimiter width and padding. */
-        inline bool InlineCode(std::string &body)
+
+        /** Cost: once per code run, scans its validated bytes, then appends the fenced slice. */
+        inline bool AppendInlineCode(const std::string &body, size_t first, size_t end, std::string &out)
         {
-          const std::string fence = Backticks(body, 1);
-          bool pad =
-              body[0] == '`' || body[body.size() - 1] == '`'
-              || (body[0] == ' ' && body[body.size() - 1] == ' ' && body.find_first_not_of(' ') != std::string::npos);
-          if (pad && body[0] == ' ')
+          bool pad = body[first] == '`' || body[end - 1] == '`';
+          if (body[first] == ' ' && body[end - 1] == ' ')
           {
-            // CommonMark tests for ASCII spaces only. Some readers trim using Unicode whitespace.
-            size_t i = 0;
-            while (i < body.size())
+            bool onlySpaces = true;
+            for (size_t i = first; i < end;)
             {
               unsigned scalar = 0;
-              core::detail::DecodeUtf8Codepoint(body.data(), body.size(), i, scalar);
+              core::detail::DecodeUtf8Codepoint(body.data(), end, i, scalar);
+              if (scalar != ' ')
+                onlySpaces = false;
               if (!EdgeSpace(scalar) && !ExtraStripSpace(scalar))
                 break;
-              if (i == body.size())
+              // Readers disagree about padding around mixed whitespace alone.
+              if (i == end && !onlySpaces)
                 return false;
             }
+            pad = !onlySpaces;
           }
-          body = fence + (pad ? " " : "") + body + (pad ? " " : "") + fence;
+          const std::string fence = Backticks(body, first, end, 1);
+          out += fence;
+          if (pad)
+            out += ' ';
+          out.append(body, first, end - first);
+          if (pad)
+            out += ' ';
+          out += fence;
           return true;
         }
 
-        /** Temporary normalized projection of one paragraph or heading. Cost: linear passes over its segments and
-         * scalars. */
+        /** Half-open interval containing the ink in a validated run or physical line. */
+        struct MarkdownInk
+        {
+          size_t first, end;
+        };
+
+        /** Cost: one scalar scan of the specified range. All-whitespace input returns an empty suffix. */
+        inline MarkdownInk FindMarkdownInk(const std::string &bytes, size_t first, size_t end)
+        {
+          MarkdownInk ink = {end, end};
+          for (size_t i = first; i < end;)
+          {
+            const size_t start = i;
+            unsigned scalar = 0;
+            core::detail::DecodeUtf8Codepoint(bytes.data(), end, i, scalar);
+            if (!EdgeSpace(scalar))
+            {
+              if (ink.first == end)
+                ink.first = start;
+              ink.end = i;
+            }
+          }
+          return ink;
+        }
+
+        /** Forward cursor shared across styles, including code spans the text speller skips.
+            Cost: at most one search and ink scan per physical line, constant storage. */
+        class MarkdownLineEdges
+        {
+          size_t nextLine_;
+          MarkdownInk ink_;
+
+        public:
+          explicit MarkdownLineEdges(size_t first)
+              : nextLine_(first),
+                ink_()
+          {
+          }
+          /** Cost: the speller queries in increasing byte order, amortized linear in all line bytes. */
+          bool contains(const std::string &bytes, size_t offset, size_t end)
+          {
+            while (this->nextLine_ <= offset)
+            {
+              size_t lineEnd = bytes.find('\n', this->nextLine_);
+              if (lineEnd > end)
+                lineEnd = end;
+              if (offset <= lineEnd)
+                this->ink_ = FindMarkdownInk(bytes, this->nextLine_, lineEnd);
+              this->nextLine_ = lineEnd + 1;
+            }
+            return offset < this->ink_.first || offset >= this->ink_.end;
+          }
+        };
+
+        /** Block-local scratch = O(runs) records + collected bytes + staged output.
+            Each MarkdownRun costs sizeof(MarkdownStyle) + 2*sizeof(size_t), including style padding.
+            For R maximal nonempty authored style/target runs, folding yields at most R ranges.
+            Removing emphasis from their edges yields at most 3R. Only two range lists coexist
+            during replacement. Destination offsets refer into one NUL-delimited byte buffer. */
         struct MarkdownInline
         {
           std::string bytes;
-          std::vector<std::string> targets;
-          std::vector<MarkdownChar> chars;
+          std::string targets;
+          std::vector<MarkdownRun> runs;
 
-          /** After CRLF folding, continue the preceding link if its destination bytes match.
-              Cost: one comparison per nonempty linked segment, against its immediate predecessor only. */
+          /** Cost: one comparison with the previous target per nonempty linked segment. */
           size_t linkFor(const std::string &target)
           {
             if (target.empty())
               return 0;
-            size_t link = this->chars.empty() ? 0 : this->chars.back().style.link;
-            if (this->targets[link] != target)
+            size_t link = this->runs.empty() ? 0 : this->runs.back().style.link;
+            if (target != this->targets.c_str() + link)
             {
-              this->targets.push_back(target);
-              link = this->targets.size() - 1;
+              link = this->targets.size();
+              this->targets += target;
+              this->targets += '\0';
             }
             return link;
           }
 
-          /** Cost: one collection per authored segment body and destination, one projection per scalar. */
-          bool collect(const AttributedString &content)
+          /** Cost: collect and strictly validate each segment body and target once. */
+          bool collect(const AttributedString &content, bool heading)
           {
             if (!content.valid())
               return false;
-            this->targets.reserve(content.segmentCount() + 1);
-            this->targets.push_back("");
+            this->targets += '\0';
+            bool trailingCR = false;
             for (size_t s = 0; s < content.segmentCount(); ++s)
             {
               const AttributedString::Segment &seg = content.segment(s);
-              std::string body, target;
-              if (!platform::CollectUtf8(seg.text, body) || !CollectMarkdownText(seg.link.text(), target)
+              const size_t first = this->bytes.size();
+              std::string target;
+              if (!CollectMarkdownText(seg.text, this->bytes) || !CollectMarkdownText(seg.link.text(), target)
                   || target.find_first_of("\r\n") != std::string::npos)
                 return false;
-              if (body.empty())
+              if (this->bytes.size() == first)
                 continue;
+              // The following LF owns a cross-segment CRLF. Withdraw the preceding
+              // byte (and possibly its entire run) before deciding whether this link continues.
+              size_t begin = first;
+              if (trailingCR && this->bytes[first] == '\n')
+              {
+                --begin;
+                this->runs.back().end = begin;
+                if (this->runs.back().first == begin)
+                  this->runs.pop_back();
+              }
+              trailingCR = this->bytes[this->bytes.size() - 1] == '\r';
               bool italic;
               TextWeight weight;
               const unsigned marks = (seg.style.queryWeight(weight) && weight == TEXT_WEIGHT_BOLD ? 2U : 0U)
                                      + (seg.style.queryItalic(italic) && italic ? 1U : 0U);
-              MarkdownStyle style = {0, marks, seg.style.family() == TEXT_FAMILY_MONOSPACE};
-              size_t base = this->bytes.size();
-              this->bytes += body;
-              for (size_t i = 0; i < body.size();)
+              MarkdownStyle style = {this->linkFor(target), marks, seg.style.family() == TEXT_FAMILY_MONOSPACE};
+              // Within this segment both bytes have the same style. Compact toward begin.
+              size_t write = begin;
+              for (size_t i = first; i < this->bytes.size(); ++i)
               {
-                size_t start = i;
-                unsigned scalar = 0;
-                if (!core::detail::DecodeUtf8Codepoint(body.data(), body.size(), i, scalar) || !scalar)
-                  return false;
-                if (scalar == '\n' && !this->chars.empty() && this->chars.back().scalar == '\r')
-                  this->chars.pop_back();
-                if (!start)
-                  style.link = this->linkFor(target);
-                MarkdownChar c = {style, base + start, scalar, static_cast<unsigned>(i - start), false};
-                this->chars.push_back(c);
+                char c = this->bytes[i];
+                if (c == '\r' && i + 1 < this->bytes.size() && this->bytes[i + 1] == '\n')
+                  continue;
+                if (c == '\r' || c == '\n')
+                  c = heading || style.code ? ' ' : '\n';
+                this->bytes[write++] = c;
               }
+              this->bytes.resize(write);
+              AppendRun(this->runs, style, begin, write);
             }
             return true;
           }
 
-          /** Cost: the inline writer visits the block's scalars in a bounded number of linear passes. */
-          void normalize(bool heading)
+          /** Cost: trim the paragraph's byte bounds, then scan each marked run once for its ink. */
+          void normalizeEdges()
           {
-            for (size_t i = 0; i < this->chars.size(); ++i)
+            std::vector<MarkdownRun> projected;
+            const size_t first = this->bytes.find_first_not_of('\n');
+            if (first != std::string::npos)
             {
-              MarkdownChar &c = this->chars[i];
-              if (c.scalar == '\r' || c.scalar == '\n')
-                c.scalar = heading || c.style.code ? ' ' : '\n';
+              const size_t end = this->bytes.find_last_not_of('\n') + 1;
+              for (size_t r = 0; r < this->runs.size(); ++r)
+              {
+                MarkdownRun run = this->runs[r];
+                if (run.first < first)
+                  run.first = first;
+                if (run.end > end)
+                  run.end = end;
+                if (run.first >= run.end)
+                  continue;
+                if (!run.style.marks)
+                {
+                  AppendRun(projected, run.style, run.first, run.end);
+                  continue;
+                }
+                const MarkdownInk ink = FindMarkdownInk(this->bytes, run.first, run.end);
+                MarkdownStyle plain = run.style;
+                plain.marks = 0;
+                AppendRun(projected, plain, run.first, ink.first);
+                AppendRun(projected, run.style, ink.first, ink.end);
+                AppendRun(projected, plain, ink.end, run.end);
+              }
             }
-            size_t first = 0;
-            while (first < this->chars.size() && this->chars[first].scalar == '\n')
-              ++first;
-            this->chars.erase(this->chars.begin(), this->chars.begin() + first);
-            while (!this->chars.empty() && this->chars.back().scalar == '\n')
-              this->chars.pop_back();
-            for (size_t i = 0; i < this->chars.size();)
-            {
-              size_t end = i + 1;
-              while (end < this->chars.size() && this->chars[end].style == this->chars[i].style)
-                ++end;
-              size_t left = i, right = end;
-              while (left < end && EdgeSpace(this->chars[left].scalar))
-                this->chars[left++].style.marks = 0;
-              while (right > left && EdgeSpace(this->chars[right - 1].scalar))
-                this->chars[--right].style.marks = 0;
-              i = end;
-            }
-            bool leading = true, trailing = true;
-            for (size_t i = 0; i < this->chars.size(); ++i)
-            {
-              MarkdownChar &a = this->chars[i], &b = this->chars[this->chars.size() - 1 - i];
-              leading = a.scalar == '\n' || (leading && EdgeSpace(a.scalar));
-              trailing = b.scalar == '\n' || (trailing && EdgeSpace(b.scalar));
-              a.edge |= leading;
-              b.edge |= trailing;
-            }
+            this->runs.swap(projected);
           }
 
-          /** Cost: once per block, writes its projected scalars into maximal runs. */
-          bool spell(std::vector<MarkdownRun> &runs) const
+          /** Cost: one spelling pass into a byte buffer. Ranges then address emitted payloads
+              so flanking checks use the actual adjacent bytes. Line lookahead is linear in total. */
+          bool spell()
           {
-            size_t count = 0;
-            for (size_t i = 0; i < this->chars.size(); ++i)
-              if (!i || !(this->chars[i - 1].style == this->chars[i].style))
-                ++count;
-            runs.reserve(count);
-            bool lineStart = true, digits = false;
-            for (size_t i = 0; i < this->chars.size(); ++i)
+            if (this->runs.empty())
+              return true;
+            const size_t first = this->runs.front().first, end = this->runs.back().end;
+            MarkdownLineEdges edges(first);
+            std::string spelled;
+            spelled.reserve(end - first);
+            for (size_t r = 0; r < this->runs.size(); ++r)
             {
-              const MarkdownChar &c = this->chars[i];
-              if ((i == 0 || i + 1 == this->chars.size()) && !c.style.link && !c.style.marks && !c.style.code
-                  && ExtraStripSpace(c.scalar))
-                return false;
-              if (runs.empty() || !(runs.back().style == c.style))
+              MarkdownRun &run = this->runs[r];
+              const size_t start = spelled.size();
+              if (run.style.code)
               {
-                // A generated label, code fence or emphasis marker interrupts a physical list prefix.
-                if (!runs.empty() || c.style.link || c.style.marks || c.style.code)
-                  lineStart = digits = false;
-                MarkdownRun run = {c.style, ""};
-                runs.push_back(run);
-              }
-              std::string &body = runs.back().body;
-              unsigned v = c.scalar;
-              if (!c.style.code && v == '\n')
-                body += "\\\n";
-              else if (!c.style.code && c.edge && EdgeSpace(v))
-              {
-                char ref[16];
-                ::snprintf(ref, sizeof(ref), v < 128 ? "&#%u;" : "&#x%X;", v);
-                body += ref;
+                if (!AppendInlineCode(this->bytes, run.first, run.end, spelled))
+                  return false;
               }
               else
               {
-                bool beforeLink = i + 1 < this->chars.size() && this->chars[i + 1].style.link
-                                  && this->chars[i + 1].style.link != c.style.link && !c.style.link && !c.style.marks;
-                if (!c.style.code && v < 128
-                    && (std::strchr("\\`*_[]<&#~", v) || (lineStart && std::strchr(">+-=", v))
-                        || (digits && (v == '.' || v == ')')) || (v == '!' && beforeLink)))
-                  body += '\\';
-                if (v < 128)
-                  body += static_cast<char>(v);
-                else
-                  body.append(this->bytes, c.offset, c.length);
+                bool lineStart = !r && !run.style.link && !run.style.marks;
+                bool digits = false;
+                for (size_t i = run.first; i < run.end;)
+                {
+                  size_t pos = i;
+                  unsigned v = 0;
+                  core::detail::DecodeUtf8Codepoint(this->bytes.data(), run.end, i, v);
+                  if ((pos == first || i == end) && !run.style.link && !run.style.marks && ExtraStripSpace(v))
+                    return false;
+                  if (v == '\n')
+                    spelled += "\\\n";
+                  else if (EdgeSpace(v) && edges.contains(this->bytes, pos, end))
+                  {
+                    char ref[16];
+                    ::snprintf(ref, sizeof(ref), v < 128 ? "&#%u;" : "&#x%X;", v);
+                    spelled += ref;
+                  }
+                  else
+                  {
+                    bool beforeLink = i == run.end && r + 1 < this->runs.size() && this->runs[r + 1].style.link
+                                      && !run.style.link && !run.style.marks;
+                    if (v < 128
+                        && (std::strchr("\\`*_[]<&#~", v) || (lineStart && std::strchr(">+-=", v))
+                            || (digits && (v == '.' || v == ')')) || (v == '!' && beforeLink)))
+                      spelled += '\\';
+                    spelled.append(this->bytes, pos, i - pos);
+                  }
+                  digits = (lineStart || digits) && v >= '0' && v <= '9';
+                  lineStart = v == '\n';
+                }
               }
-              digits = (lineStart || digits) && v >= '0' && v <= '9';
-              lineStart = v == '\n';
+              run.first = start;
+              run.end = spelled.size();
             }
-            for (size_t i = 0; i < runs.size(); ++i)
-              if (runs[i].style.code && !InlineCode(runs[i].body))
-                return false;
+            this->bytes.swap(spelled);
             return true;
           }
         };
@@ -284,10 +365,10 @@ namespace loka
         }
 
         /** Cost: once per maximal link, escaping only its own destination bytes. */
-        inline void CloseMarkdownLink(std::string &out, const std::string &target)
+        inline void CloseMarkdownLink(std::string &out, const char *target)
         {
           out += "](<";
-          for (size_t i = 0; i < target.size(); ++i)
+          for (size_t i = 0; target[i]; ++i)
           {
             if (std::strchr("<>\\&", target[i]))
               out += '\\';
@@ -300,12 +381,12 @@ namespace loka
         inline bool WriteInline(const AttributedString &content, bool heading, std::string &out)
         {
           MarkdownInline input;
-          if (!input.collect(content))
+          if (!input.collect(content, heading))
             return false;
-          input.normalize(heading);
-          std::vector<MarkdownRun> runs;
-          if (!input.spell(runs))
+          input.normalizeEdges();
+          if (!input.spell())
             return false;
+          const std::vector<MarkdownRun> &runs = input.runs;
           for (size_t i = 0; i < runs.size(); ++i)
           {
             const MarkdownRun &run = runs[i];
@@ -317,7 +398,7 @@ namespace loka
               out += '[';
             const unsigned marks = run.style.marks;
             if (!marks)
-              out += run.body;
+              out.append(input.bytes, run.first, run.end - run.first);
             else
             {
               char left = open || out.empty() ? 0 : out[out.size() - 1];
@@ -329,18 +410,21 @@ namespace loka
                 else if (next->style.marks)
                   right = '<'; // The touching successor will use HTML.
                 else
-                  right = next->body[0];
+                  right = input.bytes[next->first];
               }
               bool touching = !open && prev && prev->style.link == run.style.link && prev->style.marks;
               bool literal = next && !close && !next->style.marks && !next->style.code
                              && next->style.link == run.style.link
-                             && (next->body.compare(0, 2, "\\*") == 0 || next->body.compare(0, 2, "\\_") == 0);
-              bool stars = !touching && !literal && StarEdge(left, run.body[0])
-                           && StarEdge(right, run.body[run.body.size() - 1]);
+                             && (input.bytes.compare(next->first, 2, "\\*") == 0
+                                 || input.bytes.compare(next->first, 2, "\\_") == 0);
+              bool stars = !touching && !literal && StarEdge(left, input.bytes[run.first])
+                           && StarEdge(right, input.bytes[run.end - 1]);
               if (stars)
               {
                 const std::string marker(marks, '*');
-                out += marker + run.body + marker;
+                out += marker;
+                out.append(input.bytes, run.first, run.end - run.first);
+                out += marker;
               }
               else
               {
@@ -348,7 +432,7 @@ namespace loka
                   out += "<strong>";
                 if (marks & 1)
                   out += "<em>";
-                out += run.body;
+                out.append(input.bytes, run.first, run.end - run.first);
                 if (marks & 1)
                   out += "</em>";
                 if (marks & 2)
@@ -356,7 +440,7 @@ namespace loka
               }
             }
             if (close)
-              CloseMarkdownLink(out, input.targets[run.style.link]);
+              CloseMarkdownLink(out, input.targets.c_str() + run.style.link);
           }
           return true;
         }
@@ -405,7 +489,7 @@ namespace loka
                 continue;
               body += raw[i] == '\r' ? '\n' : raw[i];
             }
-            std::string fence = Backticks(body, 3);
+            std::string fence = Backticks(body, 0, body.size(), 3);
             if (!body.empty() && body[body.size() - 1] != '\n')
               body += '\n';
             this->block(fence + "\n" + body + fence);
@@ -440,7 +524,8 @@ namespace loka
           The owner lends a stable mounted tree synchronously on the Main Thread. The walk never mutates it.
           Detached roots contribute nothing. The initial attached lifecycle fact cannot authenticate a mount.
           Cost: once per explicit export, proportional to visited nodes, segments, collection and output bytes.
-          Recursion follows tree depth. Peak storage includes out, staged fragment, scratch and destination growth. */
+          Recursion follows tree depth. Scratch is O(style runs) records + collected bytes + staged output, alongside
+         out and its growth. */
       inline bool WriteMarkdown(scene::Node *root, std::string &out)
       {
         detail::MarkdownReader reader;

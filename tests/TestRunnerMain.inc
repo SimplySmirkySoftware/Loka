@@ -1,4 +1,5 @@
 #include <cassert>
+#include <climits>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -159,6 +160,26 @@ namespace
     return 0;
 #endif
   }
+#ifdef LOKA_TEST_RUNNER_CONTRACT
+  /** Parses the generator's ASCII unsigned decimal arguments. Cost: one pass per argument. */
+  bool parseMarkdownUnsigned(const char *text, unsigned &out)
+  {
+    if (!*text)
+      return false;
+    unsigned value = 0;
+    for (; *text; ++text)
+    {
+      if (*text < '0' || *text > '9')
+        return false;
+      const unsigned digit = static_cast<unsigned>(*text - '0');
+      if (value > (UINT_MAX - digit) / 10)
+        return false;
+      value = value * 10 + digit;
+    }
+    out = value;
+    return true;
+  }
+#endif
 } // namespace
 
 int main(int argc, char **argv)
@@ -181,9 +202,16 @@ int main(int argc, char **argv)
 #endif
 
 #ifdef LOKA_TEST_RUNNER_CONTRACT
-  if (argc == 4 && std::strcmp(argv[1], "--document-markdown-cases") == 0)
-    return documentMarkdownCases(static_cast<unsigned>(std::strtoul(argv[2], 0, 10)),
-                                 static_cast<unsigned>(std::strtoul(argv[3], 0, 10)));
+  if (argc > 1 && std::strcmp(argv[1], "--document-markdown-cases") == 0)
+  {
+    unsigned seed, count;
+    if (argc != 4 || !parseMarkdownUnsigned(argv[2], seed) || !parseMarkdownUnsigned(argv[3], count))
+    {
+      std::fprintf(stderr, "Usage: %s --document-markdown-cases SEED COUNT (decimal 0..%u)\n", argv[0], UINT_MAX);
+      return 2;
+    }
+    return documentMarkdownCases(seed, count);
+  }
 #endif
   if (argc == 1)
   {

@@ -517,6 +517,7 @@ void operator delete[](void *p, const std::nothrow_t &) throw()
 
 int main()
 {
+  allocpin::RunDocumentMarkdownAllocPin();
   allocpin::RunFocusCompletionAllocPin();
   allocpin::RunAttributedStringEqualsAllocPin();
   testStateTrackerRegistrationGrowth();

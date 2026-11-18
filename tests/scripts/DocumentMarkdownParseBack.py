@@ -2,17 +2,9 @@
 """Check the export projection. Exit 0 = pass, 1 = mismatch, 77 = skipped (unverified)."""
 from itertools import groupby
 import argparse
+import ctypes
 import subprocess
 import sys
-
-try:
-    import markdown_it
-except ModuleNotFoundError as error:
-    if error.name != "markdown_it":
-        raise
-    print("[skip] markdown_it not installed")
-    sys.exit(77)
-
 
 def projection(parser, source):
     tokens = parser.parse(source)
@@ -53,12 +45,28 @@ def decode(value):
     return bytes.fromhex(value).decode()
 
 
+def unsigned_decimal(text):
+    maximum = ctypes.c_uint(-1).value
+    digits = text.lstrip("0") or "0"
+    if (not text.isascii() or not text.isdigit() or len(digits) > len(str(maximum))
+            or int(digits) > maximum):
+        raise argparse.ArgumentTypeError(f"expected a decimal integer from 0 to {maximum}")
+    return int(digits)
+
+
 def main():
     cli = argparse.ArgumentParser(description=__doc__)
     cli.add_argument("executable")
-    cli.add_argument("seed", type=int)
-    cli.add_argument("count", type=int)
+    cli.add_argument("seed", type=unsigned_decimal)
+    cli.add_argument("count", type=unsigned_decimal)
     args = cli.parse_args()
+    try:
+        import markdown_it
+    except ModuleNotFoundError as error:
+        if error.name != "markdown_it":
+            raise
+        print("[skip] markdown_it not installed")
+        sys.exit(77)
     parser = markdown_it.MarkdownIt("commonmark")
     parser.validateLink = lambda url: True
     parser.normalizeLink = parser.normalizeLinkText = lambda url: url
