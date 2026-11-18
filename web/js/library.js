@@ -104,6 +104,14 @@ addToLibrary({
             overflow:'hidden',pointerEvents:'none',userSelect:'none'});
           element.textContent = 'RectSurface';
         }
+        // Cost: creation once per band; its strip owns one child, no listener or row walk.
+        if (kind === 8) {
+          Object.assign(element.style,{overflow:'hidden',pointerEvents:'none',border:'0',padding:'0'});
+          const body=document.createElement('div');
+          Object.assign(body.style,{position:'absolute',boxSizing:'border-box',background:'transparent',
+            border:'1px solid '+LokaWebStyle.skinLook[WebDOM.skin].button['border-color'],borderRadius:'6px'});
+          element.appendChild(body);
+        }
         if (kind === 7) Object.assign(element.style,{margin:"0",border:"0",padding:"0",overflow:"hidden"});
         if (kind === 5) {
           const g=LokaWebStyle.webButtonGeometry;
@@ -177,6 +185,14 @@ addToLibrary({
   web_set_rect(token,x,y,w,h) {
     const row=WebDOM.row(token); if(!row) return;
     Object.assign(row.element.style,{left:x+'px',top:y+'px',width:w+'px',height:h+'px'});
+  },
+  web_set_card_body__deps:['$WebDOM'],
+  /** Cost: admitted band visit once; one row lookup, five writes to its sole child. */
+  web_set_card_body(token,x,y,width,height,extent) {
+    const row=WebDOM.row(token);
+    if(!row || row.kind!==8) return;
+    Object.assign(row.element.firstElementChild.style,{left:x+'px',top:y+'px',width:width+'px',height:height+'px',
+      boxShadow:extent===1 ? '3px 3px 0 rgba(0,0,0,.5)' : extent===2 ? '0 4px 8px rgba(0,0,0,.25)' : 'none'});
   },
   web_set_projected__deps:['$WebDOM'],
   /** Cost: projection once per visit (popup layout, text render), writes one owned element. */
