@@ -211,8 +211,9 @@ namespace loka
           fresh = 0;
           return TEXT_STORE_REFUSED_UNSUPPORTED;
         }
-        /** Command refresh commits marked text. Copy handles and identities before the native call
-            and revalidate afterwards. Callbacks during the call may only mark the row's change note. */
+        /** Command refresh asks the rail to commit marked text; a rail may leave it pending.
+            Copy handles and identities before the native call and revalidate afterwards.
+            Callbacks during the call may only mark the row's change note. */
         virtual void commitMarkedText(TextStoreRow &) {}
         /** Settle this row immediately before linked detach (except discarded row retirement)
             and each read-only attach or presentation, inside the same borrow. Marks only:
@@ -230,7 +231,8 @@ namespace loka
         {
           return false;
         }
-        /** Once per linked detach or row retirement. No allocation, no failure; remove borrowed
+        /** Once per linked detach, including retirement of a row that still has a linked view (a
+            parked or transferred-away row goes straight to retireTextStore). No allocation, no failure; remove borrowed
             presentation resources and park the body. Preserve body, selection, undo and marks as of
             entry, after any settle. No kernel reentry. Retired native resources are silent, including at drain. */
         virtual void detachTextView(TextStoreRow &) {}

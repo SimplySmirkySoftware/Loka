@@ -19,7 +19,8 @@ namespace loka
         void readLifecycleFactOnAttach();
         /** Existing lifecycle delivery; terminal delivery removes membership before context deletion. */
         virtual void onFactChanged(NodeLifecycleFact previous, NodeLifecycleFact next);
-        /** Compatible props refresh changes presentation only, never retries a refused attachment. */
+        /** Compatible props refresh never retries a refused attachment. A linked read-only refresh
+            first settles composition, which may commit it into the body, then applies presentation. */
         virtual void onPropsApplied();
 
       protected:

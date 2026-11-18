@@ -1086,6 +1086,9 @@ void testTextViewSettleLifecycleDetach()
   TextDocument &document = f.root().first;
   NullTextStore &row = *TextDocumentAccess::store(document);
   TextDocumentEditorNode *node = editor(&f.root());
+  f.complete();
+  LOKA_VERIFY(!row.pending());
+  const unsigned long revision = document.fact()->get().textRevision();
   ViewTrace trace(f.controller);
   TextDocumentAccess::uncommitted(document, "ime");
   NotifySubtreeNodeDetached(node);
@@ -1095,6 +1098,11 @@ void testTextViewSettleLifecycleDetach()
   trace.expect(Call::DETACH, row, false);
   trace.end();
   expectFold(document);
+  // The settled edit stays pending for the ordinary completion, which publishes it once.
+  LOKA_VERIFY(row.pending());
+  f.complete();
+  LOKA_VERIFY(document.fact()->get().textRevision() == revision + 1);
+  LOKA_VERIFY(!row.pending());
 }
 
 void testTextViewSettleEviction()
