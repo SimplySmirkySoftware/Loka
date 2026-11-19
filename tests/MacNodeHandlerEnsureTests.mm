@@ -3795,7 +3795,11 @@ namespace
   void VerifyMixedHit(HitLayout &layout, NSUInteger start, size_t first, size_t last, MacTextHitAnswer answer)
   {
     HitCluster cluster(layout, layout.glyph(start));
-    LOKA_VERIFY(cluster.shown && cluster.shown < cluster.glyphs.length);
+    // The mixed shown/hidden shape is the host's glyph choice, not the hit contract; only that witness skips.
+    LOKA_VERIFY(cluster.shown);
+    if (cluster.shown == cluster.glyphs.length)
+      std::printf("[skip] mixed shown/hidden cluster at character %lu: every glyph is shown on this host\n",
+                  static_cast<unsigned long>(start));
     for (NSUInteger g = cluster.glyphs.location; g < NSMaxRange(cluster.glyphs); ++g)
     {
       NSRange actual;
@@ -4087,6 +4091,13 @@ void testMacTextHitEdges()
   VerifyNearestMiss(layout, p);
   p = NSMakePoint(centre.x, (NSMaxY(first.line) + NSMaxY([layout.view bounds])) / 2);
   VerifyNearestMiss(layout, p);
+  // Inclusive minimum-x edge: move the bounds origin onto a glyph-interior x so the edge point is a source hit.
+  [layout.view setBoundsOrigin:NSMakePoint(centre.x, NSMinY(bounds))];
+  p = NSMakePoint(NSMinX([layout.view bounds]), centre.y);
+  LOKA_VERIFY(p.x == centre.x && layout.lookup(p) == 0);
+  layout.expect(p, MAC_HIT_SOURCE);
+  layout.expect(NSMakePoint(p.x - 0.5, p.y), MAC_HIT_NONE);
+  [layout.view setBoundsOrigin:NSMakePoint(NSMinX(bounds), NSMinY(bounds))];
   HitLayout wrapped(
       Styled("wrapped words\nwith trailing spaces   ", TextStyle()), 48, BlockStyle().wrap(TEXT_WRAP_WORD));
   HitLayout clipped(Styled("Open the documentation", TextStyle()), 40);

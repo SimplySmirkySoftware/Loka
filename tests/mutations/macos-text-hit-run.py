@@ -31,7 +31,7 @@ def mutations(source):
     return [
         ("max-x-inclusive", "p.x < NSMaxX(rect)", "p.x <= NSMaxX(rect)", "Edges", ()),
         ("max-y-inclusive", "p.y < NSMaxY(rect)", "p.y <= NSMaxY(rect)", "Edges", ()),
-        ("min-x-exclusive", "p.x >= NSMinX(rect)", "p.x > NSMinX(rect)", "Edges", both),
+        ("min-x-exclusive", "p.x >= NSMinX(rect)", "p.x > NSMinX(rect)", "Edges", ()),
         ("min-y-exclusive", "p.y >= NSMinY(rect)", "p.y > NSMinY(rect)", "Edges", ()),
         ("partial-layout", block("  if (!NSEqualRanges([manager glyphRangeForTextContainer", "  if (!n)"),
          "", "Refusals", ()),
