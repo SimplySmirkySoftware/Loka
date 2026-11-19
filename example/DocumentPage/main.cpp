@@ -32,6 +32,8 @@ namespace
     /** Cost: once per mount, declares the guide and both checklist rows. */
     virtual void composeNode(NodeComposition &c)
     {
+      if (!this->showNotes_.isValid())
+        return; // state storage refused; the render reports the recorded refusal
       const doc::ParagraphProps checklist[] = {doc::ParagraphProps("Pack a notebook."),
                                                doc::ParagraphProps("Bring water.")};
       c.declare(
