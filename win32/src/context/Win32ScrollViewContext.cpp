@@ -305,15 +305,13 @@ bool Win32ScrollViewContext::handleScroll(int bar, int command, int thumbPositio
   assert(this->controller()->borrowPhase().open());
 #endif
   SCROLLINFO info;
-  if (!this->readScrollInfo(bar, info))
+  if (!this->node_ || !this->node_->props.viewport_.isValid() || !this->readScrollInfo(bar, info))
   {
     return false;
   }
 
   const int maximum = this->maximumOffset(info);
-  int next = this->node_ && this->node_->props.viewport_.isValid()
-                 ? (bar == SB_HORZ ? this->node_->requestedOrigin().x : this->node_->requestedOrigin().y)
-                 : this->controller()->displayScale().scrollPositionToLu(info.nPos);
+  int next = bar == SB_HORZ ? this->node_->requestedOrigin().x : this->node_->requestedOrigin().y;
   next = this->clampOffset(next, maximum);
   int page = info.nPage > static_cast<UINT>(maximum)
                  ? maximum

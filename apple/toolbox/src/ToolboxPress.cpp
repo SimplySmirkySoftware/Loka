@@ -245,6 +245,8 @@ bool ToolboxScenePlatformController::dispatchPress(const ResolvedPress &press,
     const ToolboxEditorScrollBarAssociation editor = press.editor;
     const std::size_t viewportIndex = press.viewportIndex;
     loka::app::ScrollViewNode *viewport = press.viewport;
+    if (viewport && !viewport->props.viewport_.isValid())
+      return false;
     const loka::app::ScrollBarOrientation axis = press.axis;
     const ControlRef control = press.control;
     gActiveScrollBarLineStep = source.lineStep;

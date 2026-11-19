@@ -1,5 +1,6 @@
 #ifndef LOKA_TESTS_SCROLL_VIEW_REQUEST_TESTS_HPP
 #define LOKA_TESTS_SCROLL_VIEW_REQUEST_TESTS_HPP
+#include "support/RefusedScrollViewSeat.hpp"
 #include "support/ScrollViewSeat.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/nestable/ScrollViewSettlement.hpp"
@@ -254,15 +255,22 @@ inline void testScrollRequestRefusedVisit()
   LOKA_VERIFY(f.storage.viewport.get() == Frame(0, 0, 80, 30));
   LOKA_VERIFY(f.platform.scrollViewShortRangeRefusalCount() == 1);
 }
-inline void testScrollRequestUnboundViewport()
+inline void testScrollRequestRefusedViewport()
 {
   using namespace scroll_request_tests;
+  loka::testing::RefusedScrollViewSeat seat;
   Fixture f;
   LOKA_VERIFY((NodePropsApplier<ScrollViewNode, ScrollViewProps>::apply(
-      &f.node, ScrollViewProps().scrollTo(f.storage.request))));
-  f.storage.request.set(ScrollTarget::Top());
+      &f.node,
+      ScrollViewProps(seat.viewport).scrollTo(f.storage.request).contentInsets(ScrollViewContentInsets::of(12, 3)))));
+  VisitTrace::instance().clear();
+  f.node.publishOrigin(3, 7);
+  f.storage.request.set(ScrollTarget::Origin(5, 9));
   f.visit();
   LOKA_VERIFY(f.storage.request.get().isNone());
+  verifyVisitTrace(SCROLL_UNAVAILABLE, Frame(), Frame());
+  LOKA_VERIFY(f.node.requestedOrigin() == Frame(0, 0, 0, 0));
+  LOKA_VERIFY(!seat.viewport.isValid());
   LOKA_VERIFY(f.storage.viewport.get() == Frame(0, 0, 80, 30));
 }
 inline void testScrollRequestBindingReplacement()

@@ -1,3 +1,4 @@
+#include "support/RefusedScrollViewSeat.hpp"
 #include "WebTextDescriptor.hpp"
 #include "WebSession.hpp"
 #include "WebSkins.hpp"
@@ -72,6 +73,28 @@ namespace
   {
     ++*static_cast<int *>(value);
   }
+  void RefusedViewportScrollTest()
+  {
+    using namespace loka::app;
+    loka::testing::RefusedScrollViewSeat seat;
+    webtest::Fixture fixture;
+    Reset(fixture);
+    webtest::scrollMode() = 0;
+    WebSession session;
+    LOKA_VERIFY(session.start(&webtest::CreateScroll, 0) == WebSession::STARTED);
+    const uint32_t token = webtest::token(SCROLL);
+    WebScrollContext *ctx = session.routes().find(token)->scroll();
+    ctx->owner()->asScrollViewNode()->props = ScrollViewProps(seat.viewport);
+    const loka::core::Frame previous = webtest::scrollFixture()->viewport.get();
+    webtest::resources[token].originY = 40;
+    LOKA_VERIFY(session.scroll(token, 0, 40, 1) == WebSession::ACCEPTED);
+    LOKA_VERIFY(webtest::resources[token].originY == 40);
+    LOKA_VERIFY(session.resize(webtest::token(ROOT), 220, 121, 2) == WebSession::ACCEPTED);
+    LOKA_VERIFY(webtest::resources[token].originY == 0);
+    LOKA_VERIFY(!seat.viewport.isValid() && webtest::scrollFixture()->viewport.get() == previous);
+    Shutdown(session);
+  }
+
   void ScrollTest()
   {
     using namespace loka::app;
@@ -1320,6 +1343,7 @@ int main(int argc, char **argv)
   }
   if (argc == 2 && std::strcmp(argv[1], "scroll-only") == 0)
   {
+    RefusedViewportScrollTest();
     ScrollTest();
     return 0;
   }
@@ -1351,6 +1375,7 @@ int main(int argc, char **argv)
   RUN(WebAttributedDOMTests);
   RUN(WebAttributedBuildTests);
   RUN(CounterTest);
+  RUN(RefusedViewportScrollTest);
   RUN(ScrollTest);
   RUN(ParkTest);
   RUN(RetirementTest);

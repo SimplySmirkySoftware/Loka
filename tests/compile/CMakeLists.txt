@@ -679,6 +679,22 @@ add_test(NAME compileAccepts-request-focus-and-editor
     --config $<CONFIG> --target compilePin_request-focus-and-editor_accepts)
 set_tests_properties(compileAccepts-request-focus-and-editor PROPERTIES RESOURCE_LOCK loka-build-dir)
 
+loka_compile_pin(scrollview-default
+  REFUSES pins/refuses_scrollview_default.cpp
+  ACCEPTS pins/accepts_scrollview_viewport.cpp)
+
+loka_compile_pin(scrollview-props
+  REFUSES pins/refuses_scrollview_props.cpp
+  ACCEPTS pins/accepts_scrollview_viewport.cpp)
+
+loka_compile_pin(scrollview-definition
+  REFUSES pins/refuses_scrollview_definition.cpp
+  ACCEPTS pins/accepts_scrollview_viewport.cpp)
+
+loka_compile_pin(scrollview-setter
+  REFUSES pins/refuses_scrollview_setter.cpp
+  ACCEPTS pins/accepts_scrollview_viewport.cpp)
+
 loka_compile_pin(scrollview-visit-arity
   REFUSES pins/refuses_scrollview_visit_arity.cpp
   ACCEPTS pins/accepts_scrollview_visit_arity.cpp

@@ -1162,7 +1162,7 @@ while detached configure the next presentation.
 
 The design goal is that memory and lifecycle are visible from the DSL structure.
 
-### `ScrollView()`
+### `ScrollView(viewport)`
 
 `ScrollView(viewport) << content` scrolls one subtree. The app owns one
 `NodeState<Frame>` and lends it to the view; the rail writes the clamped scroll
@@ -1173,7 +1173,9 @@ content units; insets do not shrink it. The Null, Toolbox, Win32 and macOS rails
 `contentInsets(top, bottom)` also keeps the vertical bar clear of those rows at
 the viewport edges on Toolbox, Win32 and macOS; it does not move the horizontal bar or
 shrink the clip.
-Zero width and height mean "not reported yet". Initialise it with `Frame(0, 0, 0, 0)`.
+Zero width and height mean "not reported yet". The viewport is required. `ScrollView()` does not compile.
+With a top inset, initialise the viewport with `ScrollViewProps::topOrigin()` to show the gap
+or `Frame(0, 0, 0, 0)` to start with the gap scrolled away.
 
 ```cpp
 this->state(this->viewport_, loka::core::Frame(0, 0, 0, 0));
@@ -1184,7 +1186,7 @@ The state is the rail's result channel: layout publishes origin and visible size
 on reporting rails; input publishes origin while preserving size. Null has no
 maximum clamp. An unchanged fact publishes nothing, so layout settles after a
 size change.
-The initial value is the only origin the app chooses; a negative one reads as 0.
+The initial value is the only origin the app chooses.
 
 The vertical range is the content height. The horizontal range exists only when
 content overflows the width it is offered: a declared width (including a

@@ -26,7 +26,7 @@
 
 ## From AGENTS.md
 
-`ScrollViewProps::viewport` is a rail result channel: the app lends its
+The required `viewport` argument to `ScrollViewProps(viewport)` is a rail result channel: the app lends its
 `NodeState<Frame>`, the rail writes the scroll origin and reported visible
 size into it through `NodeState::set`, and the node reads the handle only for
 props identity. A
@@ -48,8 +48,8 @@ top inset visible (see [Content insets](#content-insets)).
 Four helpers on `ScrollViewNode` are the coordinate doors (origin publication
 introduced in #1357; content insets use the conversions below):
 
-- `requestedOrigin()` reads the app's value as an extent-offset request: an
-  unbound state requests 0 on both axes. X is clamped to `[0, SHRT_MAX]`;
+- `requestedOrigin()` reads the app's value as an extent-offset request.
+  X is clamped to `[0, SHRT_MAX]`;
   content Y below `-top` reads as `-top`, then converts to extent coordinates.
   With no insets, negative coordinates read as 0 as before.
 - `contentTranslation()` gives the content-coordinate translation for placement.
@@ -71,7 +71,7 @@ is one write, and `State<Frame>` costs no new template family on 68k.
 
 ## Content insets
 
-Declare vertical content insets with `ScrollView().contentInsets(top, bottom)`.
+Declare vertical content insets with `ScrollView(viewport).contentInsets(top, bottom)`.
 Each inset is a logical-unit value checked on construction; the completed value
 lives in the props. For laid-out content height H, the scrollable extent is
 `H + top + bottom`, and content is placed `top` below the extent's start.
@@ -87,8 +87,7 @@ The node doors contain the conversion:
 
 - `requestedOrigin()` returns extent offsets: X is unchanged from its existing
   normalization; Y is `clamp(fact.y, -top, SHRT_MAX - top) + top`. **Clamp before
-  adding top** to avoid overflow even near `INT_MAX`. An unbound seat requests
-  extent 0 on both axes.
+  adding top** to avoid overflow even near `INT_MAX`.
 - `contentTranslation()` returns
   `Frame(requestedOrigin().x, requestedOrigin().y - top, w, h)`, carrying the
   fact's stored size. Null passes this to `deriveScrolled` and records it in
@@ -297,7 +296,7 @@ tracking remains visual-only, and the wheel retains per-step publications.
 The visit records axis presence, not maxima: X follows this visit's horizontal
 bar decision, and a valid context includes its vertical scrollbar control.
 
-A reached refused visit or an unbound viewport takes and drops the request.
+A reached refused visit or a viewport whose state allocation failed takes and drops the request.
 An unreached child keeps it pending. A retained re-entry's first visit may jump;
 intervening input does not cancel a pending post. Replacing the request binding
 or leaving ATTACHED cancels pending work synchronously; replacing only viewport
