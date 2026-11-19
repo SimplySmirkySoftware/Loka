@@ -1,6 +1,7 @@
 #include "MacRelayoutDisplayTests.hpp"
 #include "MacScenePlatformController.hpp"
 #include "MacObjCCompat.hpp"
+#include "support/ScrollViewSeat.hpp"
 #include "support/MacWindowSession.hpp"
 #include "support/TestVerify.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
@@ -170,14 +171,17 @@ namespace
     DrawCounts &draws = DrawCounts::instance();
     draws.reset();
     loka::core::MutableState<int> spacerWidth(20);
+    loka::testing::ScrollViewSeat viewport;
     MacScenePlatformController controller([host.window contentView], RailMetrics());
     NodeDefinitionBase *definition =
         // The Cell fills the remaining height, so it comes last to keep every
         // sampled view inside the window for the first display.
-        (ScrollView() << (Column() << (Card() << Text("Quiescent card") << ImageView().size(32, 32))
-                                   << (Row() << Box().width(&spacerWidth).height(30) << RectSurface().size(40, 30))
-                                   << (RibbonControl() << (RibbonGroup("Quiescent group") << RibbonItem("Item")))
-                                   << Cell(CellProps().text("Quiescent cell"))))
+        (ScrollView(viewport.state()) << (Column()
+                                          << (Card() << Text("Quiescent card") << ImageView().size(32, 32))
+                                          << (Row()
+                                              << Box().width(&spacerWidth).height(30) << RectSurface().size(40, 30))
+                                          << (RibbonControl() << (RibbonGroup("Quiescent group") << RibbonItem("Item")))
+                                          << Cell(CellProps().text("Quiescent cell"))))
             .clone();
     LOKA_VERIFY(definition);
     {

@@ -1,3 +1,4 @@
+#include "support/ScrollViewSeat.hpp"
 #include "support/TextBufferFixture.hpp"
 #include "MacZStackUnitTests.hpp"
 #include "MacScenePlatformController.hpp"
@@ -160,6 +161,7 @@ namespace
   {
     Host host;
     MacScenePlatformController controller;
+    loka::testing::ScrollViewSeat viewport;
     Node *tree;
     Fixture()
         : controller(this->host.root, RailMetrics()),
@@ -541,7 +543,7 @@ void testMacScrollViewRefusedInsideUnit()
 {
   Fixture f;
   ZStackNode *stack = stackWithGround(f);
-  ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+  ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(f.viewport.state()));
   scroll->addChild(buttonColumn());
   stack->addChild(scroll);
   f.layout();
@@ -646,7 +648,7 @@ void testMacZStackUnitInsideViewportPropagatesRefusal()
 void testMacZStackGroundRefusalStopsUpperChildren()
 {
   Fixture f;
-  ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+  ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(f.viewport.state()));
   f.tree = scroll;
   ZStackNode *stack = new ZStackNode((ZStackProps()));
   scroll->addChild(stack);
@@ -662,7 +664,7 @@ void testMacZStackGroundRefusalStopsUpperChildren()
 void testMacZStackFirstPassRefusalKeepsUnitEmpty()
 {
   Fixture f;
-  ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+  ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(f.viewport.state()));
   f.tree = scroll;
   ZStackNode *stack = new ZStackNode((ZStackProps()));
   scroll->addChild(stack);
@@ -692,7 +694,7 @@ namespace
     RectSurfaceNode *ground = new RectSurfaceNode(RectSurfaceProps().model(&model).size(200, 400));
     if (scrolling)
     {
-      ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+      ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(f.viewport.state()));
       scroll->addChild(ground);
       stack->addChild(scroll);
     }
