@@ -50,6 +50,10 @@ namespace loka
 
     namespace scene
     {
+      namespace detail
+      {
+        class OneShotComposition;
+      }
       // Forward declaration only. Include the concrete type where needed.
       struct NodeComposition;
       inline static bool CanRelaxFullRebuildForChildOnlyUpdate(const SceneDirector::SceneUpdateSnapshot &snapshot);
@@ -630,6 +634,7 @@ namespace loka
         friend class ::SceneManager;
         friend class ::Window;
         friend class loka::app::detail::SceneRetirePool;
+        friend class detail::OneShotComposition;
         friend class SceneDirector;
         friend class TextDocumentRegistration;
         friend class ::loka::dsl::testing::SceneTestAccess;

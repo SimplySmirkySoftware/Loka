@@ -62,7 +62,7 @@ facts into native behavior.
 | Question | Read first | Then inspect |
 |---|---|---|
 | Why does Loka prefer this design shape? | [PHILOSOPHY.md](PHILOSOPHY.md) | The narrow subsystem document, if one exists |
-| How do apps write documents and update their content? | [Documents](docs/ProgrammingGuide.en.md#documents) | [`common/app/doc/`](common/app/doc/) and [`DocumentVocabularyTests.cpp`](tests/DocumentVocabularyTests.cpp) |
+| How do apps write and update documents, and how do standalone tools render them? | [Documents](docs/ProgrammingGuide.en.md#documents) | [`common/app/doc/`](common/app/doc/) and [`DocumentVocabularyTests.cpp`](tests/DocumentVocabularyTests.cpp) |
 | How should ordinary app DSL read? | [docs/API_STYLE.md](docs/API_STYLE.md) | Shipping examples under [`example/`](example/) |
 | Should this be a helper function, Component, or Boundary? | [docs/API_STYLE.md](docs/API_STYLE.md#choose-the-smallest-composition-form) | [`ComponentNode.hpp`](common/app/scene/node/ComponentNode.hpp), [`StdComposition.hpp`](common/app/nodes/boundary/StdComposition.hpp), and [`ComponentNodeTests.cpp`](tests/ComponentNodeTests.cpp) |
 | Where should state live and who may mutate it? | [docs/ProgrammingGuide.en.md](docs/ProgrammingGuide.en.md) and [PHILOSOPHY.md](PHILOSOPHY.md) | [`common/app/scene/state/`](common/app/scene/state/) and State/Flow tests |
