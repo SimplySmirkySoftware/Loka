@@ -67,7 +67,7 @@ namespace
   {
   public:
     explicit NestedBlock(const doc::ParagraphProps &p)
-        : BlockNode<doc::ParagraphProps>(p)
+        : doc::BlockNode<doc::ParagraphProps>(p)
     {
     }
     virtual void composeChildren(NodeComposition &c)
