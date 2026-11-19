@@ -26,6 +26,12 @@ namespace
   const CGFloat kMacTextContainerHeight = 1.0e7;
   const NSPoint kMacTextOrigin = {0, 0};
 
+  /** One constant-time half-open test per bounds, used line, or selection rect examined. */
+  bool ContainsHitPoint(NSRect rect, NSPoint p)
+  {
+    return p.x >= NSMinX(rect) && p.x < NSMaxX(rect) && p.y >= NSMinY(rect) && p.y < NSMaxY(rect);
+  }
+
   id AllocateTextKitObject(Class type)
   {
 #ifdef TEST_BUILD
@@ -86,6 +92,11 @@ namespace
 - (NSLayoutManager *)lokaLayoutManager;
 - (NSTextContainer *)lokaTextContainer;
 - (CGFloat)appliedWidth;
+/** Reports the closed character range at a view-coordinate point, writing out only on SOURCE.
+    At most once per context preparation. Queries this view's layout (TextKit may lay out),
+    converts three ranges, reads up to one cluster of visibility flags, one style and at most
+    one truncation range, then scans the candidate's selection rects once. */
+- (MacTextHitAnswer)queryHitCharacters:(NSPoint)point range:(NSRange *)out;
 - (void)setAppliedWidth:(CGFloat)width;
 @end
 
@@ -190,6 +201,67 @@ namespace
     *extent = [manager defaultLineHeightForFont:font];
   }
   return YES;
+}
+- (MacTextHitAnswer)queryHitCharacters:(NSPoint)point range:(NSRange *)out
+{
+  if (!ContainsHitPoint([self bounds], point))
+    return MAC_HIT_NONE;
+  NSLayoutManager *manager = [self lokaLayoutManager];
+  NSTextContainer *container = [self lokaTextContainer];
+  const NSUInteger n = [manager numberOfGlyphs];
+  if (!NSEqualRanges([manager glyphRangeForTextContainer:container], NSMakeRange(0, n)))
+    return MAC_HIT_REFUSED;
+  if (!n)
+    return MAC_HIT_NONE;
+
+  const NSPoint p = NSMakePoint(point.x - kMacTextOrigin.x, point.y - kMacTextOrigin.y);
+  const NSUInteger g = [manager glyphIndexForPoint:p inTextContainer:container fractionOfDistanceThroughGlyph:NULL];
+  if (g >= n)
+    return MAC_HIT_NONE;
+  NSRange glyphs, actual;
+  const NSRange chars = [manager characterRangeForGlyphRange:NSMakeRange(g, 1) actualGlyphRange:&glyphs];
+  const NSRange roundTrip = [manager glyphRangeForCharacterRange:chars actualCharacterRange:&actual];
+  if (!NSEqualRanges(roundTrip, glyphs) || !NSEqualRanges(actual, chars)
+      || !NSEqualRanges([manager characterRangeForGlyphRange:glyphs actualGlyphRange:NULL], chars))
+    return MAC_HIT_REFUSED;
+  if (!chars.length)
+    return MAC_HIT_NONE;
+
+  NSUInteger visible = glyphs.location;
+  while (visible < NSMaxRange(glyphs) && [manager notShownAttributeForGlyphAtIndex:visible])
+    ++visible;
+  if (visible == NSMaxRange(glyphs))
+    return MAC_HIT_NONE;
+
+  NSParagraphStyle *style = [[self lokaTextStorage] attribute:NSParagraphStyleAttributeName
+                                                      atIndex:chars.location
+                                               effectiveRange:NULL];
+  if ([style lineBreakMode] == NSLineBreakByTruncatingTail)
+  {
+    if (![manager respondsToSelector:@selector(truncatedGlyphRangeInLineFragmentForGlyphAtIndex:)])
+      return MAC_HIT_REFUSED;
+    const NSRange truncated = [manager truncatedGlyphRangeInLineFragmentForGlyphAtIndex:g];
+    if (truncated.location != NSNotFound && NSIntersectionRange(truncated, glyphs).length)
+      return MAC_HIT_NONE;
+  }
+
+  const NSRect fragment = [manager lineFragmentRectForGlyphAtIndex:g effectiveRange:NULL];
+  const NSRect line = [manager lineFragmentUsedRectForGlyphAtIndex:g effectiveRange:NULL];
+  if (p.x >= NSMaxX(fragment) - [container lineFragmentPadding])
+    return MAC_HIT_NONE;
+  NSUInteger k = 0;
+  NSRectArray rects = [manager rectArrayForCharacterRange:chars
+                             withinSelectedCharacterRange:NSMakeRange(NSNotFound, 0)
+                                          inTextContainer:container
+                                                rectCount:&k];
+  NSUInteger i = 0;
+  while (i < k && !ContainsHitPoint(rects[i], p))
+    ++i;
+  if (i == k || !ContainsHitPoint(line, p))
+    return MAC_HIT_NONE;
+
+  *out = chars;
+  return MAC_HIT_SOURCE;
 }
 - (void)drawRect:(NSRect)dirty
 {
@@ -487,6 +559,26 @@ MacAttributedTextContext::~MacAttributedTextContext()
 {
   assert(!this->view_ && "retirement must queue the native view before reclaim");
   assert(!this->projection_.value() && "retirement must drop derived text before reclaim");
+}
+
+MacTextHitAnswer MacAttributedTextContext::prepareTextHit(NSPoint viewPoint, MacTextHit &out) const
+{
+  LokaAttributedTextView *view = (LokaAttributedTextView *)this->view_;
+  if (!view || !this->projection_.value())
+    return MAC_HIT_REFUSED;
+#ifdef LOKA_LIFECYCLE_AUDIT
+  assert([[view lokaTextStorage] length] == [(NSAttributedString *)this->projection_.value() length]);
+#endif
+  NSRange chars;
+  const MacTextHitAnswer answer = [view queryHitCharacters:viewPoint range:&chars];
+  if (answer != MAC_HIT_SOURCE)
+    return answer;
+  loka::app::TextSegmentRange source(0);
+  if (!this->projection_.queryProvenance(chars.location, NSMaxRange(chars), source))
+    return MAC_HIT_REFUSED;
+  const MacTextHit hit = {source, [view appliedWidth]};
+  out = hit;
+  return MAC_HIT_SOURCE;
 }
 
 void MacAttributedTextContext::clearProjection()
