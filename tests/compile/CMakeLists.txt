@@ -695,6 +695,10 @@ loka_compile_pin(scrollview-setter
   REFUSES pins/refuses_scrollview_setter.cpp
   ACCEPTS pins/accepts_scrollview_viewport.cpp)
 
+loka_compile_pin(scrollview-props-setter
+  REFUSES pins/refuses_scrollview_props_setter.cpp
+  ACCEPTS pins/accepts_scrollview_viewport.cpp)
+
 loka_compile_pin(scrollview-visit-arity
   REFUSES pins/refuses_scrollview_visit_arity.cpp
   ACCEPTS pins/accepts_scrollview_visit_arity.cpp

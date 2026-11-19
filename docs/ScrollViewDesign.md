@@ -296,7 +296,7 @@ tracking remains visual-only, and the wheel retains per-step publications.
 The visit records axis presence, not maxima: X follows this visit's horizontal
 bar decision, and a valid context includes its vertical scrollbar control.
 
-A reached refused visit or a viewport whose state allocation failed takes and drops the request.
+A reached refused visit or an empty viewport (left only by an allocation refusal) takes and drops the request.
 An unreached child keeps it pending. A retained re-entry's first visit may jump;
 intervening input does not cancel a pending post. Replacing the request binding
 or leaving ATTACHED cancels pending work synchronously; replacing only viewport
