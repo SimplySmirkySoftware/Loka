@@ -1,3 +1,4 @@
+#include "support/RefusedScrollViewSeat.hpp"
 #include "context/Win32ClipBoxContext.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
@@ -1713,6 +1714,21 @@ namespace
     }
   };
 } // namespace
+
+void testWin32ScrollRefusedViewport()
+{
+  loka::testing::RefusedScrollViewSeat seat;
+  ScrollRequestFixture f;
+  f.observed.values.clear();
+  f.node.props = ScrollViewProps(seat.viewport);
+  f.visit();
+  LOKA_VERIFY(maximumOffset(scrollInfo(f.viewport())) > 40);
+  LOKA_VERIFY(!Win32InputDoor::scroll(f.context(), SB_VERT, SB_THUMBTRACK, 40));
+  LOKA_VERIFY(!Win32InputDoor::scroll(f.context(), SB_VERT, SB_LINEDOWN, 0));
+  LOKA_VERIFY(scrollInfo(f.viewport()).nPos == 0);
+  LOKA_VERIFY(f.observed.values.empty());
+  LOKA_VERIFY(!seat.viewport.isValid());
+}
 
 void testWin32ScrollRequestBothAxesAndNoEcho()
 {

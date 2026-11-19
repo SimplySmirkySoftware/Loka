@@ -1,3 +1,4 @@
+#include "support/RefusedScrollViewSeat.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "app/nodes/nestable/ScrollViewSettlement.hpp"
 #include "support/Headless.hpp"
@@ -1783,6 +1784,23 @@ namespace
     }
   }
 } // namespace
+
+void testMacScrollRefusedViewport()
+{
+  loka::testing::RefusedScrollViewSeat seat;
+  ScrollRequestFixture f;
+  f.observed.events.clear();
+  f.node.props = ScrollViewProps(seat.viewport);
+  f.visit();
+  f.observe();
+  [f.observed.clip setBoundsOrigin:NSMakePoint(30, 40)];
+  [[NSNotificationCenter defaultCenter] postNotificationName:NSViewBoundsDidChangeNotification object:f.observed.clip];
+  LOKA_VERIFY([f.observed.clip bounds].origin.y == 40);
+  f.visit();
+  LOKA_VERIFY(NSEqualPoints([f.observed.clip bounds].origin, NSZeroPoint));
+  LOKA_VERIFY(f.observed.count(ScrollObservation::PUBLICATION) == 0);
+  LOKA_VERIFY(!seat.viewport.isValid());
+}
 
 void testMacScrollRequestBothAxesAndStoppedEcho()
 {

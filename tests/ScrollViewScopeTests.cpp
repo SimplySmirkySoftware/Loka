@@ -85,8 +85,7 @@ namespace
 
   loka::app::ScrollViewNode *makeScrollView(ViewportFact &offset)
   {
-    loka::app::ScrollViewProps props;
-    props.viewport(offset.state());
+    loka::app::ScrollViewProps props(offset.state());
     return new loka::app::ScrollViewNode(props);
   }
 
@@ -341,9 +340,6 @@ namespace
 void testScrollViewRequestedOriginNormalizesBothAxes()
 {
   using loka::core::Frame;
-  loka::app::ScrollViewNode unbound((loka::app::ScrollViewProps()));
-  LOKA_VERIFY(unbound.requestedOrigin().x == 0);
-  LOKA_VERIFY(unbound.requestedOrigin().y == 0);
   ViewportFact fact(0);
   loka::app::ScrollViewNode node((loka::app::ScrollViewProps(fact.state())));
   fact.state().set(Frame(-7, -9, 0, 0));
@@ -369,8 +365,6 @@ void testScrollViewRequestedOriginNormalizesBothAxes()
   fact.state().set(loka::app::ScrollViewProps::topOrigin());
   LOKA_VERIFY(node.requestedOrigin().x == 0);
   LOKA_VERIFY(node.requestedOrigin().y == 0);
-  unbound.props.contentInsets(loka::app::ScrollViewContentInsets::of(12, 0));
-  LOKA_VERIFY(unbound.requestedOrigin() == Frame(0, 0, 0, 0));
 }
 
 void testScrollViewPublishesOnlyChangedOriginAndPreservesSize()
@@ -393,9 +387,6 @@ void testScrollViewPublishesOnlyChangedOriginAndPreservesSize()
   LOKA_VERIFY(writes == 3);
   LOKA_VERIFY(fact.state().get() == Frame(9, 10, 123, 456));
   fact.state().state()->unbind(&countOriginWrites, &writes);
-  loka::app::ScrollViewNode unbound((loka::app::ScrollViewProps()));
-  unbound.publishOrigin(1, 2);
-  LOKA_VERIFY(!unbound.props.viewport_.isValid());
 }
 
 void testScrollViewContentTranslationSubtractsTopInset()
@@ -529,9 +520,6 @@ void testScrollViewPublishViewportWritesSizeAndOrigin()
   node.publishOrigin(10, 20);
   LOKA_VERIFY(writes == 5);
   fact.state().state()->unbind(&countOriginWrites, &writes);
-  loka::app::ScrollViewNode unbound((loka::app::ScrollViewProps()));
-  unbound.publishViewport(1, 2, 80, 30);
-  LOKA_VERIFY(!unbound.props.viewport_.isValid());
 }
 
 void testScrollViewNullPublishesSeatSizeWithoutClampingAndConverges()

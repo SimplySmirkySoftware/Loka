@@ -1000,7 +1000,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxControlTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxControlTests)
   set_target_properties(LokaToolboxControlTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_control_case app-page app-off-arrow app-cancel viewport-page viewport-off-arrow viewport-cancel
+  foreach(_control_case app-page app-off-arrow app-cancel viewport-page viewport-off-arrow viewport-cancel viewport-refused
       native-hit setters lifetime clear ports te-movement)
     add_test(NAME testToolboxControl_${_control_case} COMMAND LokaToolboxControlTests ${_control_case})
   endforeach()
