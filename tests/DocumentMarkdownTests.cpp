@@ -1,4 +1,6 @@
 #include "DocumentMarkdownTests.hpp"
+#include "support/DocumentExportCases.hpp"
+#include "app/doc/Html.hpp"
 #include "app/doc/Inline.hpp"
 #include "app/doc/Markdown.hpp"
 #include "app/nodes/nestable/Match.hpp"
@@ -25,6 +27,11 @@ namespace
       std::fprintf(stderr, "expected [%s] got [%s]\n", expected, out.c_str());
     LOKA_VERIFY(ok == (expected != 0));
     LOKA_VERIFY(out == std::string("prefix") + (expected ? expected : ""));
+  }
+  /** Cost: each shared scene observation forwards its Markdown golden once. */
+  void checkMarkdown(Node *node, const char *markdown, const char *)
+  {
+    expect(node, markdown);
   }
   template <class D> void golden(const D &d, const char *expected)
   {
@@ -53,10 +60,7 @@ namespace
       return this->readable_;
     }
   };
-  String raw(const std::string &bytes, bool readable = true)
-  {
-    return String::FromPlatform(Managed<loka::platform::String>::Wrap(new PartialString(bytes, readable)));
-  }
+  using DocumentExportCases::raw;
   void late(const AttributedString &p)
   {
     ColumnDefinition column;
@@ -194,20 +198,28 @@ void testDocumentMarkdownFailure()
   late(plain("body\xe2\x80\xa9"));
   late(doc::Code(" \t "));
   late(doc::Code("   "));
-  late(Styled(raw("partial", false), Bold));
-  late(Linked("x", Bold, LinkTarget(raw("partial", false))));
-  late(Styled(raw(std::string("a\0b", 3)), Bold));
-  late(Linked("x", Bold, LinkTarget(raw(std::string("a\0b", 3)))));
-  late(Styled(raw("\xc0\x80"), Bold));
-  late(Linked("x", Bold, LinkTarget(raw("\xff"))));
-  late(doc::Link("", "\r"));
-  late(doc::Link("x", "\n"));
   golden(doc::CodeBlock(raw(std::string("x\0", 2))), 0);
+  DocumentExportCases::invalidInline(late);
+}
+loka::core::String DocumentExportCases::raw(const std::string &bytes, bool readable)
+{
+  return String::FromPlatform(Managed<loka::platform::String>::Wrap(new PartialString(bytes, readable)));
+}
+void DocumentExportCases::invalidInline(void (*refuse)(const AttributedString &))
+{
+  refuse(Styled(raw("partial", false), Bold));
+  refuse(Linked("x", Bold, LinkTarget(raw("partial", false))));
+  refuse(Styled(raw(std::string("a\0b", 3)), Bold));
+  refuse(Linked("x", Bold, LinkTarget(raw(std::string("a\0b", 3)))));
+  refuse(Styled(raw("\xc0\x80"), Bold));
+  refuse(Linked("x", Bold, LinkTarget(raw("\xff"))));
+  refuse(doc::Link("", "\r"));
+  refuse(doc::Link("x", "\n"));
   AttributedString::Builder consumed(1);
   consumed.build();
-  late(consumed.build());
+  refuse(consumed.build());
 }
-void testDocumentMarkdownWalk()
+void DocumentExportCases::walk(Check check)
 {
   NullScenePlatformController controller;
   Scene scene((Boundary<Probe>()));
@@ -215,13 +227,18 @@ void testDocumentMarkdownWalk()
   SceneTestAccess::updateAttached(scene, true);
   Probe *owner = static_cast<Probe *>(root(scene));
   owner->consultations = 0;
-  expect(owner, "outer\n\n## sibling\n\nnested\n");
+  check(owner, "outer\n\n## sibling\n\nnested\n", "<p>outer</p>\n<h2>sibling</h2>\n<p>nested</p>\n");
   LOKA_VERIFY(owner->consultations == 0);
   Node *column = static_cast<CardNode *>(owner->childrenHead())->contentHead();
   Node *outer = column->asNestable()->childrenHead()->nextInComposition->nextInComposition;
   LOKA_VERIFY(outer->nextInComposition);
-  expect(outer, "outer\n");
+  check(outer, "outer\n", "<p>outer</p>\n");
 }
+void testDocumentMarkdownWalk()
+{
+  DocumentExportCases::walk(checkMarkdown);
+}
+
 namespace
 {
   class KeyRoot : public BoundaryNodeFor<KeyRoot>
@@ -253,49 +270,55 @@ namespace
     virtual void composeChildren(NodeComposition &) {}
   };
 } // namespace
-void testDocumentMarkdownSeats()
+void DocumentExportCases::seats(Check check)
 {
   MutableState<bool> shown(true);
   ShowDefinition show = Show(shown);
   show << doc::Paragraph("yes");
   static_cast<FragmentDefinition *>(show.armDefinition(0))->addOwnedChild(doc::Paragraph("no").clone());
   Fixture<ShowDefinition> s(show);
-  expect(root(s.scene), "yes\n");
+  check(root(s.scene), "yes\n", "<p>yes</p>\n");
   Node *parked = s.node();
   shown.set(false);
   settle(s.scene);
-  expect(root(s.scene), "no\n");
-  expect(parked, "");
+  check(root(s.scene), "no\n", "<p>no</p>\n");
+  check(parked, "", "");
   shown.set(true);
   settle(s.scene);
-  expect(root(s.scene), "yes\n");
+  check(root(s.scene), "yes\n", "<p>yes</p>\n");
 
   MutableState<int> choice(0);
   Fixture<MatchDefinition<int> > m(
       Match(choice).arm(0, doc::Paragraph("a")).arm(1, doc::Paragraph("b")).otherwise(doc::Paragraph("c")));
   const char *arms[] = {"a\n", "b\n", "c\n", "a\n"};
+  const char *htmlArms[] = {"<p>a</p>\n", "<p>b</p>\n", "<p>c</p>\n", "<p>a</p>\n"};
   for (int i = 0; i < 4; ++i)
   {
     choice.set(i % 3);
     settle(m.scene);
-    expect(root(m.scene), arms[i]);
+    check(root(m.scene), arms[i], htmlArms[i]);
   }
   NullScenePlatformController controller;
   Scene scene((Boundary<KeyRoot>()));
   scene.mount(&controller);
   SceneTestAccess::updateAttached(scene, true);
   KeyRoot *owner = static_cast<KeyRoot *>(root(scene));
-  expect(owner, "first\n");
+  check(owner, "first\n", "<p>first</p>\n");
   owner->generation.set(1);
   settle(scene);
-  expect(owner, "second\n");
+  check(owner, "second\n", "<p>second</p>\n");
   const doc::ParagraphProps items[] = {
       doc::ParagraphProps("one"), doc::ParagraphProps("two"), doc::ParagraphProps("three")};
   ColumnDefinition all, window;
   all << For(32, items, ComponentItemFactory<doc::ParagraphProps>());
   window << For(32, items, ComponentItemFactory<doc::ParagraphProps>()).window(1, 1);
-  golden(all, "one\n\ntwo\n\nthree\n");
-  golden(window, "two\n");
+  Fixture<ColumnDefinition> full(all, false), selected(window, false);
+  check(full.node(), "one\n\ntwo\n\nthree\n", "<p>one</p>\n<p>two</p>\n<p>three</p>\n");
+  check(selected.node(), "two\n", "<p>two</p>\n");
+}
+void testDocumentMarkdownSeats()
+{
+  DocumentExportCases::seats(checkMarkdown);
   golden(NodeDefinition<doc::HeadingProps, EmptyHeading>(doc::HeadingProps(1, "empty projection")),
          "# empty projection\n");
 #ifdef TEST_BUILD
@@ -406,7 +429,7 @@ namespace
     }
   }
 } // namespace
-int documentMarkdownCases(unsigned seed, unsigned count)
+int documentExportCases(unsigned seed, unsigned count, bool html)
 {
   const char *special[] = {"\t", "\n", "\r", " ",    "日",       "語",           "「",           "」", "€", "　",
                            " ",  "\v", "\f", "\x1c", "\xc2\x85", "\xe2\x80\xa8", "\xe2\x80\xa9", "*",  "`", "\\"};
@@ -499,7 +522,14 @@ int documentMarkdownCases(unsigned seed, unsigned count)
                   hexBytes(projection[i].text).c_str(),
                   projection[i].flags,
                   hexBytes(targets[projection[i].link]).c_str());
-    std::printf("\t%s\n", ok ? hexBytes(md).c_str() : "REFUSED");
+    std::printf("\t%s", ok ? hexBytes(md).c_str() : "REFUSED");
+    if (html)
+    {
+      std::string fragment;
+      bool written = doc::WriteHtml(node, fragment);
+      std::printf("\t%s", written ? hexBytes(fragment).c_str() : "REFUSED");
+    }
+    std::putchar('\n');
   }
   return 0;
 }

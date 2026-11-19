@@ -267,6 +267,9 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     add_test(NAME testDocumentPageGolden COMMAND python3 -c
       "import pathlib, subprocess, sys; sys.exit(subprocess.check_output([sys.argv[1]]) != pathlib.Path(sys.argv[2]).read_bytes())"
       $<TARGET_FILE:DocumentPage> ${PROJECT_SOURCE_DIR}/example/DocumentPage/FieldGuide.md)
+    add_test(NAME testDocumentPageHtmlGolden COMMAND python3 -c
+      "import pathlib, subprocess, sys; sys.exit(subprocess.check_output([sys.argv[1], '--html']) != pathlib.Path(sys.argv[2]).read_bytes())"
+      $<TARGET_FILE:DocumentPage> ${PROJECT_SOURCE_DIR}/example/DocumentPage/FieldGuide.html)
   endif()
 
   add_library(LokaCommonTesting STATIC

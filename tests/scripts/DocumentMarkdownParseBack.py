@@ -54,6 +54,18 @@ def unsigned_decimal(text):
     return int(digits)
 
 
+def expected_glyphs(glyphs):
+    return [(char, int(f), decode(u)) for c, f, u in
+            (g.split(":") for g in glyphs.split(",") if g) for char in decode(c)]
+
+
+def markdown_parser(markdown_it):
+    parser = markdown_it.MarkdownIt("commonmark")
+    parser.validateLink = lambda url: True
+    parser.normalizeLink = parser.normalizeLinkText = lambda url: url
+    return parser
+
+
 def main():
     cli = argparse.ArgumentParser(description=__doc__)
     cli.add_argument("executable")
@@ -67,17 +79,14 @@ def main():
             raise
         print("[skip] markdown_it not installed")
         sys.exit(77)
-    parser = markdown_it.MarkdownIt("commonmark")
-    parser.validateLink = lambda url: True
-    parser.normalizeLink = parser.normalizeLinkText = lambda url: url
+    parser = markdown_parser(markdown_it)
     print(f"markdown_it {markdown_it.__version__}, seed {args.seed}", flush=True)
     data = subprocess.check_output([args.executable, "--document-markdown-cases", str(args.seed), str(args.count)], text=True)
     rows = data.splitlines()
     failures = refusals = 0
     for i, line in enumerate(rows):
         kind, glyphs, spelling = line.split("\t")
-        expected = [(char, int(f), decode(u)) for c, f, u in
-                    (g.split(":") for g in glyphs.split(",") if g) for char in decode(c)]
+        expected = expected_glyphs(glyphs)
         # Some CommonMark readers trim code-span padding with Unicode strip().
         # Only whitespace-only code runs with ambiguous ASCII edge padding may refuse.
         strip_only = "\v\f\x1c\x1d\x1e\x1f\x85\u2028\u2029"

@@ -7,6 +7,7 @@
 #include "app/nodes/nestable/For.hpp"
 #include "app/nodes/nestable/Show.hpp"
 #include <cstdio>
+#include <cstring>
 
 #if defined(TEST_BUILD) || defined(LOKA_DIAG)
 #error DocumentPage requires the common shipping configuration
@@ -47,10 +48,18 @@ namespace
 } // namespace
 
 /** Cost: renders one guide and writes its bytes once per invocation. */
-int main()
+int main(int argc, char **argv)
 {
+  if (argc > 2 || (argc == 2 && std::strcmp(argv[1], "--html") != 0))
+  {
+    std::fputs("Usage: DocumentPage [--html]\n", stderr);
+    return 2;
+  }
+  using namespace loka::app;
   std::string out;
-  if (!loka::app::doc::RenderMarkdown(loka::app::scene::Boundary<FieldGuide>(), out))
+  const bool written = argc == 2 ? doc::RenderHtml(scene::Boundary<FieldGuide>(), out)
+                                 : doc::RenderMarkdown(scene::Boundary<FieldGuide>(), out);
+  if (!written)
     return 1;
   return std::fwrite(out.data(), 1, out.size(), stdout) == out.size() && std::fflush(stdout) == 0 ? 0 : 1;
 }

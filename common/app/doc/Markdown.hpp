@@ -302,7 +302,7 @@ namespace loka
       } // namespace detail
 
       /** Append an independent fragment for the subtree including root. The caller supplies any prefix separator.
-          On refusal out retains its original bytes. Output allocation follows the process OOM path.
+          Link destinations are trusted input. Refusal preserves out. Output allocation follows the process OOM path.
           The owner lends a stable mounted tree synchronously on the Main Thread. The walk never mutates it.
           Detached roots contribute nothing. The initial attached lifecycle fact cannot authenticate a mount.
           Cost: once per explicit export, proportional to visited nodes, segments, collection and output bytes.
