@@ -12,6 +12,8 @@
 #include "app/doc/CodeBlock.hpp"
 #include "app/doc/Inline.hpp"
 #include "app/doc/Markdown.hpp"
+#include "app/doc/Render.hpp"
+#include "app/nodes/boundary/StdComposition.hpp"
 
 void documentVocabularyAfterSdk(loka::app::scene::NodeComposition &composition)
 {
@@ -19,4 +21,25 @@ void documentVocabularyAfterSdk(loka::app::scene::NodeComposition &composition)
   composition.declare(Column() << doc::Heading(1, "Guide")
                                << doc::Paragraph(doc::Link("Guide", "https://example.com/guide") + doc::Code("x"))
                                << doc::CodeBlock("one\ntwo"));
+}
+
+namespace
+{
+  class PinPage : public loka::app::scene::BoundaryNodeFor<PinPage>
+  {
+  public:
+    explicit PinPage(const loka::app::scene::BoundaryPropsFor<PinPage> &p)
+        : BoundaryNodeFor<PinPage>(p)
+    {
+    }
+    virtual void composeNode(loka::app::scene::NodeComposition &c)
+    {
+      documentVocabularyAfterSdk(c);
+    }
+  };
+} // namespace
+
+bool renderDocumentAfterSdk(std::string &out)
+{
+  return loka::app::doc::RenderMarkdown(loka::app::scene::Boundary<PinPage>(), out);
 }

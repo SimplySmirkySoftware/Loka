@@ -2384,9 +2384,37 @@ styles; `doc::Link` contributes a linked segment and `doc::Code` contributes
 monospace text. The latter is a visual convention, indistinguishable from
 `Styled(text, Monospace)`, and promises no lossless source round trip.
 
-Document blocks can be written out as Markdown. There is no app-facing export
-call yet; rails and tools that hold the mounted tree use it. The output
-includes the attached document blocks in declaration order. Ordinary
+Include `app/doc/Render.hpp` to render a window-independent Boundary from a
+standalone tool's `main`. Call it on the main thread, outside any app transaction
+and before entering an app's event loop.
+
+```cpp
+std::string markdown;
+if (!doc::RenderMarkdown(Boundary<FieldGuide>(), markdown))
+  return 1;
+```
+
+Each call mounts a fresh page, drains its queued scene updates, appends one
+Markdown fragment, and detaches the page before returning. Supply any separator
+after an existing prefix yourself. A reported composition refusal, work still
+pending after 100 passes, or an unreadable block returns false and preserves
+every destination byte. Page code runs again on each call, including immediate
+watches, synchronous Flows, attach and detach hooks, and resource releasers.
+Their effects persist even when export fails. Assertions and output-storage
+exhaustion follow the normal process behavior.
+
+| Page feature | Standalone behavior |
+|---|---|
+| Layout and scrolling | The page creates no native views and receives no measured viewport. Document children inside a ScrollView still export. Caret and scroll requests receive no response. |
+| LazyView | A seeded viewport exports only its selected window, including its margin. A missing or zero-sized viewport exports zero rows. For a complete repetition, put `For` in its own container so its tagged rows form their own sibling set. |
+| Window and app services | During composition, `c.componentContext()->window()` and the node's `attachedContext()` return null. The node's strict `window()`, `scene()` and `boundary()` accessors and the composition's `c.window()` are unsupported here. App and PlatformContext services are unavailable. |
+| Idle and input | Idle callbacks, timers and native input never run. Animations and Flows waiting on them keep their initial state. |
+| Focus, editors and menus | Focus stays none, text documents await their store, and menu commands are never dispatched. Editor bodies do not become document blocks. |
+| Images | Images contribute no automatic Markdown. The producer of a native image remains responsible for draining its resources. |
+| Composition | Only attached document blocks contribute bytes. A page containing only ordinary controls can succeed with empty output. A fixed Component can locally discard children, including unsupported branch seats, without reporting a refusal. |
+
+The [sample tool](../example/DocumentPage/main.cpp) writes a complete page to stdout.
+The output includes the attached document blocks in declaration order. Ordinary
 controls such as `Text` contribute nothing. Underline, color and font size are
 omitted. Bold and italic use stars or inline `<strong>` and `<em>` tags depending
 on the surrounding text. Export preserves document meaning within these conventions.
