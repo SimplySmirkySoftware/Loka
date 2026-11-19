@@ -56,8 +56,16 @@ namespace
   }
 
   typedef reservation::Nodes<doc::ParagraphNode, 1, reservation::Nodes<AttributedTextNode, 1> > ParagraphNodes;
+  /** The owner writes its own key when a child reports its attach. */
+  struct AttachSignal
+  {
+    virtual void attached() = 0;
+
+  protected:
+    ~AttachSignal() {}
+  };
   class LateWrite;
-  typedef Input<LateWrite, NodeState<int> > WriteProps;
+  typedef Input<LateWrite, AttachSignal> WriteProps;
   class LateWrite : public ComponentNodeWithProps<WriteProps>
   {
   public:
@@ -67,14 +75,14 @@ namespace
     }
     virtual void attachNode(NodeComposition &)
     {
-      this->props.data->set(1);
+      this->props.data->attached();
     }
     virtual void composeChildren(NodeComposition &) {}
   };
 
   class BranchPage;
   typedef Input<BranchPage, int> BranchProps;
-  class BranchPage : public StdCompositionBoundaryNodeBase<BranchProps>
+  class BranchPage : public StdCompositionBoundaryNodeBase<BranchProps>, public AttachSignal
   {
     NodeState<int> key_;
 
@@ -83,6 +91,10 @@ namespace
         : StdCompositionBoundaryNodeBase<BranchProps>(p)
     {
       this->state(this->key_, 0);
+    }
+    virtual void attached()
+    {
+      this->key_.set(1);
     }
     void arm(NodeComposition &c)
     {
@@ -97,7 +109,7 @@ namespace
       c.declare(
           Column() << Match(*this->key_.state()).arm(0, doc::Paragraph("match0")).otherwise(doc::Paragraph("match1"))
                    << Keyed(*this->key_.state(), this, &BranchPage::arm, reservation::SeatNodes<ParagraphNodes>())
-                   << Component(WriteProps(this->key_)));
+                   << Component(WriteProps(*this)));
     }
   };
 

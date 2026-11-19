@@ -29,7 +29,7 @@ namespace
   {
   public:
     explicit PinPage(const loka::app::scene::BoundaryPropsFor<PinPage> &p)
-        : BoundaryNodeFor<PinPage>(p)
+        : loka::app::scene::BoundaryNodeFor<PinPage>(p)
     {
     }
     virtual void composeNode(loka::app::scene::NodeComposition &c)
