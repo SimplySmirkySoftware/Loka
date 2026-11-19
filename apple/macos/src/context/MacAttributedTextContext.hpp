@@ -20,6 +20,20 @@ namespace loka
   } // namespace dsl
 } // namespace loka
 
+/** Completed source hit. Deliberate twin of LinkHit/HitAnswer in win32/src/context/Win32AttributedTextTable.hpp.
+    The later predicate resolves links, and the applied container width supplies the seat dimension. */
+struct MacTextHit
+{
+  loka::app::TextSegmentRange source;
+  CGFloat containerWidth;
+};
+enum MacTextHitAnswer
+{
+  MAC_HIT_SOURCE,
+  MAC_HIT_NONE,
+  MAC_HIT_REFUSED
+};
+
 /** WHOLE_LINE projection; the completed attributed object belongs to this
     context, independently of AppKit's presented pixels. */
 class MacAttributedTextContext : public MacRetirableContext
@@ -113,6 +127,10 @@ private:
     Projection(const Projection &);
     Projection &operator=(const Projection &);
   };
+  /** Publishes out only on SOURCE. Tests only here; at most twice per future press,
+      never for an UP without a candidate. One view query and one provenance query at most;
+      the projection searches its own covered slots in O(covered slots x log(segments + 1)). */
+  MacTextHitAnswer prepareTextHit(NSPoint viewPoint, MacTextHit &out) const;
   bool rebuildProjection(const loka::macos::MacLength &constraint);
   void clearProjection();
   loka::app::AttributedTextNode *node_;
