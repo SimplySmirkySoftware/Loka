@@ -210,8 +210,9 @@ for creation, [SceneTextDocuments](../common/app/scene/SceneTextDocuments.hpp)
 for membership, and [TextDocumentPublisher](../common/app/text/TextDocument.cpp)
 for the single read/take/apply/read/write sequence. Controller doors in
 [IPlatformController](../common/app/scene/projection/PlatformController.hpp)
-refuse by default; Null, Win32 and macOS supply stores. The
-`commitMarkedText` operation defaults to doing nothing. `TextStoreReading`
+refuse by default; Null, Win32 and macOS supply stores. Command refresh calls
+`commitMarkedText`. View transitions call `settleTextComposition` on the
+affected row. Both default to doing nothing. `TextStoreReading`
 reports marked text; the latest reading determines `MARKED`, with positions
 assembled just as in `READY`.
 
@@ -426,9 +427,10 @@ and sealed-Blob overloads are also outside this page.
 `TextDocumentEditor` borrows a root-owned document and an optional ancestor-owned
 `NodeState<TextViewAttachment>` result. The store row owns the editable body;
 the view context supplies its place. Detach returns the body to the store's
-parking place without allocation. Body, selection, undo, and pending marks stay
-with the store. Parked stores continue to accept app requests; read-only view
-presentation restricts user input, not replacement, splice, or caret requests.
+parking place without allocation. Attach, detach and presentation preserve the
+body, selection, undo and marks measured after any preceding settle. Parked
+stores continue to accept app requests. Read-only views restrict user input
+and continue to honor replacement, splice, and caret requests.
 This supersedes the earlier handle-exchange description: detach does not move
 marks into a separate view-detach ledger. The native observation table above
 remains historical probe evidence pending each rail's qualification.
@@ -440,13 +442,30 @@ order. An attached occupant causes a typed refusal. Refused contexts render an
 empty, read-only placeholder; refresh and presentation never retry attachment.
 A later lifecycle attachment may retry. Native calls run under individual
 controller borrows and cannot reenter the kernel; native notifications only
-mark. IME commitment is a preceding input operation, not detach work.
+mark. Immediately before a linked detach, a read-only attach, or a read-only
+presentation, the kernel calls `settleTextComposition` inside that operation's
+borrow. Successful read-only attachment crosses both attach and presentation
+and settles twice. If the rail refuses a read-only attach, it has settled once.
+A claim refused during kernel admission reaches neither native call. Detach
+during retirement of a discarded row skips settle.
+
+Settle may fold composition and mark the row for ordinary publication. It
+cannot reenter the kernel, allocate on the Loka side, or fail. A rail unable to
+commit leaves composition in place. The next reading reports any remaining
+marks. The macOS design (4m-2b/4m-3) requires an empty marked range after
+settle before admitting composition. Admission awaits real IME qualification;
+a release reading with residual marks still reports MARKED.
 
 A context-owned claim derives ATTACHED from its paired store link. Context end
 and store retirement both detach synchronously before severing that link;
 deferred native reclamation fires nothing. Replacement prepares completely
 before moving the native place and transferring the claim to the fresh store.
-The old row then retires without detaching the transferred view. Cosmetic
+The old row then retires without detaching the transferred view.
+A rail can borrow the linked context through the row's protected
+`attachedView()`, an O(1) read with no callbacks or retain. A derived context
+may call the nonvirtual, idempotent `retireView()` during terminal cleanup
+while its resources and controller are live. This leaves Scene membership
+synchronously and works without destructor-time lifecycle delivery. Cosmetic
 resource preparation can fall back to defaults, but behavior such as read-only
 and wrapping must be honored or attachment must refuse.
 
