@@ -1162,7 +1162,7 @@ while detached configure the next presentation.
 
 The design goal is that memory and lifecycle are visible from the DSL structure.
 
-### `ScrollView()`
+### `ScrollView(viewport)`
 
 `ScrollView(viewport) << content` scrolls one subtree. The app owns one
 `NodeState<Frame>` and lends it to the view; the rail writes the clamped scroll
@@ -1173,7 +1173,9 @@ content units; insets do not shrink it. The Null, Toolbox, Win32 and macOS rails
 `contentInsets(top, bottom)` also keeps the vertical bar clear of those rows at
 the viewport edges on Toolbox, Win32 and macOS; it does not move the horizontal bar or
 shrink the clip.
-Zero width and height mean "not reported yet". Initialise it with `Frame(0, 0, 0, 0)`.
+Zero width and height mean "not reported yet". The viewport is required. `ScrollView()` does not compile.
+With a top inset, initialise the viewport with `ScrollViewProps::topOrigin()` to show the gap
+or `Frame(0, 0, 0, 0)` to start with the gap scrolled away.
 
 ```cpp
 this->state(this->viewport_, loka::core::Frame(0, 0, 0, 0));
@@ -1184,7 +1186,7 @@ The state is the rail's result channel: layout publishes origin and visible size
 on reporting rails; input publishes origin while preserving size. Null has no
 maximum clamp. An unchanged fact publishes nothing, so layout settles after a
 size change.
-The initial value is the only origin the app chooses; a negative one reads as 0.
+The initial value is the only origin the app chooses.
 
 The vertical range is the content height. The horizontal range exists only when
 content overflows the width it is offered: a declared width (including a
@@ -2384,9 +2386,37 @@ styles; `doc::Link` contributes a linked segment and `doc::Code` contributes
 monospace text. The latter is a visual convention, indistinguishable from
 `Styled(text, Monospace)`, and promises no lossless source round trip.
 
-Document blocks can be written out as Markdown. There is no app-facing export
-call yet; rails and tools that hold the mounted tree use it. The output
-includes the attached document blocks in declaration order. Ordinary
+Include `app/doc/Render.hpp` to render a window-independent Boundary from a
+standalone tool's `main`. Call it on the main thread, outside any app transaction
+and before entering an app's event loop.
+
+```cpp
+std::string markdown;
+if (!doc::RenderMarkdown(Boundary<FieldGuide>(), markdown))
+  return 1;
+```
+
+Each call mounts a fresh page, drains its queued scene updates, appends one
+Markdown fragment, and detaches the page before returning. Supply any separator
+after an existing prefix yourself. A reported composition refusal, work still
+pending after 100 passes, or an unreadable block returns false and preserves
+every destination byte. Page code runs again on each call, including immediate
+watches, synchronous Flows, attach and detach hooks, and resource releasers.
+Their effects persist even when export fails. Assertions and output-storage
+exhaustion follow the normal process behavior.
+
+| Page feature | Standalone behavior |
+|---|---|
+| Layout and scrolling | The page creates no native views and receives no measured viewport. Document children inside a ScrollView still export. Caret and scroll requests receive no response. |
+| LazyView | A seeded viewport exports only its selected window, including its margin. A missing or zero-sized viewport exports zero rows. For a complete repetition, put `For` in its own container so its tagged rows form their own sibling set. |
+| Window and app services | During composition, `c.componentContext()->window()` and the node's `attachedContext()` return null. The node's strict `window()`, `scene()` and `boundary()` accessors and the composition's `c.window()` are unsupported here. App and PlatformContext services are unavailable. |
+| Idle and input | Idle callbacks, timers and native input never run. Animations and Flows waiting on them keep their initial state. |
+| Focus, editors and menus | Focus stays none, text documents await their store, and menu commands are never dispatched. Editor bodies do not become document blocks. |
+| Images | Images contribute no automatic Markdown. The producer of a native image remains responsible for draining its resources. |
+| Composition | Only attached document blocks contribute bytes. A page containing only ordinary controls can succeed with empty output. A fixed Component can locally discard children, including unsupported branch seats, without reporting a refusal. |
+
+The [sample tool](../example/DocumentPage/main.cpp) writes a complete page to stdout.
+The output includes the attached document blocks in declaration order. Ordinary
 controls such as `Text` contribute nothing. Underline, color and font size are
 omitted. Bold and italic use stars or inline `<strong>` and `<em>` tags depending
 on the surrounding text. Export preserves document meaning within these conventions.

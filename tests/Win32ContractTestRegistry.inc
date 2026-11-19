@@ -302,6 +302,7 @@ LOKA_TEST(testWin32TextFamilyDpiReplacement)
 LOKA_TEST(testWin32TextFamilyGeometry)
 LOKA_TEST(testWin32TextEditorMonospaceFont)
 
+LOKA_TEST(testWin32ScrollRefusedViewport)
 LOKA_TEST(testWin32ScrollRequestBothAxesAndNoEcho)
 LOKA_TEST(testWin32ScrollRequestClampReadBack)
 LOKA_TEST(testWin32ScrollRequestReadFailures)

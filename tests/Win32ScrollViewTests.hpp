@@ -36,6 +36,7 @@ void testWin32ScrollViewFrameTabAndArrowFocus();
 
 void testWin32ScrollViewInsetBarTinyAndFractionalSeat();
 
+void testWin32ScrollRefusedViewport();
 void testWin32ScrollRequestBothAxesAndNoEcho();
 void testWin32ScrollRequestClampReadBack();
 void testWin32ScrollRequestReadFailures();

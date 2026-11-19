@@ -333,6 +333,7 @@ LOKA_TEST(testMacClipBoxPopupMenuOpensLikeTwin)
 LOKA_TEST(testMacClipBoxGroundCapturesInBothBlurPaths)
 LOKA_TEST(testMacClipBoxUnresolvedWidthLayerBackedRssIsFlat)
 
+LOKA_TEST(testMacScrollRefusedViewport)
 LOKA_TEST(testMacScrollRequestBothAxesAndStoppedEcho)
 LOKA_TEST(testMacScrollRequestMissingDocumentAtApply)
 LOKA_TEST(testMacScrollRequestSmallDocument)

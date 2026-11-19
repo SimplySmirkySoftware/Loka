@@ -13,11 +13,14 @@ namespace webtest
   public:
     typedef CardFixture<Extent, Minimum, Scrolled> Self;
     loka::app::scene::NodeState<bool> shown;
+    loka::app::scene::NodeState<loka::core::Frame> viewport;
     /** Cost: Scene once per mount; no rows. */
     explicit CardFixture(const loka::app::scene::BoundaryPropsFor<Self> &props)
         : loka::app::scene::BoundaryNodeFor<Self>(props)
     {
       this->state(this->shown, true);
+      if (Scrolled)
+        this->state(this->viewport, loka::app::ScrollViewProps::topOrigin());
     }
     /** Cost: mount once; builds this fixture's single Card subtree. */
     virtual void composeNode(loka::app::scene::NodeComposition &c)
@@ -27,7 +30,7 @@ namespace webtest
       if (!Minimum)
         card << Box().height(Extent == CARD_SHADOW_DROP ? 71 : 50);
       if (Scrolled)
-        c.declare(ScrollView().contentInsets(7, 0) << (Show(*this->shown.state()) << card));
+        c.declare(ScrollView(this->viewport).contentInsets(7, 0) << (Show(*this->shown.state()) << card));
       else
         c.declare(Show(*this->shown.state()) << card);
     }

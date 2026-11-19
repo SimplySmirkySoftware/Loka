@@ -1,3 +1,4 @@
+#include "support/RefusedScrollViewSeat.hpp"
 #include "TextDocumentViewTests.hpp"
 #include "LinkActivationTests.hpp"
 #include "TextReplacementTests.hpp"
@@ -207,6 +208,7 @@
 #include "AttributedStringTests.hpp"
 #include "AttributedTextTests.hpp"
 #include "DocumentVocabularyTests.hpp"
+#include "DocumentHeadlessTests.hpp"
 #include "DocumentMarkdownTests.hpp"
 #include "TextSpanWin32Tests.hpp"
 #include "RectSurfaceSeatExtentTests.hpp"

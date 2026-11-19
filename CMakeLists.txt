@@ -238,19 +238,19 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   # branches that only exist without it -- MenuBarDefinition::clone()'s
   # failure-injection gate, the TEST_ID paths -- were never compiled on this
   # platform at all. This object library compiles common/ the way a shipped
-  # binary sees it, under the same warnings-as-errors floor. It is never
-  # linked; the point is that the code is seen by a compiler.
+  # binary sees it, under the same warnings-as-errors floor. The standalone
+  # document tool also links these shipping objects.
   add_library(LokaCommonShippingCompileTest OBJECT
     ${LOKA_COMMON_SOURCES}
   )
   loka_enable_warnings(LokaCommonShippingCompileTest)
   # add_definitions(-DTEST_BUILD) is directory-scoped, so this target has to
-  # take the define back off to be the shipping compile it claims to be.
-  target_compile_options(LokaCommonShippingCompileTest PRIVATE
+  # take the define back off. Consumers must see the same header configuration.
+  target_compile_options(LokaCommonShippingCompileTest PUBLIC
     -UTEST_BUILD
     -ULOKA_DIAG
   )
-  target_include_directories(LokaCommonShippingCompileTest PRIVATE
+  target_include_directories(LokaCommonShippingCompileTest PUBLIC
     ${PROJECT_SOURCE_DIR}/common
     ${PROJECT_SOURCE_DIR}/tools
   )
@@ -258,6 +258,16 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     CXX_STANDARD 98
     CXX_STANDARD_REQUIRED YES
   )
+
+  if(TEST_BUILD AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_executable(DocumentPage example/DocumentPage/main.cpp)
+    target_link_libraries(DocumentPage PRIVATE LokaCommonShippingCompileTest)
+    set_target_properties(DocumentPage PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+    loka_enable_warnings(DocumentPage)
+    add_test(NAME testDocumentPageGolden COMMAND python3 -c
+      "import pathlib, subprocess, sys; sys.exit(subprocess.check_output([sys.argv[1]]) != pathlib.Path(sys.argv[2]).read_bytes())"
+      $<TARGET_FILE:DocumentPage> ${PROJECT_SOURCE_DIR}/example/DocumentPage/FieldGuide.md)
+  endif()
 
   add_library(LokaCommonTesting STATIC
     ${LOKA_COMMON_SOURCES}
@@ -990,7 +1000,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxControlTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxControlTests)
   set_target_properties(LokaToolboxControlTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_control_case app-page app-off-arrow app-cancel viewport-page viewport-off-arrow viewport-cancel
+  foreach(_control_case app-page app-off-arrow app-cancel viewport-page viewport-off-arrow viewport-cancel viewport-refused
       native-hit setters lifetime clear ports te-movement)
     add_test(NAME testToolboxControl_${_control_case} COMMAND LokaToolboxControlTests ${_control_case})
   endforeach()
