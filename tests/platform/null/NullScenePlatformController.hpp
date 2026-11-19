@@ -197,7 +197,7 @@ public:
           row(0),
           borrowed(false),
           links(0),
-          marked(false)
+          marked_(false)
     {
     }
     TextViewCall(Kind k, loka::app::scene::TextStoreRow &r, bool b, unsigned linked = 0)
@@ -205,14 +205,21 @@ public:
           row(&r),
           borrowed(b),
           links(linked),
-          marked(static_cast<NullTextStore &>(r).marked())
+          marked_(static_cast<NullTextStore &>(r).marked())
     {
+    }
+    /** Whether the row's mark at entry matches; the snapshot itself stays private. */
+    bool markedAtEntryIs(bool expected) const
+    {
+      return this->marked_ == expected;
     }
     Kind kind;
     const loka::app::scene::TextStoreRow *row;
     bool borrowed;
     unsigned links;
-    bool marked;
+
+  private:
+    bool marked_;
   };
   /** Bounded fixture evidence: recording detach must not allocate. */
   class TextViewCalls

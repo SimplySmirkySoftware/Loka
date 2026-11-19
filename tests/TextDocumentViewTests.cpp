@@ -1029,7 +1029,7 @@ namespace
     {
       LOKA_VERIFY(this->next_ < this->calls_.size());
       const Call &call = this->calls_[this->next_++];
-      LOKA_VERIFY(call.kind == kind && call.row == &row && call.marked == marked && call.borrowed == borrowed);
+      LOKA_VERIFY(call.kind == kind && call.row == &row && call.markedAtEntryIs(marked) && call.borrowed == borrowed);
     }
     void end() const
     {
@@ -1287,7 +1287,7 @@ void testTextViewStoreRetirementDoor()
   const NullScenePlatformController::TextViewCall &retire = f.controller.textViewCalls[before + 1];
   LOKA_VERIFY(detach.kind == NullScenePlatformController::TextViewCall::DETACH && detach.borrowed);
   LOKA_VERIFY(retire.kind == NullScenePlatformController::TextViewCall::RETIRE && !retire.borrowed);
-  LOKA_VERIFY(detach.marked && retire.marked && row->marked());
+  LOKA_VERIFY(detach.markedAtEntryIs(true) && retire.markedAtEntryIs(true) && row->marked());
   LOKA_VERIFY(detach.row == row && retire.row == row && retire.links == 2);
   LOKA_VERIFY(!row->view.place && !TextDocumentAccess::store(f.root().first));
 }
