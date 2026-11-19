@@ -63,6 +63,7 @@ namespace loka
         TEXT_STORE_REFUSED_UNSUPPORTED
       };
       class IPlatformController;
+      class TextDocumentViewContext;
       class TextViewClaim;
       class TextStoreRow;
       class TextStoreLedger;
@@ -150,6 +151,8 @@ namespace loka
         {
           return this->view_.remote() != 0;
         }
+        /** Rail-only borrowed read of the linked context, or zero. O(1), no callbacks or retention. */
+        TextDocumentViewContext *attachedView() const;
         /** Rail birth commit only: move the view after all fallible preparation succeeds.
             Once per replacement, O(1), touches only old and fresh rows. */
         static void transferView(TextStoreRow &old, TextStoreRow &fresh);
