@@ -6,25 +6,26 @@ import signal
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
-HEADER = ROOT / "common/app/doc/Markdown.hpp"
+MARKDOWN = ROOT / "common/app/doc/Markdown.hpp"
+PROJECTION = MARKDOWN.parent / "detail/Projection.hpp"
 MUTATIONS = [
     ("prune", "case scene::DOCUMENT_BLOCK_READ:\n            return true;",
      "case scene::DOCUMENT_BLOCK_READ: break;", "Walk"),
     ("parked", "scene::INestable *nest = node->asNestable();",
      "for (unsigned i = 0; scene::Node *branch = node->retainedLifecycleBranch(i); ++i)\n"
-     "            if (!WalkMarkdown(branch, reader)) return false;\n"
+     "            if (!WalkDocumentBlocks(branch, reader)) return false;\n"
      "          scene::INestable *nest = node->asNestable();", "Walk"),
     ("escape-heading", "[]<&#~", "[]<&~", "PhysicalLines"),
     ("unsafe-stars", "if (stars)", "if (stars || marks)", "Inline"),
     ("ignore-flanking", "if (stars)", "if (stars || (!touching && !literal))", "Inline"),
-    ("partial-body", "!CollectMarkdownText(seg.text, this->bytes)",
-     "(CollectMarkdownText(seg.text, this->bytes), false)", "Failure"),
-    ("partial-destination", "!CollectMarkdownText(seg.link.text(), target)",
-     "(CollectMarkdownText(seg.link.text(), target), false)", "Failure"),
+    ("partial-body", "!CollectDocumentText(seg.text, this->bytes)",
+     "(CollectDocumentText(seg.text, this->bytes), false)", "Failure"),
+    ("partial-destination", "!CollectDocumentText(seg.link.text(), target)",
+     "(CollectDocumentText(seg.link.text(), target), false)", "Failure"),
     ("edge-emphasis", "AppendRun(projected, plain, run.first, ink.first);", "AppendRun(projected, run.style, run.first, ink.first);", "Inline"),
     ("short-fence", "Backticks(body, 0, body.size(), 3)", 'std::string(3, \'`\')', "Blocks"),
-    ("partial-commit", "if (!root || !detail::WalkMarkdown(root, reader))\n          return false;",
-     "if (!root || !detail::WalkMarkdown(root, reader)) { out += reader.fragment; return false; }", "Failure"),
+    ("partial-commit", "if (!root || !detail::WalkDocumentBlocks(root, reader))\n          return false;",
+     "if (!root || !detail::WalkDocumentBlocks(root, reader)) { out += reader.fragment; return false; }", "Failure"),
     ("split-run", "if (runs.empty() || !(runs.back().style == style))",
      "if (first < end)", "Inline"),
     ("split-link", "if (target != this->targets.c_str() + link)", "if (!target.empty())", "Inline"),
@@ -46,7 +47,9 @@ def run(command, log):
 
 def mutation(entry):
     name, old, new, suffix = entry
-    original = HEADER.read_bytes()
+    header = PROJECTION if name in {"prune", "parked", "partial-body", "partial-destination",
+                                    "edge-emphasis", "split-run", "split-link", "detached"} else MARKDOWN
+    original = header.read_bytes()
     source = original.decode()
     assert source.count(old) == 1, "anchor mismatch: " + name
     logs = ROOT / "build/document-markdown-mutations"
@@ -63,13 +66,13 @@ def mutation(entry):
 
     check("baseline", True)
     try:
-        HEADER.write_bytes(source.replace(old, new).encode())
+        header.write_bytes(source.replace(old, new).encode())
         check("mutant", False)
         print(f"killed {name}: {test}", flush=True)
     finally:
-        HEADER.write_bytes(original)
+        header.write_bytes(original)
         check("restored", True)
-        assert HEADER.read_bytes() == original
+        assert header.read_bytes() == original
 
 
 if __name__ == "__main__":
