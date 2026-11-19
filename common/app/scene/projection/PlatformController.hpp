@@ -211,12 +211,19 @@ namespace loka
           fresh = 0;
           return TEXT_STORE_REFUSED_UNSUPPORTED;
         }
-        /** Copy handles and identities before the native call and revalidate the row afterwards.
+        /** Command refresh asks the rail to commit marked text; a rail may leave it pending.
+            Copy handles and identities before the native call and revalidate afterwards.
             Callbacks during the call may only mark the row's change note. */
         virtual void commitMarkedText(TextStoreRow &) {}
+        /** Settle this row immediately before linked detach (except discarded row retirement)
+            and each read-only attach or presentation, inside the same borrow. Marks only:
+            body, selection and undo may change only by committing composition. No kernel reentry,
+            Loka-side allocation or failure. The default and rails unable to commit do nothing.
+            A row with remaining composition continues to report MARKED. */
+        virtual void settleTextComposition(TextStoreRow &) {}
         /** Once per view attach, only this row and place. Prepare fallible resources before
             attaching; refusal keeps the store parked. Parked stores still serve app requests.
-            Preserve body, selection, undo and marks. Prior IME commit is a separate input operation.
+            Preserve body, selection, undo and marks. Measure preservation after any preceding settle.
             Never reenter the kernel: notifications only mark. Any synchronous paint sees the
             attached shape. Defaults refuse unsupported rails. Replacement birth must finish
             all fallible work before transferring the view, preserving old on refusal. */
@@ -224,14 +231,16 @@ namespace loka
         {
           return false;
         }
-        /** Once per linked detach or row retirement. No allocation, no failure; remove borrowed
-            presentation resources and park the body. Preserve body, selection, undo and marks.
-            No kernel reentry. Retired native resources are silent, including at drain. */
+        /** Once per linked detach, including retirement of a row that still has a linked view (a
+            parked or transferred-away row goes straight to retireTextStore). No allocation, no failure; remove borrowed
+            presentation resources and park the body. Preserve body, selection, undo and marks as of
+            entry, after any settle. No kernel reentry. Retired native resources are silent, including at drain. */
         virtual void detachTextView(TextStoreRow &) {}
         /** Once per row retirement, after view detach and before link cuts; O(1), this row only.
             No allocation, no failure, no kernel reentry: marks only. Default does nothing. */
         virtual void retireTextStore(TextStoreRow &) {}
         /** Once after attach or compatible props apply, only this row. No kernel reentry.
+            Preserve body, selection, undo and marks as of entry, after any settle.
             Cosmetic preparation failure uses defaults; behavioral settings must be honored. */
         virtual void applyTextViewPresentation(TextStoreRow &, const TextViewPresentation &) {}
         virtual bool readTextStore(TextStoreRow &, TextStoreReading &)

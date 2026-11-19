@@ -185,6 +185,7 @@ public:
   {
     enum Kind
     {
+      SETTLE,
       ATTACH,
       DETACH,
       PRESENT,
@@ -195,20 +196,30 @@ public:
         : kind(ATTACH),
           row(0),
           borrowed(false),
-          links(0)
+          links(0),
+          marked_(false)
     {
     }
     TextViewCall(Kind k, loka::app::scene::TextStoreRow &r, bool b, unsigned linked = 0)
         : kind(k),
           row(&r),
           borrowed(b),
-          links(linked)
+          links(linked),
+          marked_(static_cast<NullTextStore &>(r).marked())
     {
+    }
+    /** Whether the row's mark at entry matches; the snapshot itself stays private. */
+    bool markedAtEntryIs(bool expected) const
+    {
+      return this->marked_ == expected;
     }
     Kind kind;
     const loka::app::scene::TextStoreRow *row;
     bool borrowed;
     unsigned links;
+
+  private:
+    bool marked_;
   };
   /** Bounded fixture evidence: recording detach must not allocate. */
   class TextViewCalls
@@ -257,6 +268,7 @@ public:
   {
     static_cast<NullTextStore &>(row).commit();
   }
+  virtual void settleTextComposition(loka::app::scene::TextStoreRow &row);
   virtual bool readTextStore(loka::app::scene::TextStoreRow &row, loka::app::scene::TextStoreReading &out)
   {
 #ifdef TEST_BUILD

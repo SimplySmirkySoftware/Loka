@@ -1350,6 +1350,11 @@ NullTextDocumentViewContext *NullScenePlatformController::createTextViewContext(
     return 0;
   return new (std::nothrow) NullTextDocumentViewContext(*this, root->getScene()->textDocuments(), node);
 }
+void NullScenePlatformController::settleTextComposition(loka::app::scene::TextStoreRow &row)
+{
+  this->textViewCalls.push_back(TextViewCall(TextViewCall::SETTLE, row, this->borrowPhase().open()));
+  static_cast<NullTextStore &>(row).settle();
+}
 bool NullScenePlatformController::attachTextView(loka::app::scene::TextStoreRow &row,
                                                  loka::app::scene::NodeContext &context,
                                                  const loka::app::TextViewPresentation &)
