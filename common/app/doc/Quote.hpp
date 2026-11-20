@@ -41,6 +41,14 @@ namespace loka
           if (this->childrenCount() != 2)
             this->clearChildren();
         }
+        /** A refused shell replaces nothing, so the destination keeps its value.
+            Cost: one shell check, then one definition assignment per author call. */
+        Quote &operator=(const Quote &rhs)
+        {
+          if (rhs.childrenCount() == 2)
+            scene::NestableNodeDefinition<QuoteProps, QuoteProps::NodeType, Quote>::operator=(rhs);
+          return *this;
+        }
         /** Cost: every borrowed insertion clones its authored subtree into this column once. */
         virtual void addChild(scene::NodeDefinitionBase *child)
         {

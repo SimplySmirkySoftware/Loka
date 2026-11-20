@@ -85,7 +85,7 @@ def main():
     if args.containers:
         return containers(args, 2, lambda source: html_projection(html5lib, source))
     lines = subprocess.check_output([args.executable, "--document-html-cases", str(args.seed),
-                                     str(args.count)], text=True).splitlines()
+                                     str(args.count)], encoding="utf-8").splitlines()
     comparisons = 0
     for i, line in enumerate(lines):
         kind, glyphs, md, html = line.split("\t")

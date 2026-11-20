@@ -248,6 +248,9 @@ void testDocumentContainerNative()
   LOKA_VERIFY(refused.childrenCount() == 0);
   refused << doc::Paragraph("owned by refused shell").clone();
   LOKA_VERIFY(!refused.clone());
+  // Assigning a refused shell must not discard the destination's completed value.
+  forwarded = refused;
+  LOKA_VERIFY(forwarded.childrenCount() == 2);
   refuseNextDefinitionAllocation(sizeof(Column));
   LOKA_VERIFY(!forwarded.clone());
   e.golden(forwarded, "> borrowed\n>\n> constant\n>\n> owned\n>\n> borrowed\n", "");

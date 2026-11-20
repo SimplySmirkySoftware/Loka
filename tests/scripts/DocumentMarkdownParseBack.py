@@ -105,7 +105,7 @@ def authored_forest(nodes):
 
 def containers(args, field, parse):
     command = [args.executable, "--document-container-cases", str(args.seed), str(args.count)]
-    rows = subprocess.check_output(command, text=True).splitlines()
+    rows = subprocess.check_output(command, encoding="utf-8").splitlines()
     for index, row in enumerate(rows):
         fields = row.split("\t")
         expected = authored_forest(json.loads(fields[0]))
@@ -139,7 +139,7 @@ def main():
         raise ValueError("stock nesting-limit fixture changed")
     if args.containers:
         return containers(args, 1, lambda source: projection(parser, source))
-    data = subprocess.check_output([args.executable, "--document-markdown-cases", str(args.seed), str(args.count)], text=True)
+    data = subprocess.check_output([args.executable, "--document-markdown-cases", str(args.seed), str(args.count)], encoding="utf-8")
     rows = data.splitlines()
     failures = refusals = 0
     for i, line in enumerate(rows):
