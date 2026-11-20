@@ -81,6 +81,7 @@ set(LOKA_SHARED_TEST_SOURCES
   ${_LOKA_TEST_SOURCE_ROOT}/tests/DocumentVocabularyTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/DocumentHeadlessTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/DocumentMarkdownTests.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/DocumentHtmlTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/LinkActivationTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/TextSpanWin32Tests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/StyleTests.cpp

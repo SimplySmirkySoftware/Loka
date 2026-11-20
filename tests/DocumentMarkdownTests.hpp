@@ -7,5 +7,6 @@ void testDocumentMarkdownFailure();
 void testDocumentMarkdownWalk();
 void testDocumentMarkdownSeats();
 void testDocumentMarkdownLazyWindow();
-int documentMarkdownCases(unsigned seed, unsigned count);
+/** Cost: one Markdown export and optionally one HTML export per generated block. */
+int documentExportCases(unsigned seed, unsigned count, bool html);
 #endif

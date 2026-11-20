@@ -12,6 +12,7 @@
 #include "app/doc/CodeBlock.hpp"
 #include "app/doc/Inline.hpp"
 #include "app/doc/Markdown.hpp"
+#include "app/doc/Html.hpp"
 #include "app/doc/Render.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
 
@@ -41,5 +42,6 @@ namespace
 
 bool renderDocumentAfterSdk(std::string &out)
 {
-  return loka::app::doc::RenderMarkdown(loka::app::scene::Boundary<PinPage>(), out);
+  return loka::app::doc::RenderMarkdown(loka::app::scene::Boundary<PinPage>(), out)
+         && loka::app::doc::RenderHtml(loka::app::scene::Boundary<PinPage>(), out);
 }

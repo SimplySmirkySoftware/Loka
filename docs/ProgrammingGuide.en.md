@@ -2397,7 +2397,7 @@ if (!doc::RenderMarkdown(Boundary<FieldGuide>(), markdown))
 ```
 
 Each call mounts a fresh page, drains its queued scene updates, appends one
-Markdown fragment, and detaches the page before returning. Supply any separator
+Markdown or HTML fragment, and detaches the page before returning. Supply any separator
 after an existing prefix yourself. A reported composition refusal, work still
 pending after 100 passes, or an unreadable block returns false and preserves
 every destination byte. Page code runs again on each call, including immediate
@@ -2412,18 +2412,36 @@ exhaustion follow the normal process behavior.
 | Window and app services | During composition, `c.componentContext()->window()` and the node's `attachedContext()` return null. The node's strict `window()`, `scene()` and `boundary()` accessors and the composition's `c.window()` are unsupported here. App and PlatformContext services are unavailable. |
 | Idle and input | Idle callbacks, timers and native input never run. Animations and Flows waiting on them keep their initial state. |
 | Focus, editors and menus | Focus stays none, text documents await their store, and menu commands are never dispatched. Editor bodies do not become document blocks. |
-| Images | Images contribute no automatic Markdown. The producer of a native image remains responsible for draining its resources. |
+| Images | Images contribute no document blocks. The producer of a native image remains responsible for draining its resources. |
 | Composition | Only attached document blocks contribute bytes. A page containing only ordinary controls can succeed with empty output. A fixed Component can locally discard children, including unsupported branch seats, without reporting a refusal. |
 
-The [sample tool](../example/DocumentPage/main.cpp) writes a complete page to stdout.
-The output includes the attached document blocks in declaration order. Ordinary
-controls such as `Text` contribute nothing. Underline, color and font size are
-omitted. Bold and italic use stars or inline `<strong>` and `<em>` tags depending
-on the surrounding text. Export preserves document meaning within these conventions.
-Reading Markdown back into a tree and preserving the original spelling are outside
-this contract. Export leaves the destination untouched if it cannot read a string
-or preserve its meaning. This includes ambiguous padding in whitespace-only
-inline code and unprotected separators that readers would strip at block edges.
+The sample tool writes Markdown by default and HTML with `--html`. To append
+HTML from a standalone page, call `doc::RenderHtml(page, out)`. To export an
+already mounted subtree on the main thread, include `app/doc/Html.hpp` or
+`app/doc/Markdown.hpp` and call `doc::WriteHtml(root, out)` or
+`doc::WriteMarkdown(root, out)`. [Sample tool](../example/DocumentPage/main.cpp)
+
+Both exits preserve the meaning of attached document blocks in declaration order.
+Ordinary controls, underline, color, and font size are omitted. Empty headings
+and code blocks are kept. Empty paragraphs are omitted. On both exits, link
+destinations are trusted input; a tool that takes destinations from outside
+must apply its own policy.
+
+The HTML fragment is UTF-8 for a flow-content context such as a `div`, with a
+newline after each block. Headings use `h1` through `h6`, paragraphs use `p`,
+and code blocks use `pre` containing `code`. Paragraph breaks use `br`.
+Consecutive text with the same destination shares one anchor. Bold, italic and
+monospace use `strong`, `em` and `code`. Leading and trailing spaces in a styled
+run keep their code and link membership, with bold and italic removed. Code
+blocks keep every trailing newline. A nonempty code block ending in any other
+character receives one final newline.
+
+Markdown uses stars or inline emphasis tags according to the surrounding text.
+Both exports preserve the destination on refusal. Markdown can also refuse
+ambiguous padding in whitespace-only inline code and bare separators that its
+readers strip at block edges. HTML can represent these directly. Reading
+Markdown back into a tree and preserving the original spelling are outside
+this contract.
 
 | Heading level | Default size | Default weight |
 |---|---|---|
