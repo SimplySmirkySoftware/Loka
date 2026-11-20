@@ -128,7 +128,10 @@ MacTextDocumentViewContext *MacTextStore::fromNativeFocus(NSResponder *responder
   SEL action = [item action];
   if (action == @selector(undo:) || action == @selector(redo:))
     return [self qualifiedManager:action] != nil;
-  return [super validateMenuItem:item];
+  // NSTextView documents NSUserInterfaceValidations; the menu-specific form is not promised on every OS.
+  if ([NSTextView instancesRespondToSelector:@selector(validateMenuItem:)])
+    return [super validateMenuItem:item];
+  return [super validateUserInterfaceItem:item];
 }
 @end
 

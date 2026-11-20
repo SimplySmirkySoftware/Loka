@@ -536,6 +536,27 @@ void testMacTextViewUndo()
   NSUndoManager *alternate = [f.native() undoManager];
   LOKA_VERIFY(alternate && alternate != manager);
   [alternate registerUndoWithTarget:f.phase selector:@selector(alternateUndo:) object:nil];
+  // Each history query answers its own verb: only Undo before undoing, only Redo once exhausted.
+  LOKA_VERIFY([v validateMenuItem:undo] && ![v validateMenuItem:redo]);
+  unsigned steps = 0;
+  while ([v validateMenuItem:undo])
+  {
+    send(v, @selector(undo:));
+    ++steps;
+  }
+  LOKA_VERIFY(steps && ![v validateMenuItem:undo] && [v validateMenuItem:redo]);
+  while (steps--)
+    send(v, @selector(redo:));
+  LOKA_VERIFY([[v string] isEqual:@"AB"] && [v validateMenuItem:undo] && ![v validateMenuItem:redo]);
+  // Other verbs reach NSTextView's own validation.
+  if ([NSTextView instancesRespondToSelector:@selector(validateMenuItem:)])
+    std::printf("[skip] validateUserInterfaceItem: fallback: this AppKit's NSTextView answers validateMenuItem:\n");
+  NSMenuItem *copy = verb(@selector(copy:));
+  [v setSelectedRange:NSMakeRange(0, 0)];
+  LOKA_VERIFY(![v validateMenuItem:copy]);
+  [v setSelectedRange:NSMakeRange(0, 1)];
+  LOKA_VERIFY([v validateMenuItem:copy]);
+  [v setSelectedRange:NSMakeRange(2, 0)];
   MenuBarDefinition bar;
   bar << EditMenu();
   const MenuSources sources = {&bar, 0, 0};
@@ -761,12 +782,22 @@ void testMacTextViewLayout()
     LOKA_VERIFY(NSEqualSizes([v minSize], [s contentSize]));
     LOKA_VERIFY(([[v textContainer] widthTracksTextView] != NO) == (wrap != 0)
                 && ([v isHorizontallyResizable] != NO) == !wrap);
+    if (wrap)
+    {
+      // A same-size reattach with a margin keeps the tracked width (view width less both insets).
+      // On Tahoe 26.7.1 the presentation's setTextContainerInset: after attach re-tracks the width.
+      const CGFloat inset = [v textContainerInset].width;
+      LOKA_VERIFY(inset > 0 && [[v textContainer] containerSize].width == [v bounds].size.width - 2 * inset);
+      f.detach();
+      f.attach();
+      LOKA_VERIFY([[v textContainer] containerSize].width == [v bounds].size.width - 2 * inset);
+    }
   }
 }
 void testMacTextViewKeyViewLoop()
 {
   Fixture f;
-  if (!f.key("key-view commands and Tab/Option-Tab events"))
+  if (!f.key("key-view commands, Tab into and Control-Tab out of the document view"))
     return;
   NSWindow *w = f.native();
   NSTextField *field = f.field();
