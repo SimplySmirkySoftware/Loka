@@ -2,6 +2,7 @@
 #define LOKA_APP_DOC_MARKDOWN_HPP
 
 #include "app/doc/detail/Projection.hpp"
+#include "app/doc/detail/ContainerWriter.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -256,40 +257,90 @@ namespace loka
         }
 
         /** Owns the fragment until the complete borrow succeeds. Cost: one instance per explicit exit. */
-        class MarkdownReader : public BlockReader
+        class MarkdownReader : public ContainerWriter<MarkdownReader>
         {
         public:
           std::string fragment;
-          /** Cost: each accepted nonempty block appends its spelling and separator once. */
+          /** Cost: once per physical line, append one prefix per enclosing quote. */
+          void prefix(unsigned quotes, bool blank)
+          {
+            for (unsigned i = 0; i < quotes; ++i)
+              this->fragment += blank && i + 1 == quotes ? ">" : "> ";
+          }
+          /** Cost: once between emitted siblings, prefix their parent's blank line. */
+          void separator(unsigned quotes)
+          {
+            this->prefix(quotes, true);
+            this->fragment += '\n';
+          }
+          /** Cost: Markdown containers need no separate opening or closing line. */
+          void open(Kind) {}
+          /** Cost: each completed Markdown container needs no closing delimiter. */
+          void close(Kind) {}
+          /** Cost: each emitted leaf scans its own spelling once, prefixing physical lines. */
           void block(const std::string &value)
           {
-            if (!this->fragment.empty())
+            this->beginLeaf();
+            const bool item = this->frames[this->depth].kind == LIST;
+            const unsigned quotes = this->depth - (item ? 1 : 0);
+            size_t start = 0;
+            for (;;)
+            {
+              const size_t end = value.find('\n', start);
+              this->prefix(quotes, !item && end == start);
+              if (item)
+              {
+                if (start)
+                  this->fragment += "  ";
+                else
+                {
+                  this->fragment += this->frames[this->depth - 1].previous;
+                  this->fragment += ' ';
+                }
+              }
+              this->fragment.append(value, start, end == std::string::npos ? end : end - start);
               this->fragment += '\n';
-            this->fragment += value;
-            this->fragment += '\n';
+              if (end == std::string::npos)
+                break;
+              start = end + 1;
+            }
           }
           /** Cost: one inline projection per visited heading, independent of its visual defaults. */
           virtual bool read(const HeadingProps &p)
           {
+            if (!this->accepts(false))
+              return false;
             std::string body;
             if (!WriteInline(p.content, true, body))
               return false;
             this->block(std::string(p.level(), '#') + (body.empty() ? "" : " ") + body);
             return true;
           }
-          /** Cost: one inline projection per visited paragraph. */
-          virtual bool read(const ParagraphProps &p)
+          /** Cost: once per inline leaf, check its parent and spell its own runs once. */
+          bool inlineLeaf(const AttributedString &content, bool item)
           {
             std::string body;
-            if (!WriteInline(p.content, false, body))
+            if (!this->accepts(item) || !WriteInline(content, false, body))
               return false;
             if (!body.empty())
               this->block(body);
             return true;
           }
+          /** Cost: each visited paragraph forwards one input. */
+          virtual bool read(const ParagraphProps &p)
+          {
+            return this->inlineLeaf(p.content, false);
+          }
+          /** Cost: each visited item forwards one input. */
+          virtual bool read(const ItemProps &p)
+          {
+            return this->inlineLeaf(p.content, true);
+          }
           /** Cost: one collection per visited code block, then linear newline and fence scans. */
           virtual bool read(const CodeBlockProps &p)
           {
+            if (!this->accepts(false))
+              return false;
             std::string body;
             if (!CollectCodeBlock(p.text, body))
               return false;

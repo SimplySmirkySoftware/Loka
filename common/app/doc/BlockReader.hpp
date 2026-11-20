@@ -9,13 +9,17 @@ namespace loka
   {
     namespace doc
     {
+      struct ListProps;
+      struct ItemProps;
+      struct QuoteProps;
       struct HeadingProps;
       struct ParagraphProps;
       struct CodeBlockProps;
 
-      /** A synchronous exit borrows the authored props. False refuses the whole export.
-          Ordinary nodes allow descent. A read block prunes its projection. A refused block stops the walk.
-          Cost: one typed read per visited block, walking only that block's input. */
+      /** A synchronous exit borrows the authored props. Ordinary nodes allow descent.
+          Leaves prune their projection. Containers visit their own children.
+          Refusal is terminal. Discard the reader without calling leave on open containers.
+          Cost: one read per leaf, one entry per container and one leave on successful traversal. */
       class BlockReader
       {
       public:
@@ -26,12 +30,23 @@ namespace loka
         /** Cost: one call per visited CodeBlock block, borrowing its props only. */
         virtual bool read(const CodeBlockProps &) = 0;
 
+        /** Cost: one borrowed input per visited item. */
+        virtual bool read(const ItemProps &) = 0;
+        /** Cost: the walk calls once per List enter, borrowing its props only. */
+        virtual bool enter(const ListProps &) = 0;
+        /** Cost: the walk calls once per List leave, borrowing its props only. */
+        virtual bool leave(const ListProps &) = 0;
+        /** Cost: the walk calls once per Quote enter, borrowing its props only. */
+        virtual bool enter(const QuoteProps &) = 0;
+        /** Cost: the walk calls once per Quote leave, borrowing its props only. */
+        virtual bool leave(const QuoteProps &) = 0;
+
       protected:
         /** Cost: the stack owner destroys its reader once per export, with no rows to release. */
         ~BlockReader() {}
       };
 
-      /** Every document block derives from this base to expose its authored meaning.
+      /** A semantic leaf exposes its authored props and prunes its native projection.
           Cost: forwards the existing props once per node construction. */
       template <class PropsT> class BlockNode : public scene::ComponentNodeWithProps<PropsT>
       {

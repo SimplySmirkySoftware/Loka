@@ -1,3 +1,5 @@
+#include "app/doc/List.hpp"
+#include "app/doc/Quote.hpp"
 #include "app/doc/CodeBlock.hpp"
 #include "app/doc/Heading.hpp"
 #include "app/doc/Paragraph.hpp"
@@ -25,7 +27,7 @@ namespace
   public:
     /** Cost: one notes setting per mounted guide. */
     explicit FieldGuide(const BoundaryPropsFor<FieldGuide> &props)
-        : BoundaryNodeFor<FieldGuide>(props)
+        : loka::app::scene::BoundaryNodeFor<FieldGuide>(props)
     {
       this->state(this->showNotes_, true);
     }
@@ -35,14 +37,14 @@ namespace
     {
       if (!this->showNotes_.isValid())
         return; // state storage refused; the render reports the recorded refusal
-      const doc::ParagraphProps checklist[] = {doc::ParagraphProps("Pack a notebook."),
-                                               doc::ParagraphProps("Bring water.")};
+      const doc::ItemProps checklist[] = {doc::ItemProps("Pack a notebook."), doc::ItemProps("Bring water.")};
       c.declare(
           Column() << doc::Heading(1, "Field guide")
                    << doc::Paragraph(Styled("Download the ", TextStyle()) + doc::Link("map", "https://example.org/map"))
                    << doc::CodeBlock("survey --offline")
-                   << (Column() << For(32, checklist, ComponentItemFactory<doc::ParagraphProps>()))
-                   << (Show(*this->showNotes_.state()) << doc::Paragraph("Record the trail conditions.")));
+                   << (doc::List() << (Column() << For(32, checklist, ComponentItemFactory<doc::ItemProps>())))
+                   << (Show(*this->showNotes_.state())
+                       << (doc::Quote() << doc::Paragraph("Record the trail conditions."))));
     }
   };
 } // namespace

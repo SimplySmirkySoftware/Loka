@@ -224,26 +224,6 @@ namespace loka
           return true;
         }
 
-        /** Cost: one dispatch per attached composition resident, pruning the block's projection. */
-        inline bool WalkDocumentBlocks(scene::Node *node, BlockReader &reader)
-        {
-          if (node->lifecycleFact() != scene::NODE_FACT_ATTACHED)
-            return true;
-          switch (node->readDocumentBlock(reader))
-          {
-          case scene::DOCUMENT_BLOCK_READ:
-            return true;
-          case scene::DOCUMENT_BLOCK_REFUSED:
-            return false;
-          case scene::DOCUMENT_BLOCK_NONE:
-            break;
-          }
-          scene::INestable *nest = node->asNestable();
-          for (scene::Node *child = nest ? nest->childrenHead() : 0; child; child = child->nextInComposition)
-            if (!WalkDocumentBlocks(child, reader))
-              return false;
-          return true;
-        }
       } // namespace detail
     } // namespace doc
   } // namespace app

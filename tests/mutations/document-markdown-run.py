@@ -6,10 +6,17 @@ from document_mutations import main
 ROOT = Path(__file__).resolve().parents[2]
 MARKDOWN = ROOT / "common/app/doc/Markdown.hpp"
 PROJECTION = MARKDOWN.parent / "detail/Projection.hpp"
+WALK = MARKDOWN.parent / "BlockWalk.hpp"
+FRAMES = MARKDOWN.parent / "detail/ContainerWriter.hpp"
 MUTATIONS = [
-    ("prune", PROJECTION, "case scene::DOCUMENT_BLOCK_READ:\n            return true;",
+    ("drop-marker", MARKDOWN, "this->fragment += this->frames[this->depth - 1].previous;", "", "Containers"),
+    ("drop-prefix-level", MARKDOWN, "i < quotes;", "i + 1 < quotes;", "Containers"),
+    ("ignore-sibling-marker", FRAMES, "(parent.previous == '-' ? '*' : '-')", "'-'", "Containers"),
+    ("skip-leave", WALK, "return reader.leave(props) ? scene::DOCUMENT_BLOCK_READ : scene::DOCUMENT_BLOCK_REFUSED;",
+     "return scene::DOCUMENT_BLOCK_READ;", "Containers"),
+    ("prune", WALK, "case scene::DOCUMENT_BLOCK_READ:\n            return true;",
      "case scene::DOCUMENT_BLOCK_READ: break;", "Walk"),
-    ("parked", PROJECTION, "scene::INestable *nest = node->asNestable();",
+    ("parked", WALK, "scene::INestable *nest = node->asNestable();",
      "for (unsigned i = 0; scene::Node *branch = node->retainedLifecycleBranch(i); ++i)\n"
      "            if (!WalkDocumentBlocks(branch, reader)) return false;\n"
      "          scene::INestable *nest = node->asNestable();", "Walk"),
@@ -29,7 +36,7 @@ MUTATIONS = [
     ("split-link", PROJECTION, "if (target != this->targets.c_str() + link)", "if (!target.empty())", "Inline"),
     ("physical-digits", MARKDOWN, "(digits && (v == '.' || v == ')'))", "(digits && v == ')')", "PhysicalLines"),
     ("image", MARKDOWN, "(v == '!' && beforeLink)", "(v == '?' && beforeLink)", "PhysicalLines"),
-    ("detached", PROJECTION, "if (node->lifecycleFact() != scene::NODE_FACT_ATTACHED)",
+    ("detached", WALK, "if (node->lifecycleFact() != scene::NODE_FACT_ATTACHED)",
      "if (!node)", "Seats"),
     ("code-padding", MARKDOWN, "if (i == end && !onlySpaces)\n                return false;",
      "if (i == end) break;", "Failure"),

@@ -196,6 +196,7 @@
 #include "DocumentVocabularyTests.hpp"
 #include "DocumentHeadlessTests.hpp"
 #include "DocumentMarkdownTests.hpp"
+#include "DocumentContainerTests.hpp"
 #include "DocumentHtmlTests.hpp"
 #include "TextSpanWin32Tests.hpp"
 #include "RectSurfaceSeatExtentTests.hpp"
