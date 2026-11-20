@@ -32,6 +32,13 @@ namespace loka
       /** Unordered list. Cost: the nestable definition owns one capture per authored child. */
       struct List : scene::NestableNodeDefinition<ListProps, ListProps::NodeType, List>
       {
+        /** Cost: authoring starts with one childless definition. */
+        List() {}
+        /** Cost: each clone starts with one childless definition. */
+        explicit List(const scene::CloneShell<List> &shell)
+            : scene::NestableNodeDefinition<ListProps, ListProps::NodeType, List>(shell)
+        {
+        }
       };
       class ItemNode;
 

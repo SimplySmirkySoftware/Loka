@@ -29,6 +29,11 @@ namespace loka
       /** Indented content column. Cost: captures one spacer and one column per declaration. */
       struct Quote : scene::NestableNodeDefinition<QuoteProps, QuoteProps::NodeType, Quote>
       {
+        /** Cost: each clone starts with one childless definition. */
+        explicit Quote(const scene::CloneShell<Quote> &shell)
+            : scene::NestableNodeDefinition<QuoteProps, QuoteProps::NodeType, Quote>(shell)
+        {
+        }
         /** Cost: authoring captures one spacer and one column. */
         Quote()
         {
@@ -68,22 +73,10 @@ namespace loka
         {
           if (this->childrenCount() != 2)
             return 0;
-          Quote *copy = new Quote(EMPTY_SHELL);
-          if (copy && !copy->assignFromDefinition(*this))
-          {
-            delete copy;
-            return 0;
-          }
-          return copy;
+          return scene::NestableNodeDefinition<QuoteProps, QuoteProps::NodeType, Quote>::clone();
         }
 
       private:
-        enum EmptyShell
-        {
-          EMPTY_SHELL
-        };
-        /** Cost: each clone starts with one empty definition and captures no children here. */
-        explicit Quote(EmptyShell) {}
         /** Cost: each insertion follows the same two fixed definition edges. */
         scene::INestableDefinition *contentColumn()
         {
