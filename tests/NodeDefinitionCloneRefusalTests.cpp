@@ -202,7 +202,7 @@ namespace
 
   void setCloneMetadata(NodeDefinitionBase &definition, int tag, const char *id)
   {
-    definition.setNodeTag(tag);
+    definition.setNodeTag(static_cast<NodeTag>(tag));
     definition.setCompositionSeatSlot(tag + 10);
     definition.setNativeLifetimeHint(NATIVE_HINT_EAGER_RELEASE);
     if (id)
