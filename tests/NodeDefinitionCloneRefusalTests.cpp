@@ -11,11 +11,30 @@ using namespace DefinitionCloneTestSupport;
 
 namespace
 {
+  struct AppendingCopy : NestableNodeDefinition<CloneProbeProps, CloneProbeNode, AppendingCopy>
+  {
+    typedef NestableNodeDefinition<CloneProbeProps, CloneProbeNode, AppendingCopy> BaseType;
+    AppendingCopy()
+        : BaseType()
+    {
+    }
+    explicit AppendingCopy(const CloneShell<AppendingCopy> &shell)
+        : BaseType(shell)
+    {
+    }
+    AppendingCopy(const AppendingCopy &other)
+        : BaseType(other)
+    {
+      *this << ZStack();
+    }
+  };
+
   template <class T> void fillSource(T &source)
   {
     source << (Box() << LimitedCloneProbeDefinition()
                      << LimitedCloneProbeDefinition()) << ZStack();
     source.setNodeTag(42);
+    source.setCompositionSeatSlot(17);
   }
 
   void verifyStructure(INestableDefinition &definition)
@@ -85,13 +104,14 @@ void testNodeDefinitionCopiesFullStructure()
   LOKA_VERIFY(byValue.props.padding == loka::app::layout::LayoutGap::of(23) && byValue.nodeTag() == 42);
   LOKA_VERIFY(static_cast<const BoxProps *>(copy->propsBase())->padding == loka::app::layout::LayoutGap::of(23));
   LOKA_VERIFY(copy->nodeTag() == 42);
+  LOKA_VERIFY(copy->compositionSeatSlot() == 17);
   LOKA_VERIFY(destination.childrenHead() != source.childrenHead());
   LOKA_VERIFY(copy->asNestableDefinition()->childrenHead() != source.childrenHead());
   LOKA_VERIFY(destination.childrenHead()->asNestableDefinition()->childrenHead() !=
               source.childrenHead()->asNestableDefinition()->childrenHead());
 }
 
-void testNodeDefinitionByValueRefusalLeavesEmpty()
+void testNodeDefinitionByValueRefusalKeepsPropsDropsChildren()
 {
   Box source;
   fillSource(source);
@@ -103,7 +123,38 @@ void testNodeDefinitionByValueRefusalLeavesEmpty()
   g_limitedCloneBudget = -1;
   LOKA_VERIFY(g_limitedCloneCalls == 2);
   LOKA_VERIFY(copy.childrenCount() == 0);
-  LOKA_VERIFY(copy.props.padding == loka::app::layout::LayoutGap::unspecified() && copy.nodeTag() == 0);
+  LOKA_VERIFY(copy.props.padding == source.props.padding);
+  LOKA_VERIFY(copy.nodeTag() == source.nodeTag());
+  LOKA_VERIFY(copy.compositionSeatSlot() == source.compositionSeatSlot());
   LOKA_VERIFY(g_probePropsAlive == alive);
   verifyStructure(source);
+}
+
+void testNodeDefinitionDirectChildRefusalReleasesCandidate()
+{
+  AppendingCopy source;
+  source << LimitedCloneProbeDefinition() << LimitedCloneProbeDefinition();
+  const int alive = g_probePropsAlive;
+  g_limitedCloneBudget = 1;
+  g_limitedCloneCalls = 0;
+  OwnedDef<NodeDefinitionBase> copy(source.clone());
+  g_limitedCloneBudget = -1;
+  LOKA_VERIFY(g_limitedCloneCalls == 2);
+  LOKA_VERIFY(!copy.isSet());
+  LOKA_VERIFY(g_probePropsAlive == alive);
+  LOKA_VERIFY(source.childrenCount() == 2);
+}
+
+void testNodeDefinitionCloneBypassesDerivedCopy()
+{
+  AppendingCopy source;
+  source << Box();
+  AppendingCopy byValue(source);
+  LOKA_VERIFY(byValue.childrenCount() == 2);
+  OwnedDef<NodeDefinitionBase> clone(source.clone());
+  LOKA_VERIFY(clone.isSet());
+  INestableDefinition *children = clone->asNestableDefinition();
+  LOKA_VERIFY(children->childrenCount() == 1);
+  LOKA_VERIFY(children->childrenHead()->nodeKind() == NODE_KIND_BOX);
+  LOKA_VERIFY(children->childrenHead() != source.childrenHead());
 }

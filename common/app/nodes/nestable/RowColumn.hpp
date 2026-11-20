@@ -182,6 +182,10 @@ namespace loka
                              public scene::TestIdDslMixin<StackDefinition>
     {
       typedef scene::NestableNodeDefinition<StackProps, StackNode, StackDefinition> BaseType;
+      explicit StackDefinition(const scene::CloneShell<StackDefinition> &shell)
+          : BaseType(shell)
+      {
+      }
       using BaseType::operator<<;
       explicit StackDefinition(StackAxis axis)
           : BaseType(StackProps(axis))
@@ -215,19 +219,16 @@ namespace loka
         this->props.alignHorizontal(value);
         return *this;
       }
-
-    private:
-      StackDefinition()
-          : BaseType(StackProps(STACK_AXIS_ROW))
-      {
-      }
-      friend struct scene::NestableNodeDefinition<StackProps, StackNode, StackDefinition>;
     };
 
     struct RowDefinition : public scene::NestableNodeDefinition<StackProps, StackNode, RowDefinition>,
                            public scene::TestIdDslMixin<RowDefinition>
     {
       typedef scene::NestableNodeDefinition<StackProps, StackNode, RowDefinition> BaseType;
+      explicit RowDefinition(const scene::CloneShell<RowDefinition> &shell)
+          : BaseType(shell)
+      {
+      }
       using BaseType::operator<<;
       RowDefinition()
           : BaseType(StackProps(STACK_AXIS_ROW))
@@ -265,6 +266,10 @@ namespace loka
                               public scene::TestIdDslMixin<ColumnDefinition>
     {
       typedef scene::NestableNodeDefinition<StackProps, StackNode, ColumnDefinition> BaseType;
+      explicit ColumnDefinition(const scene::CloneShell<ColumnDefinition> &shell)
+          : BaseType(shell)
+      {
+      }
       using BaseType::operator<<;
       ColumnDefinition()
           : BaseType(StackProps(STACK_AXIS_COLUMN))

@@ -140,6 +140,10 @@ namespace loka
                                public scene::TestIdDslMixin<ToolbarDefinition>
     {
       typedef scene::NestableNodeDefinition<StackProps, StackNode, ToolbarDefinition> BaseType;
+      explicit ToolbarDefinition(const scene::CloneShell<ToolbarDefinition> &shell)
+          : BaseType(shell)
+      {
+      }
       ToolbarDefinition()
           : BaseType(StackProps(STACK_AXIS_ROW))
       {
