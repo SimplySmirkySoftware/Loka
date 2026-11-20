@@ -383,10 +383,11 @@ namespace
   }
 #if defined(MAC_OS_X_VERSION_MAX_ALLOWED) && MAC_OS_X_VERSION_MAX_ALLOWED >= 101200
   const NSEventType keyDownType = NSEventTypeKeyDown;
-  const NSUInteger commandKey = NSEventModifierFlagCommand, optionKey = NSEventModifierFlagOption;
+  const NSUInteger commandKey = NSEventModifierFlagCommand, controlKey = NSEventModifierFlagControl,
+                   shiftKey = NSEventModifierFlagShift;
 #else
   const NSEventType keyDownType = NSKeyDown;
-  const NSUInteger commandKey = NSCommandKeyMask, optionKey = NSAlternateKeyMask;
+  const NSUInteger commandKey = NSCommandKeyMask, controlKey = NSControlKeyMask, shiftKey = NSShiftKeyMask;
 #endif
   id discardWitness = nil;
   id substituteInputContext(id, SEL)
@@ -614,7 +615,10 @@ void testMacTextViewFocus()
 
 // During a focused swap AppKit may change selection and cause storage processing.
 // Inject both effects before the rail restores placement and takes birth edits.
-@interface LokaSwapWindow : NSWindow
+// A category method exchanged with NSWindow's for the swap only: AppKit may already have
+// moved the window to a KVO subclass, so the window's class itself is left alone.
+@interface NSWindow (LokaSwapWindow)
+- (BOOL)lokaSwapMakeFirstResponder:(NSResponder *)responder;
 @end
 namespace
 {
@@ -622,8 +626,8 @@ namespace
   bool refuseFocus = false;
   unsigned focusOffers = 0;
 } // namespace
-@implementation LokaSwapWindow
-- (BOOL)makeFirstResponder:(NSResponder *)responder
+@implementation NSWindow (LokaSwapWindow)
+- (BOOL)lokaSwapMakeFirstResponder:(NSResponder *)responder
 {
   if (swappingOld && responder != swappingOld && [responder isKindOfClass:[NSTextView class]]
       && MacTextStore::fromNativeFocus(responder))
@@ -635,9 +639,17 @@ namespace
     if (refuseFocus)
       return NO;
   }
-  return [super makeFirstResponder:responder];
+  return [self lokaSwapMakeFirstResponder:responder]; // the exchanged original
 }
 @end
+namespace
+{
+  void exchangeSwapWindow()
+  {
+    method_exchangeImplementations(class_getInstanceMethod([NSWindow class], @selector(makeFirstResponder:)),
+                                   class_getInstanceMethod([NSWindow class], @selector(lokaSwapMakeFirstResponder:)));
+  }
+} // namespace
 void testMacTextViewReplacement()
 {
   for (unsigned mode = 0; mode < 3; ++mode)
@@ -652,8 +664,8 @@ void testMacTextViewReplacement()
       LOKA_VERIFY([w makeFirstResponder:old]);
     else
       LOKA_VERIFY([w makeFirstResponder:nil]);
-    LOKA_VERIFY(object_getClass(w) == [NSWindow class]);
-    Class original = object_setClass(w, [LokaSwapWindow class]);
+    LOKA_VERIFY([w class] == [NSWindow class]);
+    exchangeSwapWindow();
     swappingOld = old;
     refuseFocus = mode == 2;
     focusOffers = 0;
@@ -661,7 +673,7 @@ void testMacTextViewReplacement()
     [f.phase begin:"replacement" row:&f.row()];
     f.replace("new body");
     swappingOld = nil;
-    object_setClass(w, original);
+    exchangeSwapWindow();
     [f.phase finish];
     NSTextView *fresh = f.row().view();
     LOKA_VERIFY([f.ctx().scroll() documentView] == fresh && fresh != old && ![old superview] && ![old window]);
@@ -771,13 +783,24 @@ void testMacTextViewKeyViewLoop()
     }
     NSTextView *v = f.row().view();
     LOKA_VERIFY([w makeFirstResponder:field]);
-    [w selectNextKeyView:nil];
+    // Traversal commands name the field: while it edits, the first responder is its field editor.
+    [w selectKeyViewFollowingView:field];
     LOKA_VERIFY([w firstResponder] == v);
-    [w selectPreviousKeyView:nil];
+    [w selectKeyViewPrecedingView:v];
     LOKA_VERIFY([field currentEditor]);
     [w sendEvent:keyEvent(w, @"\t", 0, 48)];
     LOKA_VERIFY([w firstResponder] == v);
-    [w sendEvent:keyEvent(w, @"\t", optionKey, 48)];
+    // A document text view keeps plain and Option-Tab as text input (Tahoe 26.7.1:
+    // Option-Tab inserts a tab, Shift-Tab does nothing); Control-Tab and
+    // Control-Shift-Tab are the AppKit keys that leave a multi-line text view.
+    NSString *body = [[v string] copy];
+    [w sendEvent:keyEvent(w, @"\x19", controlKey | shiftKey, 48)];
+    LOKA_VERIFY([field currentEditor]);
+    [w sendEvent:keyEvent(w, @"\t", 0, 48)];
+    LOKA_VERIFY([w firstResponder] == v);
+    [w sendEvent:keyEvent(w, @"\t", controlKey, 48)];
+    LOKA_VERIFY([[v string] isEqual:body]);
+    [body release];
     LOKA_VERIFY([field currentEditor]);
   }
 }

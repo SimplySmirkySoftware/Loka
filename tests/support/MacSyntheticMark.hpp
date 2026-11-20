@@ -30,7 +30,13 @@ namespace loka
       if (replacement)
         [view setMarkedText:@"k" selectedRange:NSMakeRange(1, 0) replacementRange:NSMakeRange(NSNotFound, 0)];
       else
+      {
+        // The 10.0 selector is the one under test; it is deprecated, not removed.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
         [view setMarkedText:@"k" selectedRange:NSMakeRange(1, 0)];
+#pragma clang diagnostic pop
+      }
       LOKA_VERIFY(![view hasMarkedText] && [[view string] isEqual:before]
                   && NSEqualRanges([view selectedRange], selection));
       [before release];
