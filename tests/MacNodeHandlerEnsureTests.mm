@@ -4437,25 +4437,35 @@ void testMacTextPresentationDeallocation()
   if (!window)
     return;
   // A window move normally consumes the retain before dealloc. Supply just the two native reads
-  // to an unparented leaf so the destructor is the first invalidating operation.
-  NSView *leaf = [[NSClassFromString(@"LokaAttributedTextView") alloc] initWithFrame:[[window contentView] bounds]];
+  // to an unparented leaf so the destructor is the first invalidating operation. AppKit autoreleases
+  // references to the leaf during setup, so setup and release each drain their own pool; otherwise
+  // dealloc waits for the outer drain (measured on Tahoe: retainCount 8 at release).
   const AttributedString value;
-  CGFloat extent;
-  [leaf applyContainerWidth:NSWidth([leaf bounds])];
-  NSAttributedString *native = [[[NSAttributedString alloc] initWithString:@""] autorelease];
-  LOKA_VERIFY([leaf installValue:native snapshot:&value extent:&extent]);
-  testLayer = [[CALayer alloc] init];
-  borrowedWindow = window;
+  NSView *leaf = nil;
+  CGImageRef image = 0;
   {
-    MacNativeRefusal layer(@selector(layer), (IMP)ReturnTestLayer, [leaf class]);
-    MacNativeRefusal attached(@selector(window), (IMP)ReturnBorrowedWindow, [leaf class]);
-    [leaf updateLayer];
-    LOKA_VERIFY([leaf lokaHasPresentationImage]);
+    HitTestPool setup;
+    leaf = [[NSClassFromString(@"LokaAttributedTextView") alloc] initWithFrame:[[window contentView] bounds]];
+    CGFloat extent;
+    [leaf applyContainerWidth:NSWidth([leaf bounds])];
+    NSAttributedString *native = [[[NSAttributedString alloc] initWithString:@""] autorelease];
+    LOKA_VERIFY([leaf installValue:native snapshot:&value extent:&extent]);
+    testLayer = [[CALayer alloc] init];
+    borrowedWindow = window;
+    {
+      MacNativeRefusal layer(@selector(layer), (IMP)ReturnTestLayer, [leaf class]);
+      MacNativeRefusal attached(@selector(window), (IMP)ReturnBorrowedWindow, [leaf class]);
+      [leaf updateLayer];
+      LOKA_VERIFY([leaf lokaHasPresentationImage]);
+    }
+    image = CGImageRetain((CGImageRef)[testLayer contents]);
   }
-  CGImageRef image = CGImageRetain((CGImageRef)[testLayer contents]);
   LOKA_VERIFY(image);
   CFIndex before = CFGetRetainCount(image);
-  [leaf release];
+  {
+    HitTestPool teardown;
+    [leaf release];
+  }
   LOKA_VERIFY(CFGetRetainCount(image) == before - 1);
   CGImageRelease(image);
   [testLayer release];
