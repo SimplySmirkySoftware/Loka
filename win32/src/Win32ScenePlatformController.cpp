@@ -2058,6 +2058,7 @@ loka::app::scene::TextChunkResult Win32ScenePlatformController::readTextChunk(lo
   return static_cast<Win32TextStore &>(row).chunk(offset, end, out, capacity, written);
 }
 
+// Twin of MacScenePlatformController::createTextViewContext: membership belongs to the root Scene.
 Win32TextDocumentViewContext *
 Win32ScenePlatformController::createTextViewContext(loka::app::TextDocumentEditorNode &node, HWND parent)
 {

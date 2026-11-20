@@ -1223,8 +1223,10 @@ namespace loka
     {
       namespace
       {
+        unsigned viewPreparationFailures = 0;
         unsigned storeAllocationFailures[STORE_ALLOCATION_COUNT] = {};
         const MacTextStore *observedRow = 0;
+        StoreCallObserver storeCallObserver = 0;
         unsigned deliveredCalls = 0;
       } // namespace
       void failStoreAllocation(StoreAllocation stage, unsigned count)
@@ -1238,8 +1240,20 @@ namespace loka
         --storeAllocationFailures[stage];
         return true;
       }
-      void observeStoreCalls(const MacTextStore *row)
+      void failTextViewPreparation(unsigned count)
       {
+        viewPreparationFailures = count;
+      }
+      bool refuseTextViewPreparation()
+      {
+        if (!viewPreparationFailures)
+          return false;
+        --viewPreparationFailures;
+        return true;
+      }
+      void observeStoreCalls(const MacTextStore *row, StoreCallObserver observer)
+      {
+        storeCallObserver = observer;
         observedRow = row;
         deliveredCalls = 0;
       }
@@ -1247,8 +1261,10 @@ namespace loka
       {
         return deliveredCalls;
       }
-      void recordStoreCall(const MacTextStore *row)
+      void recordStoreCall(const MacTextStore *row, StoreCall call)
       {
+        if (storeCallObserver)
+          storeCallObserver(row, call);
         if (row == observedRow)
           ++deliveredCalls;
       }

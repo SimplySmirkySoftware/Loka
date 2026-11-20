@@ -1,4 +1,5 @@
 #include "MacTextStoreTests.hpp"
+#include "support/MacSyntheticMark.hpp"
 #include "MacScenePlatformController.hpp"
 #include "MacApp.hpp"
 #include "core/util/StateTrackerGuard.hpp"
@@ -215,7 +216,12 @@ void testMacTextStoreChanges()
     LOKA_VERIFY(range.start() == 0 && range.insertedLength() == range.length() + 1);
     LOKA_VERIFY(!controller.peekTextStore(row));
   }
-  [view setMarkedText:@"k" selectedRange:NSMakeRange(1, 0) replacementRange:NSMakeRange(NSNotFound, 0)];
+  for (unsigned selector = 0; selector < 2; ++selector)
+  {
+    loka::testing::MacVerifyMarkRefused(view, selector != 0);
+    LOKA_VERIFY(!controller.peekTextStore(row));
+  }
+  loka::testing::MacSyntheticMark(view);
   LOKA_VERIFY(controller.readTextStore(row, reading) && reading.marked());
   NSString *before = [[storage string] copy];
   controller.commitMarkedText(row);
@@ -723,7 +729,15 @@ void testMacTextStoreConformance()
   LOKA_VERIFY(root.text.fact()->get().textRevision() == revision);
   TextPosition caret;
   LOKA_VERIFY(root.text.queryPositionAtUtf8(1, caret) && root.text.fact()->get().caret() == caret);
-  [view setMarkedText:@"k" selectedRange:NSMakeRange(1, 0) replacementRange:NSMakeRange(NSNotFound, 0)];
+  for (unsigned selector = 0; selector < 2; ++selector)
+  {
+    loka::testing::MacVerifyMarkRefused(view, selector != 0);
+    LOKA_VERIFY(!controller.peekTextStore(*controller.fresh));
+    app.reconcileAtCompletion();
+    LOKA_VERIFY(root.text.fact()->get().state() == TEXT_DOCUMENT_READY
+                && root.text.fact()->get().textRevision() == revision);
+  }
+  loka::testing::MacSyntheticMark(view);
   app.reconcileAtCompletion();
   LOKA_VERIFY(root.text.fact()->get().state() == TEXT_DOCUMENT_MARKED);
   LOKA_VERIFY(app.commitTextInput() == TEXT_INPUT_SETTLED);

@@ -1,6 +1,7 @@
 #include "app/nodes/nestable/ScrollViewSettlement.hpp"
 #include "MacScenePlatformController.hpp"
 #include "text/MacTextStore.hpp"
+#include "context/MacTextDocumentViewContext.hpp"
 #include "platform/MacPushButton.hpp"
 #include "MacBitmapCapture.hpp"
 #include "MacInputDoor.hpp"
@@ -37,6 +38,7 @@
 #include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
 #include "app/nodes/controls/EditText.hpp"
 #include "app/scene/Node.hpp"
+#include "app/scene/Scene.hpp"
 #include "context/MacEditTextContext.hpp"
 #include "context/MacTextContext.hpp"
 #include "context/MacTextEditorContext.hpp"
@@ -357,7 +359,8 @@ MacScenePlatformController::~MacScenePlatformController()
 
 bool MacScenePlatformController::registerNodeHandler(loka::app::scene::IPlatformNodeHandler *handler)
 {
-  if (!handler || IsMacClipBoxType(handler->nodeTypeKey()))
+  if (!handler || IsMacClipBoxType(handler->nodeTypeKey())
+      || handler->nodeTypeKey() == loka::app::scene::NodeTypeToken<loka::app::TextDocumentEditorNode>())
     return false;
   return this->nodeHandlerRegistry_.registerHandler(handler);
 }
@@ -1329,6 +1332,8 @@ bool MacScenePlatformController::readNativeFocus(loka::app::scene::NodeContext *
   out = MacEditTextContext::fromNativeFocus(responder);
   if (!out)
     out = MacTextEditorContext::fromNativeFocus(responder);
+  if (!out)
+    out = MacTextStore::fromNativeFocus(responder);
   return true;
 }
 
@@ -1352,6 +1357,12 @@ bool MacScenePlatformController::applyNativeFocus(loka::app::scene::NodeContext 
   {
     view = (NSView *)static_cast<MacTextEditorContext &>(ctx).nativeFocusView();
     marked = MacTextEditorContext::fromNativeFocus(view);
+  }
+  else if (owner->nodeTypeKey() == loka::app::scene::NodeTypeToken<loka::app::TextDocumentEditorNode>())
+  {
+    MacTextStore *store = static_cast<MacTextDocumentViewContext &>(ctx).store();
+    view = store ? store->view() : nil;
+    marked = MacTextStore::fromNativeFocus(view);
   }
   if (!view || [view window] != window || marked != &ctx)
     return false;
@@ -1534,11 +1545,46 @@ void MacScenePlatformController::releaseMenu()
 // Store doors parallel the Null rail; each touches only its argument row.
 loka::app::scene::TextStoreBirth
 MacScenePlatformController::createTextStore(loka::app::TextStoreSource &source,
-                                            loka::app::scene::TextStoreRow *,
+                                            loka::app::scene::TextStoreRow *old,
                                             loka::app::scene::TextStoreRow *&fresh,
                                             loka::app::scene::TextStoreReading &reading)
 {
-  return MacTextStore::create(this->textStores_, *this, source, fresh, reading);
+  return MacTextStore::create(this->textStores_, *this, source, static_cast<MacTextStore *>(old), fresh, reading);
+}
+// Twin of Win32ScenePlatformController::createTextViewContext: membership belongs to the root Scene.
+MacTextDocumentViewContext *MacScenePlatformController::createTextViewContext(loka::app::TextDocumentEditorNode &node,
+                                                                              void *parent)
+{
+  loka::app::scene::BoundaryNode *root = this->rootNode_ ? this->rootNode_->asBoundary() : 0;
+  if (!root || !root->getScene())
+    return 0;
+  MacTextDocumentViewContext *context =
+      new (std::nothrow) MacTextDocumentViewContext(*this, (NSView *)parent, root->getScene()->textDocuments(), node);
+  if (context && !context->scroll())
+  {
+    delete context;
+    return 0;
+  }
+  return context;
+}
+bool MacScenePlatformController::attachTextView(loka::app::scene::TextStoreRow &row,
+                                                loka::app::scene::NodeContext &context,
+                                                const loka::app::TextViewPresentation &presentation)
+{
+  return static_cast<MacTextStore &>(row).attach(static_cast<MacTextDocumentViewContext &>(context), presentation);
+}
+void MacScenePlatformController::detachTextView(loka::app::scene::TextStoreRow &row)
+{
+  static_cast<MacTextStore &>(row).detach();
+}
+void MacScenePlatformController::applyTextViewPresentation(loka::app::scene::TextStoreRow &row,
+                                                           const loka::app::TextViewPresentation &presentation)
+{
+  static_cast<MacTextStore &>(row).present(presentation);
+}
+void MacScenePlatformController::settleTextComposition(loka::app::scene::TextStoreRow &row)
+{
+  static_cast<MacTextStore &>(row).settleComposition();
 }
 void MacScenePlatformController::retireTextStore(loka::app::scene::TextStoreRow &row)
 {
