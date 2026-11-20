@@ -10,15 +10,16 @@ from DocumentMarkdownParseBack import containers, decode, expected_glyphs, expec
 
 def html_projection(html5lib, source):
     fragment = html5lib.parseFragment(source, container="div", namespaceHTMLElements=False)
-    def blocks(parent):
-        if (parent.text or "").strip():
+    def blocks(parent, lead=""):
+        # The fragment root carries no text; an emitted container carries exactly its formatting LF.
+        if (parent.text or "") != lead:
             raise ValueError("unexpected container text")
         result = []
         for block in parent:
             if block.tail != "\n":
                 raise ValueError("missing block separator")
             if block.tag in ("ul", "blockquote"):
-                value = blocks(block)
+                value = blocks(block, "\n")
             elif block.tag == "pre":
                 if len(block) != 1 or block.text or block[0].tag != "code" or block[0].tail or len(block[0]):
                     raise ValueError("unexpected code block")
