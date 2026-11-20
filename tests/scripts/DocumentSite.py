@@ -125,6 +125,8 @@ def parse(tool, directory, sheet, example):
 
 
 def main():
+    if not __debug__:  # -O removes every assert here, including the runs inside them
+        sys.exit("DocumentSite.py checks with assert; run it without Python optimization")
     case, tool, fixture, example_path = sys.argv[1:]
     example = Path(example_path)
     with tempfile.TemporaryDirectory() as temp:
