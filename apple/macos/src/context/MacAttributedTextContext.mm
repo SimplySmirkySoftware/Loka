@@ -508,7 +508,10 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
 - (BOOL)wantsUpdateLayer
 {
   size_t w, h;
-  return MacTextLayerCapable() && WithinMacTextBudget([self bounds].size, WindowScale([self window]), w, h);
+  // Production only moves clip-host bounds origins. Defensively draw translated text via drawRect:.
+  const NSRect bounds = [self bounds];
+  return MacTextLayerCapable() && NSEqualPoints(bounds.origin, NSZeroPoint)
+         && WithinMacTextBudget(bounds.size, WindowScale([self window]), w, h);
 }
 /** Once per AppKit display, cache or render request. Draw this leaf's visible glyphs and seal its bitmap. */
 - (void)updateLayer

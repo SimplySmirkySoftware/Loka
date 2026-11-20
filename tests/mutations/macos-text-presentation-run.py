@@ -47,6 +47,8 @@ def mutations():
         kill("commit-installed", " || !presentation_->installed()", "", OWNER),
         kill("commit-layer", "if (!layer || !window)", "if (!window)", CHECK),
         kill("commit-window", "if (!layer || !window)", "if (!layer)", OWNER),
+        kill("translated-origin-layer-display", " && NSEqualPoints(bounds.origin, NSZeroPoint)", "",
+             "testMacTextPresentationTranslatedOrigin"),
         kill("commit-origin", "!NSEqualPoints(bounds.origin, NSZeroPoint) || ", "", CHECK),
         kill("read-window", "  if (!window)\n    return NO;\n", "", OWNER),
         kill("check-layer", " || !now.layer ||", " ||", CHECK),

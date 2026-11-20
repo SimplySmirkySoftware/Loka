@@ -4248,6 +4248,53 @@ namespace
     return window;
   }
 
+  /** Complete one ordinary host display, including its implicit transaction. */
+  void DisplayWindow(NSWindow *window)
+  {
+    [window displayIfNeeded];
+    // A layer-backed window runs updateLayer when the implicit transaction commits, which an app's run loop
+    // does at the end of the same turn (Tahoe 26.7.1: no image after displayIfNeeded alone, presented after the
+    // flush in ZStack, Cell and ScrollView). The flush is that commit, not a second display of the leaf.
+    [CATransaction flush];
+  }
+
+  /** One host display followed by a parent capture limited to the visible part of this leaf's text. */
+  void VerifyRedFallbackInk(HitLayout &layout)
+  {
+    NSView *view = layout.view;
+    NSView *parent = [view superview];
+    NSRect text = [layout.manager usedRectForTextContainer:layout.container];
+    NSRect region =
+        NSIntersectionRect([parent bounds], [view convertRect:NSIntersectionRect(text, [view bounds]) toView:parent]);
+    LOKA_VERIFY(!NSIsEmptyRect(region));
+    [view setNeedsDisplay:YES];
+    // Caching can itself draw. Witness foreground submission in the ordinary display before capturing.
+    {
+      SEL draw = @selector(drawGlyphsForGlyphRange:atPoint:);
+      Class cls = [layout.manager class];
+      drawInk = class_getMethodImplementation(cls, draw);
+      MacNativeRefusal ink(draw, (IMP)RecordInk, cls);
+      submitted.foregrounds = 0;
+      DisplayWindow([view window]);
+      LOKA_VERIFY(submitted.foregrounds && submitted.foreground.length);
+    }
+    MacPresentedText fact;
+    LOKA_VERIFY(![view queryPresentedFact:&fact]);
+    NSBitmapImageRep *image = [parent bitmapImageRepForCachingDisplayInRect:region];
+    LOKA_VERIFY(image);
+    [parent cacheDisplayInRect:region toBitmapImageRep:image];
+    bool redInk = false;
+    for (NSInteger y = 0; y < [image pixelsHigh] && !redInk; ++y)
+      for (NSInteger x = 0; x < [image pixelsWide] && !redInk; ++x)
+      {
+        NSColor *color = [[image colorAtX:x y:y] colorUsingColorSpace:[NSColorSpace deviceRGBColorSpace]];
+        redInk = [color alphaComponent] > 0.25 && [color redComponent] > [color greenComponent] + 0.25 &&
+                 [color redComponent] > [color blueComponent] + 0.25;
+      }
+    LOKA_VERIFY(redInk);
+    LOKA_VERIFY(![view queryPresentedFact:&fact]);
+  }
+
   void DisplayText(NSView *view)
   {
     [view setNeedsDisplay:YES];
@@ -4729,6 +4776,34 @@ void testMacTextPresentationSnapshotLifetime()
   LOKA_VERIFY(!AttributedAccess::complete(context) && AttributedAccess::snapshot(context).segmentCount() == 0);
 }
 
+void testMacTextPresentationTranslatedOrigin()
+{
+  HitTestPool pool;
+  NSWindow *window = PresentationWindow();
+  if (!window)
+    return;
+  const AttributedString a = Linked("HHHH", Blue, LinkTarget(loka::core::String("A")));
+  const AttributedString b = Linked("HHHH", Red, LinkTarget(loka::core::String("B")));
+  CheckedLayout layout(window, a);
+  NSView *view = layout.view;
+  const NSRect frame = [view frame];
+  const NSPoint glyph = layout.point();
+  Candidate(AttributedContext(layout.node), glyph, "A");
+  [view setBoundsOrigin:glyph];
+  layout.install(b);
+  LOKA_VERIFY(NSEqualRects(frame, [view frame]) && NSEqualPoints([view bounds].origin, glyph));
+  VerifyRedFallbackInk(layout);
+  LOKA_VERIFY(![view wantsUpdateLayer]);
+  layout.expect(glyph, MAC_HIT_SOURCE);
+  layout.checked(glyph, MAC_HIT_REFUSED);
+  Candidate(AttributedContext(layout.node), glyph, 0);
+  [view setBoundsOrigin:NSZeroPoint];
+  [view setNeedsDisplay:YES];
+  DisplayWindow(window);
+  layout.checked(glyph, MAC_HIT_SOURCE);
+  Candidate(AttributedContext(layout.node), glyph, "B");
+}
+
 #include <limits>
 void testMacTextPresentationBudget()
 {
@@ -4757,17 +4832,24 @@ void testMacTextPresentationBudget()
   NSWindow *window = PresentationWindow();
   if (!window)
     return;
-  HitLayout layout(LinkText("budget", "A"));
+  HitLayout layout(Styled("HHHH", Red));
   NSView *view = layout.view;
-  NSSize good = [view frame].size;
-  [view setFrameSize:NSMakeSize(4097 / [window backingScaleFactor], good.height)];
-  [window setContentView:[view superview]];
+  const NSSize good = [view frame].size;
+  // One pixel beyond the width limit at native scale keeps the line visible and the ink capture small.
+  const NSSize oversized = NSMakeSize(4097 / [window backingScaleFactor], good.height);
+  NSView *parent = [view superview];
+  [parent setFrame:[[window contentView] bounds]];
+  [view setFrameSize:oversized];
+  [window setContentView:parent];
   LOKA_VERIFY(![view wantsUpdateLayer]);
-  MacPresentedText fact;
-  LOKA_VERIFY(![view queryPresentedFact:&fact]);
+  VerifyRedFallbackInk(layout);
   [view setFrameSize:good];
   DisplayText(view);
+  [view setFrameSize:oversized];
+  LOKA_VERIFY(![view wantsUpdateLayer]);
+  VerifyRedFallbackInk(layout);
   [view setFrameSize:NSMakeSize(good.width, 4097 / [window backingScaleFactor])];
+  MacPresentedText fact;
   LOKA_VERIFY(![view wantsUpdateLayer] && ![view queryPresentedFact:&fact]);
   [view setFrameSize:NSZeroSize];
   LOKA_VERIFY(![view wantsUpdateLayer] && ![view queryPresentedFact:&fact]);
@@ -4896,11 +4978,12 @@ namespace
     return image;
   }
 
-  unsigned long PixelDifferences(NSBitmapImageRep *left, NSBitmapImageRep *right)
+  void ReportPixelDifferences(const char *label, NSBitmapImageRep *left, NSBitmapImageRep *right)
   {
     unsigned long count = 0;
-    const NSInteger width = std::min([left pixelsWide], [right pixelsWide]);
-    const NSInteger height = std::min([left pixelsHigh], [right pixelsHigh]);
+    const long leftWidth = [left pixelsWide], leftHeight = [left pixelsHigh];
+    const long rightWidth = [right pixelsWide], rightHeight = [right pixelsHigh];
+    const long width = std::min(leftWidth, rightWidth), height = std::min(leftHeight, rightHeight);
     for (NSInteger y = 0; y < height; ++y)
       for (NSInteger x = 0; x < width; ++x)
       {
@@ -4910,7 +4993,18 @@ namespace
         if (std::memcmp(a, b, sizeof(a)))
           ++count;
       }
-    return count;
+    std::printf("%s: images %ldx%ld vs %ldx%ld px, overlap %ldx%ld px (%lu differing), "
+                "unmatched pixels %ld left / %ld right\n",
+                label,
+                leftWidth,
+                leftHeight,
+                rightWidth,
+                rightHeight,
+                width,
+                height,
+                count,
+                leftWidth * leftHeight - width * height,
+                rightWidth * rightHeight - width * height);
   }
 
   // A fully covered stroke gives the resolved ink without weighting edge antialiasing.
@@ -4999,10 +5093,9 @@ void testMacTextPresentationPixels()
   [parent cacheDisplayInRect:region toBitmapImageRep:composed];
   MacPresentedText fact;
   LOKA_VERIFY([view queryPresentedFact:&fact]);
-  std::printf("fractional height remainder=%g px; raw vs drawRect=%lu differing pixels, composed vs drawRect=%lu\n",
-              std::ceil(size.height * scale) - size.height * scale,
-              PixelDifferences(control, raw),
-              PixelDifferences(control, composed));
+  std::printf("fractional height remainder=%g px\n", std::ceil(size.height * scale) - size.height * scale);
+  ReportPixelDifferences("drawRect vs raw", control, raw);
+  ReportPixelDifferences("drawRect vs composed", control, composed);
 }
 
 void testMacTextPresentationColour()
@@ -5077,11 +5170,7 @@ namespace
   {
     const NSPoint point = FirstLinkPoint(node);
     std::fprintf(stderr, "Darwin %d %s first ordinary display\n", loka::dsl::testing::DarwinMajor(), host);
-    [window displayIfNeeded];
-    // A layer-backed window runs updateLayer when the implicit transaction commits, which an app's run loop
-    // does at the end of the same turn (Tahoe 26.7.1: no image after displayIfNeeded alone, presented after the
-    // flush in ZStack, Cell and ScrollView). The flush is that commit, not a second display of the leaf.
-    [CATransaction flush];
+    DisplayWindow(window);
     Candidate(AttributedContext(node), point, "destination");
   }
 } // namespace

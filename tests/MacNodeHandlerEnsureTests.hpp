@@ -16,6 +16,7 @@ void testMacTextPresentationCheck();
 void testMacTextPresentationCandidate();
 void testMacTextPresentationPredicate();
 void testMacTextPresentationSnapshotLifetime();
+void testMacTextPresentationTranslatedOrigin();
 void testMacTextPresentationBudget();
 void testMacTextPresentationIntervals();
 void testMacTextPresentationPixels();
