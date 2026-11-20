@@ -5078,6 +5078,10 @@ namespace
     const NSPoint point = FirstLinkPoint(node);
     std::fprintf(stderr, "Darwin %d %s first ordinary display\n", loka::dsl::testing::DarwinMajor(), host);
     [window displayIfNeeded];
+    // A layer-backed window runs updateLayer when the implicit transaction commits, which an app's run loop
+    // does at the end of the same turn (Tahoe 26.7.1: no image after displayIfNeeded alone, presented after the
+    // flush in ZStack, Cell and ScrollView). The flush is that commit, not a second display of the leaf.
+    [CATransaction flush];
     Candidate(AttributedContext(node), point, "destination");
   }
 } // namespace
