@@ -1,6 +1,6 @@
 #ifndef LOKA_APP_DOC_PARAGRAPH_HPP
 #define LOKA_APP_DOC_PARAGRAPH_HPP
-#include "app/doc/Lowering.hpp"
+#include "app/doc/InlineBlock.hpp"
 #include "app/doc/BlockReader.hpp"
 
 namespace loka
@@ -11,52 +11,30 @@ namespace loka
     {
       class ParagraphNode;
 
-      /** Complete semantic block input; no live content source.
-          Cost: construction copies shared values; literal content allocates a segment. */
-      struct ParagraphProps : scene::NodePropsBase<ParagraphProps>
+      /** Authored Paragraph content and borrowed link destination. Cost: one value per declaration. */
+      struct ParagraphProps : InlineBlockProps<ParagraphProps>
       {
         typedef ParagraphNode NodeType;
-        struct TypeTag
-        {
-        };
-        AttributedString content;
-        scene::NodeState<LinkTarget> activatedLink_;
-
+        /** Cost: default construction initializes one empty input. */
         ParagraphProps() {}
-        ParagraphProps(const AttributedString &content)
-            : content(content)
+        /** Cost: authoring copies one shared content value. */
+        ParagraphProps(const AttributedString &value)
+            : doc::InlineBlockProps<ParagraphProps>(value)
         {
         }
-        ParagraphProps(const char *content)
-            : content(Styled(content, TextStyle()))
+        /** Cost: authoring constructs one string and one segment. */
+        ParagraphProps(const char *value)
+            : doc::InlineBlockProps<ParagraphProps>(value)
         {
-        }
-        /** Value order for retained reconciliation. Cost: walks this pair's content only. */
-        bool operator<(const scene::PropsBase &rhs) const
-        {
-          if (rhs.propsTypeId() != this->propsTypeId())
-            return false;
-          const ParagraphProps &other = static_cast<const ParagraphProps &>(rhs);
-          const int order = this->content.compareSegmentValues(other.content);
-          if (order)
-            return order < 0;
-          return std::less<core::State<LinkTarget> *>()(this->activatedLink_.state(), other.activatedLink_.state());
         }
       };
-      /** Shared leaf lowering for composition and retained application.
-          Cost: once per materialization attempt or apply with a destination; copies shared content.
-          Refusal remains an invalid child value; no eager body read or retry. */
-      inline AttributedTextDefinitionWithAttr Lower(const ParagraphProps &props)
-      {
-        return AttributedText(props.content).activatedLink(props.activatedLink_) + BlockStyle().wrap(TEXT_WRAP_WORD);
-      }
       /** Semantic identity with a fixed projected subtree; props are its only state.
           Cost: constructor only copies props, including node-kind probes. */
       class ParagraphNode : public BlockNode<ParagraphProps>
       {
       public:
         explicit ParagraphNode(const ParagraphProps &props)
-            : BlockNode<ParagraphProps>(props)
+            : doc::BlockNode<ParagraphProps>(props)
         {
         }
 

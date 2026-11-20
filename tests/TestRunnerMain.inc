@@ -202,8 +202,9 @@ int main(int argc, char **argv)
 #endif
 
 #ifdef LOKA_TEST_RUNNER_CONTRACT
+  const bool containers = argc > 1 && std::strcmp(argv[1], "--document-container-cases") == 0;
   const bool htmlCases = argc > 1 && std::strcmp(argv[1], "--document-html-cases") == 0;
-  if (htmlCases || (argc > 1 && std::strcmp(argv[1], "--document-markdown-cases") == 0))
+  if (containers || htmlCases || (argc > 1 && std::strcmp(argv[1], "--document-markdown-cases") == 0))
   {
     unsigned seed, count;
     if (argc != 4 || !parseMarkdownUnsigned(argv[2], seed) || !parseMarkdownUnsigned(argv[3], count))
@@ -211,7 +212,7 @@ int main(int argc, char **argv)
       std::fprintf(stderr, "Usage: %s %s SEED COUNT (decimal 0..%u)\n", argv[0], argv[1], UINT_MAX);
       return 2;
     }
-    return documentExportCases(seed, count, htmlCases);
+    return containers ? documentContainerCases(seed, count) : documentExportCases(seed, count, htmlCases);
   }
 #endif
   if (argc == 1)

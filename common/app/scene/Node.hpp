@@ -651,7 +651,8 @@ namespace loka
           return NODE_KIND_UNKNOWN;
         }
         /** Reads this node's semantic block during a synchronous owner borrow.
-            Cost: one dispatch per attached node visited by an explicit document exit, no child walk. */
+            Cost: one dispatch per attached node visited by an explicit document exit. Semantic containers walk their
+           own children. */
         virtual DocumentBlockRead readDocumentBlock(::loka::app::doc::BlockReader &) const
         {
           return DOCUMENT_BLOCK_NONE;
