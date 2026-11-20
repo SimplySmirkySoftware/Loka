@@ -2,7 +2,9 @@
 #define LOKA_TESTS_SUPPORT_LOCAL_REBUILD_REFUSAL_HPP
 
 #include <cstddef>
+#include <new>
 #include "app/nodes/nestable/Fragment.hpp"
+#include "core/util/OwnedDef.hpp"
 
 // Fail-count hook for retained props application during a local rebuild.
 // The implementations live in tests/TestingHooks.cpp (TEST_BUILD only).
@@ -44,7 +46,12 @@ namespace LocalRebuildRefusalSupport
     typedef RefusingRetainedFragment CloneType;
     virtual loka::app::scene::NodeDefinitionBase *clone() const
     {
-      return new RefusingRetainedFragment(*this);
+      loka::core::OwnedDef<RefusingRetainedFragment> copy(new (std::nothrow) RefusingRetainedFragment(*this));
+      if (!copy.isSet() || copy->childrenCount() != this->childrenCount())
+      {
+        return 0;
+      }
+      return copy.take();
     }
     virtual bool applyPropsToNode(loka::app::scene::Node *node) const
     {

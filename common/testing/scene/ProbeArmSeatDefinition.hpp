@@ -4,6 +4,7 @@
 #ifdef TEST_BUILD
 
 #include <cassert>
+#include <new>
 #include "app/scene/Node.hpp"
 #include "core/util/OwnedDef.hpp"
 
@@ -123,7 +124,19 @@ namespace loka
           typedef ProbeArmSeatDefinition CloneType;
           virtual NodeDefinitionBase *clone() const
           {
-            return new ProbeArmSeatDefinition(*this);
+            loka::core::OwnedDef<ProbeArmSeatDefinition> copy(new (std::nothrow) ProbeArmSeatDefinition(*this));
+            if (!copy.isSet())
+            {
+              return 0;
+            }
+            for (unsigned arm = 0; arm < this->armCount(); ++arm)
+            {
+              if (this->arms_[arm].isSet() && !copy->arms_[arm].isSet())
+              {
+                return 0;
+              }
+            }
+            return copy.take();
           }
           virtual NodeKind nodeKind() const
           {
