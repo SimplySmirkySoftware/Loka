@@ -899,6 +899,15 @@ namespace loka
       unsigned refusedAttributedDraws = 0;
     }
     static unsigned macTextKitAllocationCountdown = 0;
+    static unsigned macTextPresentationCountdown = 0;
+    void failMacTextPresentationStep(unsigned ordinal)
+    {
+      macTextPresentationCountdown = ordinal;
+    }
+    bool refuseMacTextPresentationStep()
+    {
+      return macTextPresentationCountdown && --macTextPresentationCountdown == 0;
+    }
     void failMacTextKitAllocation(unsigned ordinal)
     {
       macTextKitAllocationCountdown = ordinal;

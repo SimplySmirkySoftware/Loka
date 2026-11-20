@@ -7,6 +7,18 @@ void testMacTextItalicTraits();
 void testMacSmallLabelUsesTheSmallSystemFont();
 
 void testMacAttributedTextWholeLineProjection();
+void testMacTextLayerCapability();
+void testMacTextPresentationOwner();
+void testMacTextPresentationDeallocation();
+void testMacTextPresentationCheck();
+void testMacTextPresentationCandidate();
+void testMacTextPresentationPredicate();
+void testMacTextPresentationSnapshotLifetime();
+void testMacTextPresentationBudget();
+void testMacTextPresentationIntervals();
+void testMacTextPresentationPixels();
+void testMacTextPresentationColour();
+void testMacTextPresentationIntegration();
 void testMacTextHitSources();
 void testMacTextHitClusters();
 void testMacTextHitBidi();
