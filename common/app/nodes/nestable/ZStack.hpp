@@ -69,6 +69,10 @@ namespace loka
                               public scene::TestIdDslMixin<ZStackDefinition>
     {
       typedef scene::NestableNodeDefinition<ZStackProps, ZStackNode, ZStackDefinition> BaseType;
+      explicit ZStackDefinition(const scene::CloneShell<ZStackDefinition> &shell)
+          : BaseType(shell)
+      {
+      }
       using BaseType::operator<<;
       ZStackDefinition()
           : BaseType()

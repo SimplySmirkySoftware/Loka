@@ -658,6 +658,11 @@ namespace
     typedef loka::app::scene::NestableNodeDefinition<ArenaRetireOrderParentProps,
                                                      ArenaRetireOrderParentNode,
                                                      ArenaRetireOrderParentDefinition> BaseType;
+    explicit ArenaRetireOrderParentDefinition(
+        const loka::app::scene::CloneShell<ArenaRetireOrderParentDefinition> &shell)
+        : BaseType(shell)
+    {
+    }
     using BaseType::operator<<;
     ArenaRetireOrderParentDefinition() : BaseType() {}
     explicit ArenaRetireOrderParentDefinition(const ArenaRetireOrderParentProps &props) : BaseType(props) {}
@@ -732,6 +737,11 @@ namespace
     typedef loka::app::scene::NestableNodeDefinition<ArenaParentWithHeapChildProps,
                                                      ArenaParentWithHeapChildNode,
                                                      ArenaParentWithHeapChildDefinition> BaseType;
+    explicit ArenaParentWithHeapChildDefinition(
+        const loka::app::scene::CloneShell<ArenaParentWithHeapChildDefinition> &shell)
+        : BaseType(shell)
+    {
+    }
     using BaseType::operator<<;
     ArenaParentWithHeapChildDefinition() : BaseType() {}
     explicit ArenaParentWithHeapChildDefinition(const ArenaParentWithHeapChildProps &props) : BaseType(props) {}
@@ -872,6 +882,11 @@ namespace
     typedef loka::app::scene::NestableNodeDefinition<NestedArenaRetireOuterProps,
                                                      NestedArenaRetireOuterNode,
                                                      NestedArenaRetireOuterDefinition> BaseType;
+    explicit NestedArenaRetireOuterDefinition(
+        const loka::app::scene::CloneShell<NestedArenaRetireOuterDefinition> &shell)
+        : BaseType(shell)
+    {
+    }
     using BaseType::operator<<;
     NestedArenaRetireOuterDefinition() : BaseType() {}
     explicit NestedArenaRetireOuterDefinition(const NestedArenaRetireOuterProps &props) : BaseType(props) {}
