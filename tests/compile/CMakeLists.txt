@@ -977,6 +977,11 @@ loka_compile_pin(text-view-store-transfer
   ACCEPTS pins/accepts_text-view-store-transfer.cpp
 )
 
+loka_compile_pin(text-view-store-attached-view
+  REFUSES pins/refuses_text-view-store-attached-view.cpp
+  ACCEPTS pins/accepts_text-view-store-attached-view.cpp
+)
+
 loka_compile_pin(document-heading-level
   REFUSES pins/refuses_document_heading_level.cpp
   ACCEPTS pins/accepts_document_heading_level.cpp)

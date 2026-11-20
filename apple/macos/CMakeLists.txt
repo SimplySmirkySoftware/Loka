@@ -72,6 +72,7 @@ set(LOKA_MACOS_CORE_SOURCES
   src/context/MacRibbonGroupEdgeContext.mm
   src/context/MacEditTextContext.mm
   src/context/MacTextEditorContext.mm
+  src/context/MacTextDocumentViewContext.mm
   src/context/MacOpenFileDialogContext.mm
   src/context/MacConfirmDialogContext.mm
   src/context/MacDeferredDialogPresenter.mm
@@ -140,6 +141,7 @@ if(NOT LOKA_MAC_OS_10_4)
     ${PROJECT_SOURCE_DIR}/tests/MacNaturalWidthTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacInputDoorTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacTextStoreTests.mm
+    ${PROJECT_SOURCE_DIR}/tests/MacTextDocumentViewTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacTextEditorTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacScrollViewTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacClipBoxTests.mm
@@ -181,6 +183,7 @@ if(NOT LOKA_MAC_OS_10_4)
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacRibbonGroupEdgeContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacEditTextContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacTextEditorContext.mm
+    ${CMAKE_CURRENT_LIST_DIR}/src/context/MacTextDocumentViewContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacOpenFileDialogContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacConfirmDialogContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacDeferredDialogPresenter.mm

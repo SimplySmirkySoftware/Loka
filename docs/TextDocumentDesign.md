@@ -166,7 +166,7 @@ then plays the native role. It is still the only copy.
   uncommitted: its store reading reports MARKED only for the focused EDIT, and
   treats a failed composition query as marked. Committed characters can still
   be waiting for queued WM_CHAR delivery (see [Native facts](#native-facts)).
-  macOS creates parked stores and commits marked text directly on the parked view.
+  macOS asks each row’s text view to commit marked text in place, including while parked.
   The shipped `TextEditor` path is unchanged.
 
 `TextReader` pulls a revision's logical UTF-8 body in bounded chunks, with CR,
@@ -452,9 +452,10 @@ during retirement of a discarded row skips settle.
 Settle may fold composition and mark the row for ordinary publication. It
 cannot reenter the kernel, allocate on the Loka side, or fail. A rail unable to
 commit leaves composition in place. The next reading reports any remaining
-marks. The macOS design (4m-2b/4m-3) requires an empty marked range after
-settle before admitting composition. Admission awaits real IME qualification;
-a release reading with residual marks still reports MARKED.
+marks. macOS conditionally unmarks, then asks the input context to discard
+marked text when available. It rechecks row identity across native calls.
+Lifecycle-audit builds assert an empty marked range on return. A release
+reading with residual marks still reports MARKED.
 
 A context-owned claim derives ATTACHED from its paired store link. Context end
 and store retirement both detach synchronously before severing that link;
@@ -496,8 +497,7 @@ P4-2a), so wrap changes are incompatible on every rail and the Win32 view, page 
 refuses `wrap=false` (native view implementation in 4w-2b).
 Other presentation and focus-binding changes remain compatible and update the
 retained context. The kernel and Null pins
-are in `tests/TextDocumentViewTests.cpp`. macOS and Toolbox keep the refusing/default
-view doors; their native implementations and runtime evidence belong to their rail pages.
+are in `tests/TextDocumentViewTests.cpp`. Toolbox keeps the default refusing view doors.
 The macOS and Win32 store rows are described below.
 
 
@@ -515,16 +515,43 @@ captures the processed range and signed length delta during the callback.
 Reading takes this note and samples the current marked state and both ends
 of the selection. A caret request preserves pending edits. A bounded chunk
 reads UTF-16 directly from storage and emits complete logical UTF-8 scalars.
-The command commit door asks the parked view to unmark and leaves its edit
+The command commit door asks the row’s view to unmark and leaves its edit
 for the publisher.
 
 Retirement cuts the delegate's borrowed row pointer and clears both native
 delegate slots synchronously. At the controller's drain the row clears undo,
 removes the layout manager from storage and releases the network. Both
-controller exits retire live rows before that drain. View attachment remains
-deferred and splice returns the inherited `UNAVAILABLE`. The store row is
-runtime-verified on macOS 26 (Tahoe) and build-verified with the 10.9 and 10.6
+controller exits retire live rows before that drain. Splice returns the inherited
+`UNAVAILABLE`. The 4m-1 store row is runtime-verified on macOS 26 (Tahoe) and build-verified with the 10.9 and 10.6
 SDK toolchains. macOS 10.4–10.6 behavior is not runtime-verified.
+
+### macOS document view (4m-2b)
+
+The context owns one scroll view. Initial mount and retained attachment install
+it under the projection parent before the row lends its text view as the
+document view. Layout projects the scroll frame and updates the text view's
+minimum size. Attachment requests relayout and configures wrapping. Presentation
+applies font and typing attributes, margin and editability. Read-only text
+remains selectable and accepts document caret requests.
+
+Detach parks the same view by removing it from its superview. Body, selection,
+undo and pending character edits belong to the row. Both terminal delivery
+and context destruction detach the claim before removing and queueing the
+scroll view on the controller's native retirement clock.
+
+Replacement prepares the new network, frame and presentation while parked.
+After preparation succeeds, the row transfers the claim, swaps the document
+view, asks for focus only if the old view held it, restores the requested
+selection and consumes birth edits. A refused focus handoff still completes
+replacement. Completion samples the actual first responder.
+
+The controller reserves the document editor handler token. Native focus
+recognition follows the document view's delegate to its live row, checks view
+identity, then reads the linked context. Undo and redo use the same resolution,
+require editability and consult the row's undo manager on validation and again
+on execution. Both marked-text selectors refuse input in every placement and
+editability state until 4m-3. The synthetic marking fixture exercises settlement
+directly. Real IME qualification and runtime verification on 10.4–10.6 remain open.
 
 ### Win32 store row and parking (4w-1)
 
