@@ -4,7 +4,7 @@
     {
       "label": "Build: Linux DocumentSite",
       "type": "shell",
-      "command": "cmake --preset testing && cmake --build build/Testing --target DocumentSite",
+      "command": "cmake --preset testing && cmake --build build/Testing --target DocumentSite && cmake -E make_directory build/document-site",
       "options": {
         "cwd": "${workspaceFolder}"
       },

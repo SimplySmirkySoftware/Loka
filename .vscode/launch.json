@@ -7,7 +7,7 @@
       "request": "launch",
       "program": "${workspaceFolder}/build/Testing/DocumentSite",
       "args": [
-        "${workspaceFolder}/build/Testing",
+        "${workspaceFolder}/build/document-site",
         "${workspaceFolder}/example/DocumentSite/site.css"
       ],
       "cwd": "${workspaceFolder}",
