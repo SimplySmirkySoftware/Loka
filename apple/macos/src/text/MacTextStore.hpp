@@ -23,9 +23,17 @@ namespace loka
       };
       void failStoreAllocation(StoreAllocation stage, unsigned count);
       bool refuseStoreAllocation(StoreAllocation stage);
-      void observeStoreCalls(const MacTextStore *row);
+      void failTextViewPreparation(unsigned count);
+      bool refuseTextViewPreparation();
+      enum StoreCall
+      {
+        NOTE_EDIT,
+        GET_UNDO_MANAGER
+      };
+      typedef void (*StoreCallObserver)(const MacTextStore *, StoreCall);
+      void observeStoreCalls(const MacTextStore *row, StoreCallObserver observer = 0);
       unsigned observedStoreCalls();
-      void recordStoreCall(const MacTextStore *row);
+      void recordStoreCall(const MacTextStore *row, StoreCall call);
       struct TextStoreAccess;
     } // namespace testing
   } // namespace macos
@@ -35,6 +43,8 @@ namespace loka
 #ifdef __OBJC__
 #include "app/text/TextChangeNote.hpp"
 #include "app/scene/projection/PlatformController.hpp"
+@class NSResponder;
+class MacTextDocumentViewContext;
 @class NSTextStorage, NSLayoutManager, NSTextContainer, NSTextView, NSUndoManager, LokaTextStoreDelegate;
 class MacScenePlatformController;
 
@@ -45,6 +55,7 @@ public:
   static loka::app::scene::TextStoreBirth create(loka::app::scene::TextStoreLedger &,
                                                  MacScenePlatformController &,
                                                  loka::app::TextStoreSource &,
+                                                 MacTextStore *,
                                                  loka::app::scene::TextStoreRow *&,
                                                  loka::app::scene::TextStoreReading &);
   virtual ~MacTextStore();
@@ -53,18 +64,29 @@ public:
   bool pending() const;
   bool apply(unsigned long);
   void commitMarkedText();
+  void settleComposition();
+  bool attach(MacTextDocumentViewContext &, const loka::app::TextViewPresentation &);
+  void detach();
+  void present(const loka::app::TextViewPresentation &);
+  NSTextView *view() const
+  {
+    return this->view_;
+  }
+  /** Resolves native identity through the live delegate and the row's claim. */
+  static MacTextStore *attachedRow(NSResponder *);
+  static MacTextDocumentViewContext *fromNativeFocus(NSResponder *);
   loka::app::scene::TextChunkResult chunk(unsigned long &, unsigned long, char *, unsigned long, unsigned long &);
   void noteEdit(const loka::app::TextChangedRange *range)
   {
 #ifdef TEST_BUILD
-    loka::macos::testing::recordStoreCall(this);
+    loka::macos::testing::recordStoreCall(this, loka::macos::testing::NOTE_EDIT);
 #endif
     this->changes_.noteEdit(range);
   }
   NSUndoManager *undoManager() const
   {
 #ifdef TEST_BUILD
-    loka::macos::testing::recordStoreCall(this);
+    loka::macos::testing::recordStoreCall(this, loka::macos::testing::GET_UNDO_MANAGER);
 #endif
     return this->undo_;
   }
@@ -72,6 +94,7 @@ public:
 private:
   MacTextStore(loka::app::scene::TextStoreLedger &, MacScenePlatformController &);
   bool buildNetwork();
+  bool prepareReplacement(const MacTextStore &);
   bool matches(NSTextView *) const;
   NSTextStorage *storage_;
   NSLayoutManager *layout_;

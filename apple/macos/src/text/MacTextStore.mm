@@ -1,6 +1,7 @@
 #include "MacTextStore.hpp"
 #include "../MacScenePlatformController.hpp"
 #include "../MacObjCCompat.hpp"
+#include "../context/MacTextDocumentViewContext.hpp"
 #include "app/style/Style.hpp"
 #include "app/text/TextStoreSource.hpp"
 #include <climits>
@@ -17,8 +18,6 @@ using namespace loka::macos::testing;
 #endif
 
 @interface LokaTextDocumentView : NSTextView
-@end
-@implementation LokaTextDocumentView
 @end
 
 @interface LokaTextStoreDelegate : NSObject
@@ -65,6 +64,71 @@ using namespace loka::macos::testing;
   const unsigned long oldLength = delta < 0 ? newRange.length + magnitude : newRange.length - magnitude;
   const TextChangedRange range(newRange.location, oldLength, newRange.length);
   row->noteEdit(&range);
+}
+@end
+
+MacTextStore *MacTextStore::attachedRow(NSResponder *responder)
+{
+  if (![responder isKindOfClass:[LokaTextDocumentView class]])
+    return 0;
+  NSTextView *view = (NSTextView *)responder;
+  id delegate = [view delegate];
+  if (![delegate isKindOfClass:[LokaTextStoreDelegate class]])
+    return 0;
+  MacTextStore *row = [(LokaTextStoreDelegate *)delegate owner];
+  return row && row->matches(view) && row->viewAttached() ? row : 0;
+}
+
+MacTextDocumentViewContext *MacTextStore::fromNativeFocus(NSResponder *responder)
+{
+  MacTextStore *row = attachedRow(responder);
+  return row ? static_cast<MacTextDocumentViewContext *>(row->attachedView()) : 0;
+}
+
+@implementation LokaTextDocumentView
+// As in LokaTextEditorView (#862, #1264), refuse before AppKit creates a mark.
+- (void)abandonComposition
+{
+  if ([self respondsToSelector:@selector(inputContext)])
+    [[self inputContext] discardMarkedText];
+}
+- (void)setMarkedText:(id)text selectedRange:(NSRange)selection replacementRange:(NSRange)replacement
+{
+  (void)text;
+  (void)selection;
+  (void)replacement;
+  [self abandonComposition];
+}
+- (void)setMarkedText:(id)text selectedRange:(NSRange)selection
+{
+  (void)text;
+  (void)selection;
+  [self abandonComposition];
+}
+- (NSUndoManager *)qualifiedManager:(SEL)action
+{
+  MacTextStore *row = MacTextStore::attachedRow(self);
+  if (!row || ![self isEditable])
+    return nil;
+  NSUndoManager *manager = row->undoManager();
+  return (action == @selector(undo:) ? [manager canUndo] : [manager canRedo]) ? manager : nil;
+}
+- (void)undo:(id)sender
+{
+  (void)sender;
+  [[self qualifiedManager:_cmd] undo];
+}
+- (void)redo:(id)sender
+{
+  (void)sender;
+  [[self qualifiedManager:_cmd] redo];
+}
+- (BOOL)validateMenuItem:(NSMenuItem *)item
+{
+  SEL action = [item action];
+  if (action == @selector(undo:) || action == @selector(redo:))
+    return [self qualifiedManager:action] != nil;
+  return [super validateMenuItem:item];
 }
 @end
 
@@ -278,6 +342,7 @@ bool MacTextStore::buildNetwork()
 TextStoreBirth MacTextStore::create(TextStoreLedger &ledger,
                                     MacScenePlatformController &controller,
                                     TextStoreSource &source,
+                                    MacTextStore *old,
                                     TextStoreRow *&fresh,
                                     TextStoreReading &reading)
 {
@@ -331,6 +396,25 @@ TextStoreBirth MacTextStore::create(TextStoreLedger &ledger,
   {
     row->retire();
     return TEXT_STORE_REFUSED_UNSUPPORTED;
+  }
+  if (old && old->viewAttached())
+  {
+    if (!row->prepareReplacement(*old))
+    {
+      row->retire();
+      return TEXT_STORE_REFUSED_UNSUPPORTED;
+    }
+    NSWindow *window = [old->view_ window];
+    const bool hadFocus = window && [window firstResponder] == old->view_;
+    transferView(*old, *row);
+    NSScrollView *scroll = static_cast<MacTextDocumentViewContext *>(row->attachedView())->scroll();
+    [scroll setDocumentView:view];
+    if (hadFocus)
+      [window makeFirstResponder:view];
+    [view setSelectedRange:NSMakeRange(caret, 0)];
+#ifdef LOKA_LIFECYCLE_AUDIT
+    assert(![old->view_ superview] && ![old->view_ window]);
+#endif
   }
   row->changes_.take();
   const TextChangedRange range(0, 0, buffer.length());
@@ -426,4 +510,112 @@ MacTextStore::chunk(unsigned long &offset, unsigned long end, char *out, unsigne
     offset = next;
   }
   return result;
+}
+
+namespace
+{
+  void configureWrap(NSTextView *view, bool wrap)
+  {
+    NSTextContainer *container = [view textContainer];
+    [view setHorizontallyResizable:!wrap];
+    [view setAutoresizingMask:wrap ? NSViewWidthSizable : NSViewNotSizable];
+    [container setWidthTracksTextView:wrap];
+    [container setContainerSize:NSMakeSize(wrap ? [view bounds].size.width : CGFLOAT_MAX, CGFLOAT_MAX)];
+  }
+} // namespace
+bool MacTextStore::prepareReplacement(const MacTextStore &old)
+{
+  NSTextView *view = this->view_;
+  NSTextView *previous = old.view_;
+  [view setFrame:[previous frame]];
+  [view setMinSize:[previous minSize]];
+  configureWrap(view, [[previous textContainer] widthTracksTextView]);
+  [view setFont:[previous font]];
+  [view setTypingAttributes:[previous typingAttributes]];
+  [view setTextContainerInset:[previous textContainerInset]];
+  [view setEditable:[previous isEditable]];
+  [view setSelectable:YES];
+#ifdef TEST_BUILD
+  if (refuseTextViewPreparation())
+    return false;
+#endif
+  return true;
+}
+void MacTextStore::present(const TextViewPresentation &presentation)
+{
+  MacScenePlatformController &controller = static_cast<MacScenePlatformController &>(this->controller());
+  NSFont *font = (NSFont *)controller.textFont(presentation.style());
+  if (!font)
+    font = (NSFont *)controller.textFont(TextStyle());
+  if (font)
+  {
+    [this->view_ setFont:font];
+    NSMutableDictionary *attributes = [NSMutableDictionary dictionaryWithDictionary:[this->view_ typingAttributes]];
+    [attributes setObject:font forKey:NSFontAttributeName];
+    [this->view_ setTypingAttributes:attributes];
+  }
+  [this->view_ setTextContainerInset:NSMakeSize(presentation.margin(), presentation.margin())];
+  [this->view_ setEditable:!presentation.readOnly()];
+  [this->view_ setSelectable:YES];
+}
+bool MacTextStore::attach(MacTextDocumentViewContext &context, const TextViewPresentation &presentation)
+{
+  NSScrollView *scroll = context.scroll();
+  if (!scroll)
+    return false;
+#ifdef LOKA_LIFECYCLE_AUDIT
+  assert(![this->view_ superview]);
+#endif
+  this->present(presentation);
+  configureWrap(this->view_, presentation.wrap());
+  [scroll setHasHorizontalScroller:!presentation.wrap()];
+  [scroll setDocumentView:this->view_];
+  [this->view_ setMinSize:[scroll contentSize]];
+#ifdef LOKA_LIFECYCLE_AUDIT
+  assert([this->view_ superview] == [scroll contentView] && [scroll documentView] == this->view_);
+#endif
+  static_cast<MacScenePlatformController &>(this->controller()).requestRelayout();
+  return true;
+}
+void MacTextStore::detach()
+{
+#ifdef LOKA_LIFECYCLE_AUDIT
+  NSScrollView *scroll = static_cast<MacTextDocumentViewContext *>(this->attachedView())->scroll();
+  assert([this->view_ superview] == [scroll contentView] && [scroll documentView] == this->view_);
+#endif
+  [this->view_ removeFromSuperview];
+#ifdef LOKA_LIFECYCLE_AUDIT
+  assert(![this->view_ superview] && ![this->view_ window]);
+#endif
+}
+void MacTextStore::settleComposition()
+{
+  NSTextView *view = this->view_;
+  NSTextStorage *storage = this->storage_;
+  if (!storage || !this->matches(view))
+    return;
+  const bool marked = [view hasMarkedText];
+  if (!this->matches(view))
+    return;
+  if (marked)
+  {
+    [view unmarkText];
+    if (!this->matches(view))
+      return;
+  }
+  const bool hasContext = [view respondsToSelector:@selector(inputContext)];
+  if (!this->matches(view))
+    return;
+  if (hasContext)
+  {
+    id context = [view inputContext];
+    if (!this->matches(view))
+      return;
+    [context discardMarkedText];
+    if (!this->matches(view))
+      return;
+  }
+#ifdef LOKA_LIFECYCLE_AUDIT
+  assert(![view hasMarkedText]);
+#endif
 }
