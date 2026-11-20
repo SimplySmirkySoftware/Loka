@@ -2,6 +2,7 @@
 #include "../MacScenePlatformController.hpp"
 #include "../MacObjCCompat.hpp"
 #include "../context/MacTextDocumentViewContext.hpp"
+#include "../platform/MacNativeGeometry.hpp"
 #include "app/style/Style.hpp"
 #include "app/text/TextStoreSource.hpp"
 #include <climits>
@@ -530,7 +531,7 @@ bool MacTextStore::prepareReplacement(const MacTextStore &old)
 {
   NSTextView *view = this->view_;
   NSTextView *previous = old.view_;
-  [view setFrame:[previous frame]];
+  loka::macos::CopyMacFrame(view, previous);
   [view setMinSize:[previous minSize]];
   configureWrap(view, [[previous textContainer] widthTracksTextView]);
   [view setFont:[previous font]];
