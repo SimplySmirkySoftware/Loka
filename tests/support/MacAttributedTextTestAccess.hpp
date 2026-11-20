@@ -122,6 +122,11 @@ namespace loka
         {
           return context.projection_.queryProvenance(start, end, out);
         }
+        /** One context preparation per test point; the forwarder walks no rows. */
+        static MacTextHitAnswer prepareTextHit(const MacAttributedTextContext &context, NSPoint point, MacTextHit &out)
+        {
+          return context.prepareTextHit(point, out);
+        }
         static bool complete(const MacAttributedTextContext &context)
         {
           return context.projection_.value() != 0;

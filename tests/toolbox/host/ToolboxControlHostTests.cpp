@@ -1,3 +1,4 @@
+#include "support/RefusedScrollViewSeat.hpp"
 #include "support/ScrollViewSeat.hpp"
 #include "ToolboxHost.hpp"
 #include "ToolboxInputDoor.hpp"
@@ -239,6 +240,28 @@ namespace
     f.controller.clearControls();
     LOKA_VERIFY(f.controller.retiredScrollBarControls_.size() == 3);
   }
+  void refusedViewportGesture()
+  {
+    loka::testing::RefusedScrollViewSeat seat;
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    window.scenePlatformController_ = &controller;
+    ScrollViewNode scroll((ScrollViewProps(seat.viewport)));
+    NotifySubtreeNodeAttached(&scroll);
+    const Rect viewport = {0, 0, 80, 100};
+    controller.ensureViewportScrollBarControl(
+        viewport, &scroll, 300, 80, scroll.requestedOrigin().y, ToolboxScrollViewMetrics(0, 0), false);
+    ControlRef control = controller.scrollControl(0).control;
+    LOKA_VERIFY(control->maximum > 60 && control->value == 0);
+    control->tracking = toolbox_host::TrackScript(129, 129, 60);
+    const Point point = {40, 90};
+    controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(controller, point));
+    LOKA_VERIFY(control->value == 0 && !seat.viewport.isValid());
+    LOKA_VERIFY(controller.debugStatsForTesting().windowFullRequestCount == 0);
+  }
+
   void viewportGesture(const char *which)
   {
     ToolboxWindow window;
@@ -362,6 +385,8 @@ int main(int argc, char **argv)
   std::printf("[pin] %s\n", argv[1]);
   if (std::strncmp(argv[1], "app-", 4) == 0)
     appGesture(argv[1]);
+  else if (std::strcmp(argv[1], "viewport-refused") == 0)
+    refusedViewportGesture();
   else if (std::strncmp(argv[1], "viewport-", 9) == 0)
     viewportGesture(argv[1]);
   else if (std::strcmp(argv[1], "native-hit") == 0)

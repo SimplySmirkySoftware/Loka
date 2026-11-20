@@ -1,3 +1,4 @@
+#include "support/RefusedScrollViewSeat.hpp"
 #include "TextDocumentViewTests.hpp"
 #include "LinkActivationTests.hpp"
 #include "TextReplacementTests.hpp"

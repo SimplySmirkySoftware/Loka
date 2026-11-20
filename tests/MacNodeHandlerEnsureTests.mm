@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <vector>
 
 #include <AppKit/AppKit.h>
 #include <cstdio>
@@ -3487,7 +3488,6 @@ void testMacAttributedTextWindow()
 #include <string>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <vector>
 
 namespace
 {
@@ -3653,4 +3653,531 @@ void testMacAttributedTextLineAdvances()
     LOKA_VERIFY(state.height == SHRT_MAX && bottom == SHRT_MAX);
   }
   [pool drain];
+}
+
+namespace
+{
+  struct HitTestPool
+  {
+    NSAutoreleasePool *pool;
+    HitTestPool()
+        : pool([[NSAutoreleasePool alloc] init])
+    {
+      [NSApplication sharedApplication];
+    }
+    ~HitTestPool()
+    {
+      [pool drain];
+    }
+  };
+
+  struct HitLayout
+  {
+    MacScenePlatformController controller;
+    AttributedTextNode node;
+    LayoutState state;
+    NSView *view;
+    NSLayoutManager *manager;
+    NSTextContainer *container;
+    HitLayout(const AttributedString &value, short width = 200, const BlockStyle &block = BlockStyle())
+        : controller([[[NSView alloc] initWithFrame:NSZeroRect] autorelease], RailMetrics()),
+          node((AttributedText(value) + block).props)
+    {
+      state.width = width;
+      node.layoutProjected(&controller, state);
+      view = AttributedAccess::view(AttributedContext(node));
+      manager = AttributedAccess::manager(view);
+      container = AttributedAccess::container(view);
+      LOKA_VERIFY(AttributedAccess::complete(AttributedContext(node)));
+    }
+
+    NSUInteger lookup(NSPoint p) const
+    {
+      return [manager glyphIndexForPoint:p inTextContainer:container fractionOfDistanceThroughGlyph:NULL];
+    }
+
+    NSUInteger glyph(NSUInteger character) const
+    {
+      return [manager glyphRangeForCharacterRange:NSMakeRange(character, 1) actualCharacterRange:NULL].location;
+    }
+
+    void expect(NSPoint point, MacTextHitAnswer answer, size_t first = 0, size_t last = 0)
+    {
+      MacTextHit out = {TextSegmentRange(97).through(99), -1};
+      const MacTextHitAnswer actual = AttributedAccess::prepareTextHit(AttributedContext(node), point, out);
+      if (actual != answer)
+        std::fprintf(stderr, "hit at (%g, %g): expected %d, got %d\n", point.x, point.y, answer, actual);
+      LOKA_VERIFY(actual == answer);
+      if (answer == MAC_HIT_SOURCE)
+      {
+        LOKA_VERIFY(out.source.first() == first && out.source.last() == last);
+        LOKA_VERIFY(out.containerWidth == AttributedAccess::width(view));
+      }
+      else
+        LOKA_VERIFY(out.source.first() == 97 && out.source.last() == 99 && out.containerWidth == -1);
+    }
+  };
+
+  // Independent oracle: copy the borrowed rectangle list before any further TextKit reads.
+  struct HitCluster
+  {
+    NSRange chars, glyphs;
+    NSRect line, fragment;
+    std::vector<NSRect> rects;
+    NSUInteger shown;
+    CGFloat cutoff;
+    HitCluster(const HitLayout &layout, NSUInteger glyph)
+        : shown(0)
+    {
+      NSLayoutManager *m = layout.manager;
+      LOKA_VERIFY(glyph < [m numberOfGlyphs]);
+      chars = [m characterRangeForGlyphRange:NSMakeRange(glyph, 1) actualGlyphRange:&glyphs];
+      NSRange actual;
+      NSRange reverse = [m glyphRangeForCharacterRange:chars actualCharacterRange:&actual];
+      LOKA_VERIFY(NSEqualRanges(actual, chars) && NSEqualRanges(reverse, glyphs));
+      LOKA_VERIFY(NSEqualRanges([m characterRangeForGlyphRange:glyphs actualGlyphRange:NULL], chars));
+      for (NSUInteger i = glyphs.location; i < NSMaxRange(glyphs); ++i)
+        if (![m notShownAttributeForGlyphAtIndex:i])
+          ++shown;
+      line = [m lineFragmentUsedRectForGlyphAtIndex:glyph effectiveRange:NULL];
+      fragment = [m lineFragmentRectForGlyphAtIndex:glyph effectiveRange:NULL];
+      cutoff = NSMaxX(fragment) - [layout.container lineFragmentPadding];
+      NSUInteger k = 0;
+      NSRectArray r = [m rectArrayForCharacterRange:chars
+                       withinSelectedCharacterRange:NSMakeRange(NSNotFound, 0)
+                                    inTextContainer:layout.container
+                                          rectCount:&k];
+      if (k)
+        rects.assign(r, r + k);
+    }
+
+    bool inRects(NSPoint p) const
+    {
+      for (size_t i = 0; i < rects.size(); ++i)
+        if (NSMouseInRect(p, rects[i], YES))
+          return true;
+      return false;
+    }
+
+    NSRect visibleRect() const
+    {
+      LOKA_VERIFY(rects.size() == 1);
+      return NSIntersectionRect(rects.front(), line);
+    }
+  };
+
+  NSPoint HitCentre(NSRect r)
+  {
+    LOKA_VERIFY(!NSIsEmptyRect(r));
+    return NSMakePoint(NSMidX(r), NSMidY(r));
+  }
+
+  void VerifyCharacterHit(HitLayout &layout,
+                          NSUInteger character,
+                          NSRange chars,
+                          size_t first,
+                          size_t last,
+                          MacTextHitAnswer answer = MAC_HIT_SOURCE,
+                          bool ambiguous = false)
+  {
+    HitCluster cluster(layout, layout.glyph(character));
+    LOKA_VERIFY(NSEqualRanges(cluster.chars, chars) && cluster.shown);
+    NSPoint p = HitCentre(cluster.visibleRect());
+    LOKA_VERIFY(NSLocationInRange(layout.lookup(p), cluster.glyphs) && p.x < cluster.cutoff);
+    LOKA_VERIFY(NSMouseInRect(p, [layout.view bounds], YES));
+    if (ambiguous)
+      VerifyNoSource(AttributedContext(layout.node), chars.location, NSMaxRange(chars));
+    else
+      VerifySource(AttributedContext(layout.node), chars.location, NSMaxRange(chars), first, last);
+    layout.expect(p, answer, first, last);
+  }
+
+  void VerifyMixedHit(HitLayout &layout, NSUInteger start, size_t first, size_t last, MacTextHitAnswer answer)
+  {
+    HitCluster cluster(layout, layout.glyph(start));
+    // The mixed shown/hidden shape is the host's glyph choice, not the hit contract; only that witness skips.
+    LOKA_VERIFY(cluster.shown);
+    if (cluster.shown == cluster.glyphs.length)
+      std::printf("[skip] mixed shown/hidden cluster at character %lu: every glyph is shown on this host\n",
+                  static_cast<unsigned long>(start));
+    for (NSUInteger g = cluster.glyphs.location; g < NSMaxRange(cluster.glyphs); ++g)
+    {
+      NSRange actual;
+      NSRange chars = [layout.manager characterRangeForGlyphRange:NSMakeRange(g, 1) actualGlyphRange:&actual];
+      LOKA_VERIFY(NSEqualRanges(chars, cluster.chars) && NSEqualRanges(actual, cluster.glyphs));
+    }
+    VerifyCharacterHit(layout, start, NSMakeRange(start, 2), first, last, answer, answer == MAC_HIT_REFUSED);
+  }
+} // namespace
+
+void testMacTextHitSources()
+{
+  HitTestPool pool;
+  const TextStyle plain;
+  HitLayout layout(Styled("a", plain) + Styled("", plain) + Styled("b c", plain) + Styled("d", Italic));
+  const size_t segments[] = {0, 2, 2, 2, 3};
+  for (NSUInteger i = 0; i < 5; ++i)
+    VerifyCharacterHit(layout, i, NSMakeRange(i, 1), segments[i], segments[i]);
+}
+
+void testMacTextHitClusters()
+{
+  HitTestPool pool;
+  const TextStyle plain;
+  HitLayout split(Styled("e", plain) + Styled("\xCC\x81x", plain));
+  VerifyMixedHit(split, 0, 0, 1, MAC_HIT_SOURCE);
+  HitLayout whole(Styled("e\xCC\x81x", plain) + Styled("\xF0\x9F\x98\x80", plain));
+  VerifyMixedHit(whole, 0, 0, 0, MAC_HIT_SOURCE);
+  VerifyMixedHit(whole, 3, 1, 1, MAC_HIT_SOURCE);
+  HitLayout ambiguous(Styled(RawAttributed("a\xF0\x9F", 3), plain)
+                      + Styled(RawAttributed("\x98\x80"
+                                             "b",
+                                             3),
+                               plain));
+  VerifyCharacterHit(ambiguous, 0, NSMakeRange(0, 1), 0, 0);
+  VerifyMixedHit(ambiguous, 1, 0, 0, MAC_HIT_REFUSED);
+  VerifyCharacterHit(ambiguous, 3, NSMakeRange(3, 1), 1, 1);
+
+  HitLayout ligature(Linked("f", plain, LinkTarget(loka::core::String("one")))
+                     + Linked("i", plain, LinkTarget(loka::core::String("two"))));
+  HitCluster f(ligature, ligature.glyph(0));
+  NSFont *font = TextAttribute(AttributedAccess::storage(ligature.view), NSFontAttributeName, 0);
+  if (NSEqualRanges(f.chars, NSMakeRange(0, 1)))
+    std::printf("[skip] ligature not formed by %s on this host\n", [[font fontName] UTF8String]);
+  else
+  {
+    std::printf("fi ligature formed by %s\n", [[font fontName] UTF8String]);
+    VerifyCharacterHit(ligature, 0, NSMakeRange(0, 2), 0, 1);
+  }
+}
+
+namespace
+{
+  AttributedString GutterText(bool rtl)
+  {
+    // One segment per character, including the Latin space that straddled the probe cutoff.
+    const char *text = rtl ? "אבגדהוזחטי" : "Open the documentation";
+    const size_t stride = rtl ? 2 : 1;
+    AttributedString::Builder builder(std::strlen(text) / stride);
+    for (size_t i = 0; text[i]; i += stride)
+      LOKA_VERIFY(builder.append(RawAttributed(text + i, stride), TextStyle()));
+    return builder.build();
+  }
+
+  void VerifyGutter(HitLayout &layout)
+  {
+    HitCluster first(layout, 0);
+    NSPoint p = NSMakePoint(first.cutoff, NSMidY(first.line));
+    const CGFloat padding = [layout.container lineFragmentPadding];
+    // Identify the visual advance crossing the cutoff independently of point lookup.
+    CGFloat left = -CGFLOAT_MAX, right = CGFLOAT_MAX;
+    NSUInteger crossing = NSNotFound;
+    for (NSUInteger g = 0; g < [layout.manager numberOfGlyphs]; ++g)
+    {
+      const CGFloat x = NSMinX(first.fragment) + [layout.manager locationForGlyphAtIndex:g].x;
+      if (x < first.cutoff && x > left)
+      {
+        left = x;
+        crossing = g;
+      }
+      if (x >= first.cutoff && x < right)
+        right = x;
+    }
+    if (crossing != NSNotFound && right != CGFLOAT_MAX && right > first.cutoff)
+    {
+      HitCluster c(layout, crossing);
+      p.x = (left + first.cutoff) / 2;
+      if (c.shown && layout.lookup(p) == crossing && c.inRects(p) && NSMouseInRect(p, c.line, YES))
+      {
+        VerifySource(AttributedContext(layout.node), c.chars.location, NSMaxRange(c.chars), crossing, crossing);
+        layout.expect(p, MAC_HIT_SOURCE, crossing, crossing);
+      }
+      else
+        std::printf("[skip] cutoff-crossing advance lacks eligible lookup\n");
+    }
+    else
+      std::printf("[skip] no advance straddles the gutter edge\n");
+
+    for (unsigned wider = 0; wider < 2; ++wider)
+    {
+      if (wider)
+        [layout.view setFrameSize:NSMakeSize(NSMaxX(first.fragment) + padding, NSHeight([layout.view bounds]))];
+      for (unsigned interior = 0; interior < 2; ++interior)
+      {
+        p.x = first.cutoff + interior * padding / 2;
+        HitCluster c(layout, layout.lookup(p));
+        LOKA_VERIFY(NSMouseInRect(p, [layout.view bounds], YES));
+        if (c.shown && c.inRects(p) && NSMouseInRect(p, c.line, YES))
+        {
+          VerifySource(AttributedContext(layout.node),
+                       c.chars.location,
+                       NSMaxRange(c.chars),
+                       c.chars.location,
+                       NSMaxRange(c.chars) - 1);
+        }
+        else
+          std::printf("[skip] gutter x=%g lacks eligible rect/line lookup\n", p.x);
+        layout.expect(p, MAC_HIT_NONE);
+      }
+    }
+    p.x = NSMaxX(first.fragment);
+    LOKA_VERIFY(NSMouseInRect(p, [layout.view bounds], YES));
+    layout.expect(p, MAC_HIT_NONE);
+  }
+} // namespace
+
+void testMacTextHitBidi()
+{
+  HitTestPool pool;
+  TextStyle plain;
+  HitLayout mixed(Styled("A", plain) + Styled("א", plain) + Styled("ב", plain) + Styled("Z", plain));
+  HitCluster aleph(mixed, mixed.glyph(1)), bet(mixed, mixed.glyph(2));
+  NSRect right = aleph.visibleRect(), left = bet.visibleRect();
+  LOKA_VERIFY(NSMaxX(left) == NSMinX(right));
+  CGFloat inset = std::min(NSWidth(left), NSWidth(right)) / 8;
+  for (unsigned i = 0; i < 2; ++i)
+  {
+    const NSUInteger index = i ? 1 : 2;
+    NSPoint p = NSMakePoint(NSMaxX(left) + (i ? inset : -inset), NSMidY(left));
+    HitCluster c(mixed, mixed.lookup(p));
+    LOKA_VERIFY(c.chars.location == index && c.chars.length == 1 && c.shown && c.inRects(p));
+    LOKA_VERIFY(NSMouseInRect(p, c.line, YES) && p.x < c.cutoff);
+    VerifySource(AttributedContext(mixed.node), index, index + 1, index, index);
+    mixed.expect(p, MAC_HIT_SOURCE, index, index);
+  }
+  const TextAlign alignments[] = {TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, TEXT_ALIGN_RIGHT};
+  for (unsigned rtl = 0; rtl < 2; ++rtl)
+    for (unsigned a = 0; a < 3; ++a)
+    {
+      HitLayout clipped(GutterText(rtl != 0), 40, BlockStyle().align(alignments[a]));
+      std::printf("clipped gutter rtl=%u alignment=%u\n", rtl, a);
+      VerifyGutter(clipped);
+    }
+}
+
+namespace
+{
+  void VerifyHiddenCharacter(HitLayout &layout, NSUInteger character, NSLineBreakMode mode, const char *name)
+  {
+    NSParagraphStyle *style =
+        TextAttribute(AttributedAccess::storage(layout.view), NSParagraphStyleAttributeName, character);
+    LOKA_VERIFY([style lineBreakMode] == mode);
+    HitCluster cluster(layout, layout.glyph(character));
+    LOKA_VERIFY(NSEqualRanges(cluster.chars, NSMakeRange(character, 1)));
+    VerifySource(AttributedContext(layout.node), character, character + 1, 0, 0);
+    for (size_t r = 0; !cluster.shown && r < cluster.rects.size(); ++r)
+    {
+      const NSRect area = NSIntersectionRect(cluster.rects[r], cluster.line);
+      if (NSIsEmptyRect(area))
+        continue;
+      for (unsigned i = 0; i < 16; ++i)
+      {
+        NSPoint p = NSMakePoint(NSMinX(area) + NSWidth(area) * (i + 0.5) / 16, NSMidY(area));
+        if (p.x < cluster.cutoff && NSMouseInRect(p, [layout.view bounds], YES)
+            && NSLocationInRange(layout.lookup(p), cluster.glyphs))
+        {
+          layout.expect(p, MAC_HIT_NONE);
+          return;
+        }
+      }
+    }
+    std::printf("[skip] %s lacks an all-hidden lookup in its visible advance\n", name);
+  }
+
+  void VerifyLeadingGap(HitLayout &layout, MacTextHitAnswer answer)
+  {
+    HitCluster first(layout, 0);
+    NSRect rect = first.visibleRect();
+    NSPoint p = NSMakePoint((NSMinX(first.line) + NSMinX(rect)) / 2, NSMidY(rect));
+    if (layout.lookup(p) != 0 || !first.shown || first.inRects(p) || !NSMouseInRect(p, first.line, YES)
+        || p.x >= first.cutoff)
+    {
+      std::printf("[skip] no shown first-letter lookup in the leading padding gap\n");
+      return;
+    }
+    VerifySource(AttributedContext(layout.node), first.chars.location, NSMaxRange(first.chars), 0, 0);
+    layout.expect(p, answer);
+  }
+
+  void VerifyNearestMiss(HitLayout &layout, NSPoint p)
+  {
+    HitCluster nearest(layout, layout.lookup(p));
+    LOKA_VERIFY(NSMouseInRect(p, [layout.view bounds], YES) && nearest.shown && p.x < nearest.cutoff);
+    LOKA_VERIFY(!NSMouseInRect(p, nearest.line, YES));
+    VerifySource(AttributedContext(layout.node), nearest.chars.location, NSMaxRange(nearest.chars), 0, 0);
+    layout.expect(p, MAC_HIT_NONE);
+  }
+
+  bool VerifyOutsideUsedLine(HitLayout &layout)
+  {
+    const NSRect bounds = [layout.view bounds];
+    for (NSUInteger g = 0; g < [layout.manager numberOfGlyphs]; ++g)
+    {
+      HitCluster c(layout, g);
+      if (!c.shown)
+        continue;
+      for (size_t r = 0; r < c.rects.size(); ++r)
+      {
+        NSRect rect = NSIntersectionRect(c.rects[r], bounds);
+        const CGFloat x = NSMinX(rect), y = NSMinY(rect);
+        const CGFloat end = std::min(NSMaxX(rect), c.cutoff);
+        if (end <= x || NSIsEmptyRect(rect))
+          continue;
+        rect.size.width = end - x;
+        // Probe only the portions left after subtracting the used line.
+        const NSRect bands[] = {NSMakeRect(x, y, NSMinX(c.line) - x, NSHeight(rect)),
+                                NSMakeRect(NSMaxX(c.line), y, end - NSMaxX(c.line), NSHeight(rect)),
+                                NSMakeRect(x, y, NSWidth(rect), NSMinY(c.line) - y),
+                                NSMakeRect(x, NSMaxY(c.line), NSWidth(rect), NSMaxY(rect) - NSMaxY(c.line))};
+        for (unsigned b = 0; b < 4; ++b)
+        {
+          if (NSIsEmptyRect(bands[b]))
+            continue;
+          NSRect area = NSIntersectionRect(rect, bands[b]);
+          if (NSIsEmptyRect(area))
+            continue;
+          NSPoint p = HitCentre(area);
+          if (!NSLocationInRange(layout.lookup(p), c.glyphs))
+            continue;
+          LOKA_VERIFY(c.inRects(p) && !NSMouseInRect(p, c.line, YES) && p.x < c.cutoff);
+          VerifySource(AttributedContext(layout.node), c.chars.location, NSMaxRange(c.chars), 0, 0);
+          layout.expect(p, MAC_HIT_NONE);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+} // namespace
+
+void testMacTextHitWhitespace()
+{
+  HitTestPool pool;
+  HitLayout layout(Styled("a\tb\nc d", TextStyle()), 300, BlockStyle().wrap(TEXT_WRAP_WORD));
+  VerifyHiddenCharacter(layout, 1, NSLineBreakByWordWrapping, "tab");
+  VerifyHiddenCharacter(layout, 3, NSLineBreakByWordWrapping, "newline");
+  VerifyCharacterHit(layout, 5, NSMakeRange(5, 1), 0, 0);
+}
+
+void testMacTextHitEdges()
+{
+  HitTestPool pool;
+  HitLayout layout(Styled("Visible", TextStyle()));
+  HitCluster first(layout, 0);
+  NSRect rect = first.visibleRect(), bounds = [layout.view bounds];
+  NSPoint centre = HitCentre(rect);
+  LOKA_VERIFY(layout.lookup(centre) == 0 && first.shown && centre.x < first.cutoff);
+  VerifySource(AttributedContext(layout.node), first.chars.location, NSMaxRange(first.chars), 0, 0);
+  [layout.view setFrameSize:NSMakeSize(centre.x, NSHeight(bounds))];
+  layout.expect(centre, MAC_HIT_NONE);
+  NSPoint p = NSMakePoint((NSMinX(rect) + centre.x) / 2, centre.y);
+  LOKA_VERIFY(layout.lookup(p) == 0);
+  layout.expect(p, MAC_HIT_SOURCE);
+  layout.expect(NSMakePoint((centre.x + NSMaxX(rect)) / 2, centre.y), MAC_HIT_NONE);
+  [layout.view setFrameSize:NSMakeSize(NSWidth(bounds), centre.y)];
+  layout.expect(centre, MAC_HIT_NONE);
+  p = NSMakePoint(centre.x, (NSMinY(rect) + centre.y) / 2);
+  LOKA_VERIFY(layout.lookup(p) == 0);
+  layout.expect(p, MAC_HIT_SOURCE);
+  [layout.view setFrameSize:NSMakeSize(NSWidth(bounds), NSHeight(bounds) * 2)];
+  p.y = NSMinY(bounds);
+  LOKA_VERIFY(layout.lookup(p) == 0 && first.inRects(p) && NSMouseInRect(p, first.line, YES));
+  layout.expect(p, MAC_HIT_SOURCE);
+  p = NSMakePoint(NSMinX(bounds), centre.y);
+  LOKA_VERIFY(!first.inRects(p) && layout.lookup(p) == 0);
+  layout.expect(p, MAC_HIT_NONE);
+  VerifyLeadingGap(layout, MAC_HIT_NONE);
+  p = NSMakePoint((NSMaxX(first.line) + first.cutoff) / 2, centre.y);
+  VerifyNearestMiss(layout, p);
+  p = NSMakePoint(centre.x, (NSMaxY(first.line) + NSMaxY([layout.view bounds])) / 2);
+  VerifyNearestMiss(layout, p);
+  // Inclusive minimum-x edge: move the bounds origin onto a glyph-interior x so the edge point is a source hit.
+  [layout.view setBoundsOrigin:NSMakePoint(centre.x, NSMinY(bounds))];
+  p = NSMakePoint(NSMinX([layout.view bounds]), centre.y);
+  LOKA_VERIFY(p.x == centre.x && layout.lookup(p) == 0);
+  layout.expect(p, MAC_HIT_SOURCE);
+  layout.expect(NSMakePoint(p.x - 0.5, p.y), MAC_HIT_NONE);
+  [layout.view setBoundsOrigin:NSMakePoint(NSMinX(bounds), NSMinY(bounds))];
+  HitLayout wrapped(
+      Styled("wrapped words\nwith trailing spaces   ", TextStyle()), 48, BlockStyle().wrap(TEXT_WRAP_WORD));
+  HitLayout clipped(Styled("Open the documentation", TextStyle()), 40);
+  if (!VerifyOutsideUsedLine(layout) && !VerifyOutsideUsedLine(wrapped) && !VerifyOutsideUsedLine(clipped))
+    std::printf("[skip] no shown candidate rectangle outside its used line left of the gutter\n");
+}
+
+void testMacTextHitTruncation()
+{
+  HitTestPool pool;
+  const BlockStyle tail = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+  HitLayout overflow(Styled("Open the documentation now", TextStyle()), 60, tail);
+  HitLayout fits(Styled("Fits", TextStyle()), 300, tail);
+  const bool supported =
+      [overflow.manager respondsToSelector:@selector(truncatedGlyphRangeInLineFragmentForGlyphAtIndex:)];
+  std::printf("[skip] %s branch unavailable (fragment selector %s)\n",
+              supported ? "selector-less" : "selector-present",
+              supported ? "present" : "absent");
+  const MacTextHitAnswer ordinary = supported ? MAC_HIT_SOURCE : MAC_HIT_REFUSED;
+  VerifyCharacterHit(overflow, 0, NSMakeRange(0, 1), 0, 0, ordinary);
+  if ([fits.manager respondsToSelector:@selector(truncatedGlyphRangeInLineFragmentForGlyphAtIndex:)])
+    LOKA_VERIFY([fits.manager truncatedGlyphRangeInLineFragmentForGlyphAtIndex:0].location == NSNotFound);
+  VerifyCharacterHit(fits, 0, NSMakeRange(0, 1), 0, 0, ordinary);
+  VerifyLeadingGap(fits, supported ? MAC_HIT_NONE : MAC_HIT_REFUSED);
+  HitLayout tab(Styled("a\tb", TextStyle()), 300, tail);
+  VerifyHiddenCharacter(tab, 1, NSLineBreakByTruncatingTail, "tail-mode tab");
+  for (NSUInteger g = 1; g < [overflow.manager numberOfGlyphs]; ++g)
+  {
+    HitCluster carrier(overflow, g);
+    if (!carrier.shown || carrier.chars.length <= 1 || NSMaxRange(carrier.glyphs) != [overflow.manager numberOfGlyphs])
+      continue;
+    if (supported)
+    {
+      const NSRange truncated = [overflow.manager truncatedGlyphRangeInLineFragmentForGlyphAtIndex:g];
+      LOKA_VERIFY(truncated.location == g && NSIntersectionRange(truncated, carrier.glyphs).length);
+    }
+    NSPoint p = HitCentre(carrier.visibleRect());
+    LOKA_VERIFY(p.x < carrier.cutoff && NSLocationInRange(overflow.lookup(p), carrier.glyphs));
+    VerifySource(AttributedContext(overflow.node), carrier.chars.location, NSMaxRange(carrier.chars), 0, 0);
+    overflow.expect(p, supported ? MAC_HIT_NONE : MAC_HIT_REFUSED);
+    return;
+  }
+  std::printf("[skip] no nonzero ellipsis carrier covering the tail\n");
+}
+
+void testMacTextHitRefusals()
+{
+  HitTestPool pool;
+  HitLayout layout(Styled("ok", TextStyle()));
+  const CGFloat applied = AttributedAccess::width(layout.view);
+  NSSize size = [layout.container containerSize];
+  size.width *= 2;
+  [layout.container setContainerSize:size];
+  [layout.manager glyphRangeForTextContainer:layout.container];
+  LOKA_VERIFY([layout.container containerSize].width != applied && AttributedAccess::width(layout.view) == applied);
+  VerifyCharacterHit(layout, 0, NSMakeRange(0, 1), 0, 0);
+  const NSPoint prior = HitCentre(HitCluster(layout, 0).visibleRect());
+  layout.node.props.text(Styled(RawAttributed("\xC0\xAF", 2), Italic));
+  layout.node.getContext()->onPropsApplied();
+  layout.node.layout(&layout.controller, layout.state);
+  LOKA_VERIFY(!AttributedAccess::complete(AttributedContext(layout.node)));
+  layout.expect(prior, MAC_HIT_REFUSED);
+
+  HitLayout empty(AttributedString(), 100);
+  LOKA_VERIFY(![empty.manager numberOfGlyphs] && !NSIsEmptyRect([empty.view bounds]));
+  empty.expect(HitCentre([empty.view bounds]), MAC_HIT_NONE);
+
+  HitLayout partial(Styled("one line\nsecond line\nthird line", TextStyle()), 80, BlockStyle().wrap(TEXT_WRAP_WORD));
+  size = [partial.container containerSize];
+  size.height = NSMaxY(HitCluster(partial, 0).fragment);
+  [partial.container setContainerSize:size];
+  NSRange prefix = [partial.manager glyphRangeForTextContainer:partial.container];
+  if (!(prefix.location == 0 && prefix.length && prefix.length < [partial.manager numberOfGlyphs]))
+  {
+    std::printf("[skip] shortened container did not produce a nonempty proper prefix\n");
+    return;
+  }
+  HitCluster first(partial, 0);
+  NSPoint p = HitCentre(first.visibleRect());
+  LOKA_VERIFY(first.shown && partial.lookup(p) == 0 && p.x < first.cutoff);
+  VerifySource(AttributedContext(partial.node), first.chars.location, NSMaxRange(first.chars), 0, 0);
+  partial.expect(p, MAC_HIT_REFUSED);
 }

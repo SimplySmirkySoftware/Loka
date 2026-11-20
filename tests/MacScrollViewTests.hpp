@@ -31,6 +31,7 @@ void testMacScrollViewInsetsPlaceContentBelowTheTopInset();
 void testMacScrollViewInsetsGrowTheHeightlessExtent();
 void testMacScrollViewInsetsRefuseAnExtentAboveShort();
 
+void testMacScrollRefusedViewport();
 void testMacScrollRequestBothAxesAndStoppedEcho();
 void testMacScrollRequestMissingDocumentAtApply();
 void testMacScrollRequestSmallDocument();

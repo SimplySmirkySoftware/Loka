@@ -94,13 +94,6 @@ namespace loka
       scene::RequestBinding<ScrollTarget> scrollTo_;
       ScrollViewContentInsets contentInsets_;
 
-      ScrollViewProps()
-          : viewport_(),
-            scrollTo_(),
-            contentInsets_()
-      {
-      }
-
       explicit ScrollViewProps(const scene::NodeState<loka::core::Frame> &viewport)
           : viewport_(viewport.writeSeat()),
             scrollTo_(),
@@ -118,13 +111,6 @@ namespace loka
       ScrollViewProps &contentInsets(const ScrollViewContentInsets &value)
       {
         this->contentInsets_ = value;
-        return *this;
-      }
-
-      /** Binds the rail-published visible content rect. */
-      ScrollViewProps &viewport(const scene::NodeState<loka::core::Frame> &value)
-      {
-        this->viewport_ = value.writeSeat();
         return *this;
       }
 
@@ -154,6 +140,17 @@ namespace loka
           return this->scrollTo_ < other.scrollTo_;
         return this->contentInsets_ < other.contentInsets_;
       }
+
+    private:
+      // #1863: copy and clone seed the base props before copying required props.
+      friend struct scene::NodeDefinition<ScrollViewProps, ScrollViewNode>;
+
+      ScrollViewProps()
+          : viewport_(),
+            scrollTo_(),
+            contentInsets_()
+      {
+      }
     };
 
     class ScrollViewNode : public scene::NestableNode
@@ -182,7 +179,7 @@ namespace loka
         return this;
       }
 
-      /** Requested extent offset, safely representable by every rail. An unbound
+      /** Requested extent offset, safely representable by every rail. An allocation-refused
           seat requests zero on both axes. Content y below -top reads as -top;
           clamp before adding top so even an INT_MAX request is safe. */
       loka::core::Frame requestedOrigin() const
@@ -217,7 +214,7 @@ namespace loka
       }
 
       /** Publishes one changed extent offset as a content origin through the
-          owner's tracker, preserving size. An unbound seat has no fact. */
+          owner's tracker, preserving size. An allocation-refused seat has no fact. */
       void publishOrigin(int x, int extentY)
       {
         if (!this->props.viewport_.isValid())
@@ -286,11 +283,6 @@ namespace loka
       typedef scene::NestableNodeDefinition<ScrollViewProps, ScrollViewNode, ScrollViewDefinition> BaseType;
       using BaseType::operator<<;
 
-      ScrollViewDefinition()
-          : BaseType()
-      {
-      }
-
       explicit ScrollViewDefinition(const ScrollViewProps &p)
           : BaseType(p)
       {
@@ -313,16 +305,19 @@ namespace loka
         return *this;
       }
 
-      ScrollViewDefinition &viewport(const scene::NodeState<loka::core::Frame> &value)
-      {
-        this->props.viewport(value);
-        return *this;
-      }
-
       ScrollViewDefinition &scrollTo(scene::Request<ScrollTarget> &value)
       {
         this->props.scrollTo(value);
         return *this;
+      }
+
+    private:
+      // #1863: clone seeds the derived definition before copying required props.
+      friend struct scene::NestableNodeDefinition<ScrollViewProps, ScrollViewNode, ScrollViewDefinition>;
+
+      ScrollViewDefinition()
+          : BaseType()
+      {
       }
     };
 

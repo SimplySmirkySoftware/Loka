@@ -191,4 +191,10 @@ typedef float CGFloat;
 #define LOKA_MAC_CONTROL_SIZE_REGULAR NSRegularControlSize
 #endif
 
+// Declare independently of SDK version macros in mixed-header builds.
+@interface NSLayoutManager (LokaTruncatedGlyphRange)
+/** At most one native fragment query per tail-mode hit, only on managers answering this selector. */
+- (NSRange)truncatedGlyphRangeInLineFragmentForGlyphAtIndex:(NSUInteger)glyphIndex;
+@end
+
 #endif // LOKA_MAC_OBJC_COMPAT_HPP
