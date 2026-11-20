@@ -2443,6 +2443,10 @@ already mounted subtree on the main thread, include `app/doc/Html.hpp` or
 `app/doc/Markdown.hpp` and call `doc::WriteHtml(root, out)` or
 `doc::WriteMarkdown(root, out)`. [Sample tool](../example/DocumentPage/main.cpp)
 
+To make a standalone HTML page, wrap the fragment in a document with a title
+and place it inside `main`. The two-page example links its pages with relative
+`doc::Link` destinations and shares one stylesheet. [DocumentSite](../example/DocumentSite/main.cpp)
+
 Both exits preserve the meaning of attached document blocks in declaration order.
 Ordinary controls, underline, color, and font size are omitted. Empty headings
 and code blocks are kept. Empty paragraphs are omitted. On both exits, link

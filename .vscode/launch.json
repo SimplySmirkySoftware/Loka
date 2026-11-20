@@ -2,12 +2,28 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Run (Linux DocumentSite)",
+      "type": "lldb-dap",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/Testing/DocumentSite",
+      "args": [
+        "${workspaceFolder}/build/Testing",
+        "${workspaceFolder}/example/DocumentSite/site.css"
+      ],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Build: Linux DocumentSite"
+    },
+    {
       "name": "Loka: Preview Extension",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}/tools/vscode-loka"],
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/tools/vscode-loka"
+      ],
       "preLaunchTask": "Build: Loka Preview Extension",
-      "outFiles": ["${workspaceFolder}/tools/vscode-loka/out/**/*.js"]
+      "outFiles": [
+        "${workspaceFolder}/tools/vscode-loka/out/**/*.js"
+      ]
     },
     {
       "name": "Run (macOS HelloWorld)",
@@ -29,7 +45,8 @@
       "name": "Run (macOS SimpleViewer)",
       "type": "lldb-dap",
       "request": "launch",
-      "program": "${workspaceFolder}/build/macos/Debug/example/SimpleViewer/LokaSimpleViewerMacOS.app/Contents/MacOS/LokaSimpleViewerMacOS",
+      "program":
+          "${workspaceFolder}/build/macos/Debug/example/SimpleViewer/LokaSimpleViewerMacOS.app/Contents/MacOS/LokaSimpleViewerMacOS",
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Build: macOS SimpleViewer"
     },
@@ -37,7 +54,8 @@
       "name": "Run (macOS CardShowcase)",
       "type": "lldb-dap",
       "request": "launch",
-      "program": "${workspaceFolder}/build/macos/Debug/example/CardShowcase/LokaCardShowcaseMacOS.app/Contents/MacOS/LokaCardShowcaseMacOS",
+      "program":
+          "${workspaceFolder}/build/macos/Debug/example/CardShowcase/LokaCardShowcaseMacOS.app/Contents/MacOS/LokaCardShowcaseMacOS",
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Build: macOS CardShowcase"
     },
@@ -45,7 +63,8 @@
       "name": "Run (macOS SimpleText)",
       "type": "lldb-dap",
       "request": "launch",
-      "program": "${workspaceFolder}/build/macos/Debug/example/SimpleText/LokaSimpleTextMacOS.app/Contents/MacOS/LokaSimpleTextMacOS",
+      "program":
+          "${workspaceFolder}/build/macos/Debug/example/SimpleText/LokaSimpleTextMacOS.app/Contents/MacOS/LokaSimpleTextMacOS",
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Build: macOS SimpleText"
     },
@@ -53,7 +72,8 @@
       "name": "Run (macOS ScrapbookUI)",
       "type": "lldb-dap",
       "request": "launch",
-      "program": "${workspaceFolder}/build/macos/Debug/example/ScrapbookUI/ScrapbookUIMacOS.app/Contents/MacOS/ScrapbookUIMacOS",
+      "program":
+          "${workspaceFolder}/build/macos/Debug/example/ScrapbookUI/ScrapbookUIMacOS.app/Contents/MacOS/ScrapbookUIMacOS",
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Build: macOS ScrapbookUI"
     },
@@ -93,7 +113,8 @@
       "name": "Run (macOS SmirkyCard)",
       "type": "lldb-dap",
       "request": "launch",
-      "program": "${workspaceFolder}/build/macos/Debug/example/SmirkyCard/LokaSmirkyCardMacOS.app/Contents/MacOS/LokaSmirkyCardMacOS",
+      "program":
+          "${workspaceFolder}/build/macos/Debug/example/SmirkyCard/LokaSmirkyCardMacOS.app/Contents/MacOS/LokaSmirkyCardMacOS",
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Build: macOS SmirkyCard"
     },

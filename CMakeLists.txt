@@ -270,6 +270,20 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     add_test(NAME testDocumentPageHtmlGolden COMMAND python3 -c
       "import pathlib, subprocess, sys; sys.exit(subprocess.check_output([sys.argv[1], '--html']) != pathlib.Path(sys.argv[2]).read_bytes())"
       $<TARGET_FILE:DocumentPage> ${PROJECT_SOURCE_DIR}/example/DocumentPage/FieldGuide.html)
+
+    add_executable(DocumentSite example/DocumentSite/main.cpp)
+    add_executable(DocumentSiteFixture tests/DocumentSiteFixture.cpp)
+    foreach(target DocumentSite DocumentSiteFixture)
+      target_link_libraries(${target} PRIVATE LokaCommonShippingCompileTest)
+      set_target_properties(${target} PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+      loka_enable_warnings(${target})
+    endforeach()
+    add_test(NAME testDocumentSiteRender COMMAND DocumentSiteFixture)
+    foreach(case Output Refusal Files Parse)
+      add_test(NAME testDocumentSite${case} COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/DocumentSite.py
+        ${case} $<TARGET_FILE:DocumentSite> $<TARGET_FILE:DocumentSiteFixture> ${PROJECT_SOURCE_DIR}/example/DocumentSite)
+    endforeach()
+    set_tests_properties(testDocumentSiteParse PROPERTIES SKIP_RETURN_CODE 77)
   endif()
 
   add_library(LokaCommonTesting STATIC
