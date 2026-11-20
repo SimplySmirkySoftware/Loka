@@ -538,13 +538,14 @@ void testMacTextViewUndo()
   [alternate registerUndoWithTarget:f.phase selector:@selector(alternateUndo:) object:nil];
   // Each history query answers its own verb: only Undo before undoing, only Redo once exhausted.
   LOKA_VERIFY([v validateMenuItem:undo] && ![v validateMenuItem:redo]);
+  // Two groups were typed; the bound keeps a regressed undo from looping forever.
   unsigned steps = 0;
-  while ([v validateMenuItem:undo])
+  while (steps < 2 && [v validateMenuItem:undo])
   {
     send(v, @selector(undo:));
     ++steps;
   }
-  LOKA_VERIFY(steps && ![v validateMenuItem:undo] && [v validateMenuItem:redo]);
+  LOKA_VERIFY(steps == 2 && [[v string] isEqual:@""] && ![v validateMenuItem:undo] && [v validateMenuItem:redo]);
   while (steps--)
     send(v, @selector(redo:));
   LOKA_VERIFY([[v string] isEqual:@"AB"] && [v validateMenuItem:undo] && ![v validateMenuItem:redo]);
