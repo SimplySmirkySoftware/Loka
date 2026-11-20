@@ -3,7 +3,6 @@
 from html.parser import HTMLParser
 from pathlib import Path
 import resource
-import signal
 import subprocess
 import sys
 import tempfile
@@ -48,8 +47,11 @@ def output(tool, directory, sheet, example):
         assert links.anchors == [peer] and links.sheets == [("stylesheet", "site.css")]
         assert page == (example / "expected" / name).read_bytes(), name
 
+    modes = lambda: {(directory / name).stat().st_mode & 0o777 for name in NAMES}
+    assert modes() == {0o644}, "new files are readable by a server running as another user"
     subprocess.run([tool, directory, example / "site.css"], check=True)
     assert (directory / "site.css").read_bytes() == (example / "site.css").read_bytes()
+    assert modes() == {0o644}, "replaced files keep that mode"
 
 
 def refusal(fixture, directory, sheet):
@@ -80,7 +82,6 @@ def files(tool, directory, sheet):
     assert {p.name: p.read_bytes() for p in directory.iterdir()} == {n: n.encode() for n in NAMES}
     # Both HTML files fit. The third temporary hits the file size limit at write or close.
     def limit_file_size():
-        signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
         resource.setrlimit(resource.RLIMIT_FSIZE, (4096, 4096))
 
     large = sheet.with_name("large.css")

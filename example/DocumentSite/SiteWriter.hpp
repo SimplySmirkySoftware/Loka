@@ -4,6 +4,7 @@
 #include "app/doc/Render.hpp"
 #include <cstdio>
 #include <cstdlib>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
 
@@ -90,7 +91,8 @@ namespace document_site
       if (fd < 0)
         return false;
       this->temporary_ = &path[0];
-      FILE *file = fdopen(fd, "wb");
+      // mkstemp creates the file for its owner only; a published page is world-readable.
+      FILE *file = fchmod(fd, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH) == 0 ? fdopen(fd, "wb") : 0;
       if (!file)
       {
         close(fd);

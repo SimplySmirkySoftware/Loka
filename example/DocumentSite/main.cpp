@@ -3,6 +3,7 @@
 #include "app/doc/List.hpp"
 #include "app/doc/Quote.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
+#include <csignal>
 
 namespace
 {
@@ -55,6 +56,8 @@ namespace
 /** Cost: one site of two authored boundaries per invocation. */
 int main(int argc, char **argv)
 {
+  // A file-size limit then fails the write, so the temporaries are removed on return.
+  std::signal(SIGXFSZ, SIG_IGN);
   if (argc != 3)
   {
     std::fputs("Usage: DocumentSite <out-dir> <stylesheet-file>\n", stderr);
