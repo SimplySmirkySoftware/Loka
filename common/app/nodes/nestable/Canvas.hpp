@@ -141,6 +141,10 @@ namespace loka
                               public scene::TestIdDslMixin<CanvasDefinition>
     {
       typedef scene::NestableNodeDefinition<CanvasProps, CanvasNode, CanvasDefinition> BaseType;
+      explicit CanvasDefinition(const scene::CloneShell<CanvasDefinition> &shell)
+          : BaseType(shell)
+      {
+      }
       using BaseType::operator<<;
       CanvasDefinition()
           : BaseType()

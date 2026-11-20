@@ -679,6 +679,22 @@ add_test(NAME compileAccepts-request-focus-and-editor
     --config $<CONFIG> --target compilePin_request-focus-and-editor_accepts)
 set_tests_properties(compileAccepts-request-focus-and-editor PROPERTIES RESOURCE_LOCK loka-build-dir)
 
+loka_compile_pin(required-props-default
+  REFUSES pins/refuses_required_props_default.cpp
+  ACCEPTS pins/accepts_required_props.cpp)
+
+loka_compile_pin(external-clone-shell
+  REFUSES pins/refuses_external_shell.cpp
+  ACCEPTS pins/accepts_card_clone.cpp)
+
+loka_compile_pin(standalone-nestable
+  REFUSES pins/refuses_standalone_nestable.cpp
+  ACCEPTS pins/accepts_required_props.cpp)
+
+loka_compile_pin(missing-shell-forwarder
+  REFUSES pins/refuses_missing_shell_forwarder.cpp
+  ACCEPTS pins/accepts_required_props.cpp)
+
 loka_compile_pin(scrollview-default
   REFUSES pins/refuses_scrollview_default.cpp
   ACCEPTS pins/accepts_scrollview_viewport.cpp)

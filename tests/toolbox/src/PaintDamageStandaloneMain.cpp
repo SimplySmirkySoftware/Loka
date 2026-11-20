@@ -164,6 +164,15 @@ namespace
   template <int Geometry>
   struct CopyGeometry : NestableNodeDefinition<BoxProps, CopyGeometryNode<Geometry>, CopyGeometry<Geometry> >
   {
+    typedef NestableNodeDefinition<BoxProps, CopyGeometryNode<Geometry>, CopyGeometry<Geometry> > BaseType;
+    CopyGeometry()
+        : BaseType()
+    {
+    }
+    explicit CopyGeometry(const CloneShell<CopyGeometry> &shell)
+        : BaseType(shell)
+    {
+    }
   };
 
   template <int Painter> class CopyPainterNode : public BoundaryNodeFor<CopyPainterNode<Painter> >

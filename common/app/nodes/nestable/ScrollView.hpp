@@ -140,17 +140,6 @@ namespace loka
           return this->scrollTo_ < other.scrollTo_;
         return this->contentInsets_ < other.contentInsets_;
       }
-
-    private:
-      // #1863: copy and clone seed the base props before copying required props.
-      friend struct scene::NodeDefinition<ScrollViewProps, ScrollViewNode>;
-
-      ScrollViewProps()
-          : viewport_(),
-            scrollTo_(),
-            contentInsets_()
-      {
-      }
     };
 
     class ScrollViewNode : public scene::NestableNode
@@ -281,6 +270,10 @@ namespace loka
           public scene::TestIdDslMixin<ScrollViewDefinition>
     {
       typedef scene::NestableNodeDefinition<ScrollViewProps, ScrollViewNode, ScrollViewDefinition> BaseType;
+      explicit ScrollViewDefinition(const scene::CloneShell<ScrollViewDefinition> &shell)
+          : BaseType(shell)
+      {
+      }
       using BaseType::operator<<;
 
       explicit ScrollViewDefinition(const ScrollViewProps &p)
@@ -309,15 +302,6 @@ namespace loka
       {
         this->props.scrollTo(value);
         return *this;
-      }
-
-    private:
-      // #1863: clone seeds the derived definition before copying required props.
-      friend struct scene::NestableNodeDefinition<ScrollViewProps, ScrollViewNode, ScrollViewDefinition>;
-
-      ScrollViewDefinition()
-          : BaseType()
-      {
       }
     };
 

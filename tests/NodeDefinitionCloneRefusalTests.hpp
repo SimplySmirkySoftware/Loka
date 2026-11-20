@@ -4,6 +4,8 @@
 void testNodeDefinitionCloneRefusesGrandchild();
 void testNodeDefinitionAssignmentPreservesDestination();
 void testNodeDefinitionCopiesFullStructure();
-void testNodeDefinitionByValueRefusalLeavesEmpty();
+void testNodeDefinitionByValueRefusalKeepsPropsDropsChildren();
+void testNodeDefinitionDirectChildRefusalReleasesCandidate();
+void testNodeDefinitionCloneBypassesDerivedCopy();
 
 #endif

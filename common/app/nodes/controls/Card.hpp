@@ -229,6 +229,10 @@ namespace loka
                             public scene::TestIdDslMixin<CardDefinition>
     {
       typedef scene::NestableNodeDefinition<CardProps, CardNode, CardDefinition> BaseType;
+      explicit CardDefinition(const scene::CloneShell<CardDefinition> &shell)
+          : BaseType(shell)
+      {
+      }
       explicit CardDefinition(const CardStyle &style = CardStyle())
           : BaseType(CardProps(style))
       {
@@ -258,15 +262,7 @@ namespace loka
       {
         if (this->childrenCount() != 1 + CARD_BAND_COUNT)
           return 0;
-        CardDefinition *copy = new CardDefinition(EMPTY_SHELL);
-        if (!copy)
-          return 0;
-        if (!copy->assignFromDefinition(*this))
-        {
-          delete copy;
-          return 0;
-        }
-        return copy;
+        return BaseType::clone();
       }
       // Every insertion form a nestable definition accepts goes to the content
       // column; declaring these here hides the inherited forms, which would append
@@ -311,15 +307,6 @@ namespace loka
       {
         scene::NodeDefinitionBase *column = this->childrenHead();
         return column ? column->asNestableDefinition() : 0;
-      }
-      /** Cloning fills the shell from completed source children, without re-expansion. */
-      enum EmptyShell
-      {
-        EMPTY_SHELL
-      };
-      explicit CardDefinition(EmptyShell)
-          : BaseType()
-      {
       }
       struct BandDefinition : public scene::NodeDefinition<CardBandProps, CardBandNode>
       {

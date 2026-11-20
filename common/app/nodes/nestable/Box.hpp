@@ -150,6 +150,10 @@ namespace loka
                            public scene::TestIdDslMixin<BoxDefinition>
     {
       typedef scene::NestableNodeDefinition<BoxProps, BoxNode, BoxDefinition> BaseType;
+      explicit BoxDefinition(const scene::CloneShell<BoxDefinition> &shell)
+          : BaseType(shell)
+      {
+      }
       using BaseType::operator<<;
 
       BoxDefinition()
