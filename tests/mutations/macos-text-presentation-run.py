@@ -28,7 +28,11 @@ def mutations():
                       "  if (loka::testing::refuseMacTextPresentationStep())\n    return NO;\n#endif")
     late_drop = install_prefix.replace("  presentation_->dropInstalled();\n", "").replace(
         "    [storage delete", "    presentation_->dropInstalled();\n    [storage delete")
+    storage_write = "  [storage setAttributedString:value];"
     return [
+        kill("early-storage-drop", install_prefix,
+             late_drop.replace(storage_write, storage_write + "\n  presentation_->dropInstalled();"),
+             "testMacTextPresentationFailedReplacement"),
         kill("late-install-invalidation", install_prefix, late_drop + "\n  presentation_->dropInstalled();",
              "testMacTextPresentationFailedReplacement"),
         kill("runtime-always-false", "return [NSView instancesRespondToSelector:@selector(wantsUpdateLayer)];",
@@ -76,6 +80,7 @@ def mutations():
         kill("failed-seal-clears-contents", "if (!image)\n  {\n    presentation_->dropImage();",
              "if (!image)\n  {\n    [layer setContents:nil];\n    presentation_->dropImage();", OWNER),
         kill("budget-cap", "height <= 16u", "height < 16u", "testMacTextPresentationBudget"),
+        kill("height-cap", "h <= 4096", "h < 4096", "testMacTextPresentationBudget"),
         kill("dimension-cap", "w <= 4096", "w < 4096", "testMacTextPresentationBudget"),
         # Exclusive install/reset doors keep these equal in a reachable candidate.
         # A synthetic predicate fixture can supply a mismatched pair independently.

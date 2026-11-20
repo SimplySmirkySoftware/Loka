@@ -4263,9 +4263,10 @@ namespace
   {
     NSView *view = layout.view;
     NSView *parent = [view superview];
-    NSRect text = [layout.manager usedRectForTextContainer:layout.container];
-    NSRect region =
-        NSIntersectionRect([parent bounds], [view convertRect:NSIntersectionRect(text, [view bounds]) toView:parent]);
+    // Search the leaf's whole frame: with translated bounds, 10.9's unflipped parent places the converted
+    // text rectangle on the other half of the frame from the ink (Mavericks 10.9.5). Text A is blue, so any
+    // red ink in the frame is B's fallback drawing, not a stale layer image.
+    NSRect region = NSIntersectionRect([parent bounds], [view frame]);
     LOKA_VERIFY(!NSIsEmptyRect(region));
     [view setNeedsDisplay:YES];
     // Caching can itself draw. Witness foreground submission in the ordinary display before capturing.
@@ -4382,6 +4383,31 @@ void testMacTextLayerCapability()
   std::printf("leaf compiled=1 runtime L=%d\n", int(MacTextLayerCapable()));
 }
 
+namespace
+{
+  struct StorageWriteProbe
+  {
+    NSTextStorage *target;
+    NSView *view;
+    IMP original;
+    bool observed, sawInstalled, sawImage;
+  };
+  StorageWriteProbe *storageWriteProbe;
+
+  /** Sample both owner fields at entry to the target storage's write and forward every call. */
+  void ObserveStorageWrite(id receiver, SEL cmd, NSAttributedString *value)
+  {
+    StorageWriteProbe &probe = *storageWriteProbe;
+    if (receiver == probe.target)
+    {
+      probe.observed = true;
+      probe.sawInstalled |= [probe.view lokaHasInstalledText] != NO;
+      probe.sawImage |= [probe.view lokaHasPresentationImage] != NO;
+    }
+    ((void (*)(id, SEL, NSAttributedString *))probe.original)(receiver, cmd, value);
+  }
+} // namespace
+
 void testMacTextPresentationFailedReplacement()
 {
   HitTestPool pool;
@@ -4394,12 +4420,22 @@ void testMacTextPresentationFailedReplacement()
   LOKA_VERIFY([layout.view queryPresentedFact:&fact] && fact.value.hasSameSegmentValues(a));
   NSAttributedString *nativeB = [[[NSAttributedString alloc] initWithString:@"new"] autorelease];
   CGFloat extent;
-  loka::testing::failMacTextPresentationStep(1);
-  LOKA_VERIFY(![layout.view installValue:nativeB snapshot:&b extent:&extent]);
+  NSTextStorage *storage = AttributedAccess::storage(layout.view);
+  Class cls = object_getClass(storage);
+  SEL setter = @selector(setAttributedString:);
+  StorageWriteProbe probe = {storage, layout.view, class_getMethodImplementation(cls, setter), false, false, false};
+  storageWriteProbe = &probe;
+  {
+    MacNativeRefusal observe(setter, (IMP)ObserveStorageWrite, cls);
+    loka::testing::failMacTextPresentationStep(1);
+    LOKA_VERIFY(![layout.view installValue:nativeB snapshot:&b extent:&extent]);
+  }
+  storageWriteProbe = 0;
   LOKA_VERIFY(![layout.view lokaHasInstalledText]);
   LOKA_VERIFY(![layout.view lokaHasPresentationImage]);
   LOKA_VERIFY(![layout.view queryPresentedFact:&fact]);
-  LOKA_VERIFY([[AttributedAccess::storage(layout.view) string] isEqualToString:@"new"]);
+  LOKA_VERIFY([[storage string] isEqualToString:@"new"]);
+  LOKA_VERIFY(probe.observed && !probe.sawInstalled && !probe.sawImage);
 }
 
 namespace
@@ -4814,6 +4850,7 @@ void testMacTextPresentationBudget()
     return;
   }
   LOKA_VERIFY(MacTestTextBudget(NSMakeSize(4096, 1), 1));
+  LOKA_VERIFY(MacTestTextBudget(NSMakeSize(1, 4096), 1));
   LOKA_VERIFY(!MacTestTextBudget(NSMakeSize(4097, 1), 1));
   LOKA_VERIFY(MacTestTextBudget(NSMakeSize(2048, 2048), 1));
   LOKA_VERIFY(!MacTestTextBudget(NSMakeSize(2048, 2048.5), 1));
