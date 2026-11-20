@@ -8,6 +8,8 @@ void testMacSmallLabelUsesTheSmallSystemFont();
 
 void testMacAttributedTextWholeLineProjection();
 void testMacTextLayerCapability();
+void testMacTextPresentationFailedReplacement();
+void testMacTextPresentationLayerActions();
 void testMacTextPresentationOwner();
 void testMacTextPresentationDeallocation();
 void testMacTextPresentationCheck();

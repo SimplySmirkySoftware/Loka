@@ -21,7 +21,20 @@ def mutations():
     def kill(name, old, new, test):
         return name, old, new, [(test, False)]
 
+    # Keep clear and successful installs correct, but strand the prior record on a failed replacement.
+    install_prefix = ("  presentation_->dropInstalled();\n  NSTextStorage *storage = [self lokaTextStorage];\n"
+                      "  if (!value)\n  {\n    [storage deleteCharactersInRange:NSMakeRange(0, [storage length])];\n"
+                      "    return YES;\n  }\n  [storage setAttributedString:value];\n#ifdef TEST_BUILD\n"
+                      "  if (loka::testing::refuseMacTextPresentationStep())\n    return NO;\n#endif")
+    late_drop = install_prefix.replace("  presentation_->dropInstalled();\n", "").replace(
+        "    [storage delete", "    presentation_->dropInstalled();\n    [storage delete")
     return [
+        kill("late-install-invalidation", install_prefix, late_drop + "\n  presentation_->dropInstalled();",
+             "testMacTextPresentationFailedReplacement"),
+        kill("runtime-always-false", "return [NSView instancesRespondToSelector:@selector(wantsUpdateLayer)];",
+             "return false;", "testMacTextLayerCapability"),
+        kill("actions-enabled", "  [CATransaction setValue:(id)kCFBooleanTrue forKey:kCATransactionDisableActions];",
+             "", "testMacTextPresentationLayerActions"),
         kill("install-door", "  presentation_->dropInstalled();", "", OWNER),
         kill("width-door", "presentation_->dropImage();\n    [[self lokaTextContainer]",
              "[[self lokaTextContainer]", OWNER),
@@ -50,8 +63,8 @@ def mutations():
         kill("pixel-axis", "CGContextTranslateCTM(graphics, 0, height)",
              "CGContextTranslateCTM(graphics, 0, bounds.size.height * scale)", PIXELS),
         kill("pixel-scale", "CGContextScaleCTM(graphics, scale, -scale)", "CGContextScaleCTM(graphics, 2 * scale, -2 * scale)", PIXELS),
-        kill("layer-placement", "        [self setLayerContentsPlacement:LOKA_MAC_LAYER_TOP_LEFT];",
-             "        [self setLayerContentsPlacement:(NSViewLayerContentsPlacement)0];", PIXELS),
+        kill("layer-placement", "objc_msgSend)(view, @selector(setLayerContentsPlacement:), 11)",
+             "objc_msgSend)(view, @selector(setLayerContentsPlacement:), 0)", PIXELS),
         kill("image-placement", "? kCAGravityBottomLeft : kCAGravityTopLeft",
              "? kCAGravityTopLeft : kCAGravityBottomLeft", PIXELS),
         kill("ungated-layer", "if (MacTextLayerCapable())\n    {\n      [self setWantsLayer:YES];",

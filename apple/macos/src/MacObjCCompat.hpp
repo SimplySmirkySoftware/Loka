@@ -51,13 +51,6 @@ typedef float CGFloat;
 - (BOOL)wantsUpdateLayer;
 - (void)updateLayer;
 - (void)viewDidChangeEffectiveAppearance;
-#if MAC_OS_X_VERSION_MAX_ALLOWED < 1060
-- (NSInteger)layerContentsPlacement;
-- (void)setLayerContentsPlacement:(NSInteger)placement;
-#define LOKA_MAC_LAYER_TOP_LEFT ((NSInteger)11)
-#else
-#define LOKA_MAC_LAYER_TOP_LEFT NSViewLayerContentsPlacementTopLeft
-#endif
 @end
 @interface CALayer (LokaTextContentsCompat)
 - (BOOL)contentsAreFlipped;

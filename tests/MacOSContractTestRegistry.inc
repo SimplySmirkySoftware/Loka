@@ -49,6 +49,8 @@ LOKA_TEST(testMacOpenFileDialogRetargetDropsResult)
 
 LOKA_TEST(testMacAttributedTextWholeLineProjection)
 LOKA_TEST(testMacTextLayerCapability)
+LOKA_TEST(testMacTextPresentationFailedReplacement)
+LOKA_TEST(testMacTextPresentationLayerActions)
 LOKA_TEST(testMacTextPresentationOwner)
 LOKA_TEST(testMacTextPresentationDeallocation)
 LOKA_TEST(testMacTextPresentationCheck)

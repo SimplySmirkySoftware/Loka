@@ -6,6 +6,7 @@
 #endif
 #if LOKA_MAC_HAS_CALAYER
 #include "../MacCardImage.hpp"
+#include <objc/message.h>
 #endif
 #include <cmath>
 #include "../MacGround.hpp"
@@ -95,6 +96,14 @@ bool MacTextLayerCapable()
 namespace
 {
 #if LOKA_MAC_HAS_CALAYER
+  /** Once per layer-capable view init. The same mixed headers documented for NSWindow can supply a newer
+      AvailabilityMacros.h beside Leopard AppKit. Placement uses the NSInteger enum ABI; top-left is 11. */
+  void SetTopLeftTextPlacement(NSView *view)
+  {
+    if ([view respondsToSelector:@selector(setLayerContentsPlacement:)])
+      ((void (*)(id, SEL, NSInteger))objc_msgSend)(view, @selector(setLayerContentsPlacement:), 11);
+  }
+
   /** A single read of the model layer and view/window geometry at preparation. */
   struct MacLayerState
   {
@@ -379,8 +388,7 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
     if (MacTextLayerCapable())
     {
       [self setWantsLayer:YES];
-      if ([self respondsToSelector:@selector(setLayerContentsPlacement:)])
-        [self setLayerContentsPlacement:LOKA_MAC_LAYER_TOP_LEFT];
+      SetTopLeftTextPlacement(self);
     }
 #endif
     if ([self respondsToSelector:@selector(setClipsToBounds:)])

@@ -1104,6 +1104,7 @@ void testMacAttributedTextSourceLateFailure()
 }
 
 #include <objc/runtime.h>
+#include <objc/message.h>
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 
@@ -4329,7 +4330,107 @@ void testMacTextLayerCapability()
     NSView *leaf = [[[leafClass alloc] initWithFrame:NSZeroRect] autorelease];
     LOKA_VERIFY(leaf && !MacTextLayerCapable());
   }
+  LOKA_VERIFY(MacTextLayerCapable()
+              == (MacTextLayerCompiledIn() && [NSView instancesRespondToSelector:@selector(wantsUpdateLayer)]));
   std::printf("leaf compiled=1 runtime L=%d\n", int(MacTextLayerCapable()));
+}
+
+void testMacTextPresentationFailedReplacement()
+{
+  HitTestPool pool;
+  NSWindow *window = PresentationWindow();
+  if (!window)
+    return;
+  const AttributedString a = LinkText("old", "A"), b = LinkText("new", "B");
+  CheckedLayout layout(window, a);
+  MacPresentedText fact;
+  LOKA_VERIFY([layout.view queryPresentedFact:&fact] && fact.value.hasSameSegmentValues(a));
+  NSAttributedString *nativeB = [[[NSAttributedString alloc] initWithString:@"new"] autorelease];
+  CGFloat extent;
+  loka::testing::failMacTextPresentationStep(1);
+  LOKA_VERIFY(![layout.view installValue:nativeB snapshot:&b extent:&extent]);
+  LOKA_VERIFY(![layout.view lokaHasInstalledText]);
+  LOKA_VERIFY(![layout.view lokaHasPresentationImage]);
+  LOKA_VERIFY(![layout.view queryPresentedFact:&fact]);
+  LOKA_VERIFY([[AttributedAccess::storage(layout.view) string] isEqualToString:@"new"]);
+}
+
+namespace
+{
+  struct LayerActionProbe
+  {
+    CALayer *target;
+    IMP gravity, contents, scale;
+    enum Write
+    {
+      GRAVITY = 1,
+      CONTENTS = 2,
+      SCALE = 4
+    };
+    unsigned observed, actionsEnabled;
+
+    /** Sample the active transaction once per setter entry on the observed layer. */
+    void record(id receiver, Write bit)
+    {
+      if (receiver == this->target)
+      {
+        this->observed |= bit;
+        if (![[CATransaction valueForKey:kCATransactionDisableActions] boolValue])
+          this->actionsEnabled |= bit;
+      }
+    }
+  };
+  LayerActionProbe *actionProbe;
+
+  void ObserveGravity(id receiver, SEL cmd, NSString *gravity)
+  {
+    actionProbe->record(receiver, LayerActionProbe::GRAVITY);
+    ((void (*)(id, SEL, NSString *))actionProbe->gravity)(receiver, cmd, gravity);
+  }
+  void ObserveContents(id receiver, SEL cmd, id contents)
+  {
+    actionProbe->record(receiver, LayerActionProbe::CONTENTS);
+    ((void (*)(id, SEL, id))actionProbe->contents)(receiver, cmd, contents);
+  }
+  void ObserveScale(id receiver, SEL cmd, CGFloat scale)
+  {
+    actionProbe->record(receiver, LayerActionProbe::SCALE);
+    ((void (*)(id, SEL, CGFloat))actionProbe->scale)(receiver, cmd, scale);
+  }
+} // namespace
+
+void testMacTextPresentationLayerActions()
+{
+  HitTestPool pool;
+  NSWindow *window = PresentationWindow();
+  if (!window)
+    return;
+  CheckedLayout layout(window, LinkText("writes", "A"));
+  CALayer *layer = [layout.view layer];
+  Class cls = object_getClass(layer);
+  LayerActionProbe probe = {
+    layer,
+    class_getMethodImplementation(cls, @selector(setContentsGravity:)),
+    class_getMethodImplementation(cls, @selector(setContents:)),
+    class_getMethodImplementation(cls, @selector(setContentsScale:)),
+    0,
+    0
+  };
+  [CATransaction begin];
+  [CATransaction setValue:(id)kCFBooleanFalse forKey:kCATransactionDisableActions];
+  LOKA_VERIFY(![[CATransaction valueForKey:kCATransactionDisableActions] boolValue]);
+  actionProbe = &probe;
+  {
+    MacNativeRefusal gravity(@selector(setContentsGravity:), (IMP)ObserveGravity, cls);
+    MacNativeRefusal contents(@selector(setContents:), (IMP)ObserveContents, cls);
+    MacNativeRefusal scale(@selector(setContentsScale:), (IMP)ObserveScale, cls);
+    [layout.view updateLayer];
+  }
+  actionProbe = 0;
+  LOKA_VERIFY(probe.observed == (LayerActionProbe::GRAVITY | LayerActionProbe::CONTENTS | LayerActionProbe::SCALE));
+  LOKA_VERIFY(probe.actionsEnabled == 0);
+  LOKA_VERIFY(![[CATransaction valueForKey:kCATransactionDisableActions] boolValue]);
+  [CATransaction commit];
 }
 
 void testMacTextPresentationOwner()
@@ -4718,7 +4819,7 @@ void testMacTextPresentationIntervals()
   VerifyAttributedChildAssertion("nestedDisplay", "testMacTextPresentationIntervals", "occupied_");
   VerifyAttributedChildAssertion("widthDuringHit", "testMacTextPresentationIntervals", "occupied_");
 #else
-  std::puts("[skip] lifecycle audit assertions disabled");
+  std::puts("[skip] interval death pins require LOKA_LIFECYCLE_AUDIT and enabled assertions");
 #endif
 }
 
@@ -4862,7 +4963,8 @@ void testMacTextPresentationPixels()
   std::puts(scale == 1 ? "[skip] scale 2 on this window" : "[skip] scale 1 on this window");
   std::puts("[skip] physical display scale transition on this single-window fixture");
   LOKA_VERIFY([[layer contentsGravity] isEqualToString:flipped ? kCAGravityBottomLeft : kCAGravityTopLeft]);
-  LOKA_VERIFY([view layerContentsPlacement] == 11);
+  LOKA_VERIFY([view respondsToSelector:@selector(layerContentsPlacement)]);
+  LOKA_VERIFY(((NSInteger(*)(id, SEL))objc_msgSend)(view, @selector(layerContentsPlacement)) == 11);
   std::vector<NSRect> boxes;
   for (NSUInteger g = 0; g < [layout.manager numberOfGlyphs]; ++g)
   {
@@ -4973,11 +5075,10 @@ namespace
   }
   void FirstOrdinaryCandidate(NSWindow *window, AttributedTextNode &node, const char *host)
   {
+    const NSPoint point = FirstLinkPoint(node);
+    std::fprintf(stderr, "Darwin %d %s first ordinary display\n", loka::dsl::testing::DarwinMajor(), host);
     [window displayIfNeeded];
-    NSView *view = AttributedAccess::view(AttributedContext(node));
-    [view displayIfNeeded];
-    std::printf("Darwin %d %s first ordinary display\n", loka::dsl::testing::DarwinMajor(), host);
-    Candidate(AttributedContext(node), FirstLinkPoint(node), "destination");
+    Candidate(AttributedContext(node), point, "destination");
   }
 } // namespace
 
