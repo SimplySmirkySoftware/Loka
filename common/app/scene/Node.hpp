@@ -1756,6 +1756,18 @@ namespace loka
         loka::dsl::CompositionList<NodeDefinitionBase> children_;
       };
 
+      /** Borrows the props and metadata used to construct a childless clone candidate. */
+      template <class D> class CloneShell
+      {
+        template <class P, class N, class Derived> friend struct NestableNodeDefinition;
+        typedef NodeDefinition<typename D::PropsType, typename D::NodeType> Source;
+        explicit CloneShell(const Source &source)
+            : source_(source)
+        {
+        }
+        const Source &source_;
+      };
+
       template <class PropsT, class NodeT, class DerivedT>
       struct NestableNodeDefinition : public NodeDefinition<PropsT, NodeT>,
                                       public NestableDefinitionBase,
@@ -1763,6 +1775,13 @@ namespace loka
       {
         typedef NodeDefinition<PropsT, NodeT> BaseType;
         using NestableDslMixin<DerivedT>::operator<<;
+
+      protected:
+        explicit NestableNodeDefinition(const CloneShell<DerivedT> &shell)
+            : BaseType(shell.source_),
+              NestableDefinitionBase()
+        {
+        }
 
         NestableNodeDefinition()
             : BaseType(),
@@ -1776,15 +1795,16 @@ namespace loka
         {
         }
 
-        /** By-value copy cannot report refusal; children remain empty on failure.
-            Refusal-capable callers must use clone(). */
+        /** On child refusal a by-value copy keeps the source props and metadata
+            and has no children. Use clone() to detect refusal. */
         NestableNodeDefinition(const NestableNodeDefinition &other)
-            : BaseType(),
+            : BaseType(static_cast<const BaseType &>(other)),
               NestableDefinitionBase()
         {
-          this->assignFromDefinition(other);
+          this->replaceChildrenFrom(other);
         }
 
+      public:
         NestableNodeDefinition &operator=(const NestableNodeDefinition &other)
         {
           if (this != &other)
@@ -1807,17 +1827,12 @@ namespace loka
         typedef DerivedT CloneType;
         virtual NodeDefinitionBase *clone() const
         {
-          DerivedT *copy = new DerivedT();
-          if (!copy)
-          {
+          loka::core::OwnedDef<NestableNodeDefinition> copy(new DerivedT(CloneShell<DerivedT>(*this)));
+          if (!copy.isSet())
             return 0;
-          }
-          if (!copy->assignFromDefinition(*this))
-          {
-            delete copy;
+          if (!copy->replaceChildrenFrom(*this))
             return 0;
-          }
-          return copy;
+          return copy.take();
         }
 
       protected:

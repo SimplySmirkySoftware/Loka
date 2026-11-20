@@ -70,6 +70,10 @@ namespace loka
                             public scene::TestIdDslMixin<GridDefinition>
     {
       typedef scene::NestableNodeDefinition<GridProps, GridNode, GridDefinition> BaseType;
+      explicit GridDefinition(const scene::CloneShell<GridDefinition> &shell)
+          : BaseType(shell)
+      {
+      }
       using BaseType::operator<<;
       GridDefinition()
           : BaseType()

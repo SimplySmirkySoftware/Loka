@@ -186,6 +186,10 @@ namespace loka
           public scene::TestIdDslMixin<RibbonControlDefinition>
     {
       typedef scene::NestableNodeDefinition<StackProps, StackNode, RibbonControlDefinition> BaseType;
+      explicit RibbonControlDefinition(const scene::CloneShell<RibbonControlDefinition> &shell)
+          : BaseType(shell)
+      {
+      }
       RibbonControlDefinition()
           : BaseType(StackProps(STACK_AXIS_ROW))
       {
@@ -224,6 +228,15 @@ namespace loka
       struct GroupFrameDefinition
           : public scene::NestableNodeDefinition<RibbonGroupProps, RibbonGroupNode, GroupFrameDefinition>
       {
+        typedef scene::NestableNodeDefinition<RibbonGroupProps, RibbonGroupNode, GroupFrameDefinition> BaseType;
+        GroupFrameDefinition()
+            : BaseType()
+        {
+        }
+        explicit GroupFrameDefinition(const scene::CloneShell<GroupFrameDefinition> &shell)
+            : BaseType(shell)
+        {
+        }
       };
     };
     typedef RibbonControlDefinition RibbonControl;

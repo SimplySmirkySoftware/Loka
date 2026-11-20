@@ -61,6 +61,10 @@ namespace loka
                                 public scene::TestIdDslMixin<FragmentDefinition>
     {
       typedef scene::NestableNodeDefinition<FragmentProps, FragmentNode, FragmentDefinition> BaseType;
+      explicit FragmentDefinition(const scene::CloneShell<FragmentDefinition> &shell)
+          : BaseType(shell)
+      {
+      }
       using BaseType::operator<<;
       FragmentDefinition()
           : BaseType()

@@ -245,6 +245,10 @@ namespace loka
                                             BoundarySectionNode,
                                             BoundarySectionDefinition>
           BaseType;
+      explicit BoundarySectionDefinition(const scene::CloneShell<BoundarySectionDefinition> &shell)
+          : BaseType(shell)
+      {
+      }
       using BaseType::operator<<;
 
       BoundarySectionDefinition()
@@ -265,9 +269,8 @@ namespace loka
       }
 
       BoundarySectionDefinition(const BoundarySectionDefinition &other)
-          : BaseType(other.props)
+          : BaseType(other)
       {
-        this->assignFromDefinition(other);
       }
 
       BoundarySectionDefinition &operator=(const BoundarySectionDefinition &other)
@@ -280,17 +283,7 @@ namespace loka
       virtual scene::NodeDefinitionBase *clone() const
       {
         this->assertValidIdentity();
-        BoundarySectionDefinition *copy = new BoundarySectionDefinition(this->props);
-        if (!copy)
-        {
-          return 0;
-        }
-        if (!copy->assignFromDefinition(*this))
-        {
-          delete copy;
-          return 0;
-        }
-        return copy;
+        return BaseType::clone();
       }
 
       virtual scene::Node *create() const

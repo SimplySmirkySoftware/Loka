@@ -330,6 +330,10 @@ namespace loka
       struct WindowCanvas : scene::NestableNodeDefinition<WindowCanvasProps<T>, WindowCanvasNode<T>, WindowCanvas<T> >
       {
         typedef scene::NestableNodeDefinition<WindowCanvasProps<T>, WindowCanvasNode<T>, WindowCanvas<T> > Base;
+        explicit WindowCanvas(const scene::CloneShell<WindowCanvas> &shell)
+            : Base(shell)
+        {
+        }
         WindowCanvas()
             : Base(WindowCanvasProps<T>())
         {
