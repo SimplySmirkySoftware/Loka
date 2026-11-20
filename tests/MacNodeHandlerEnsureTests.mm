@@ -4529,8 +4529,12 @@ void testMacTextPresentationCheck()
   layout.checked(in, MAC_HIT_REFUSED);
   [layer setTransform:CATransform3DIdentity];
   NSRect bounds = [view bounds];
-  [view setBoundsSize:NSMakeSize(bounds.size.width + 1, bounds.size.height)];
+  // Resize the frame, not the bounds alone: a bounds size unequal to the frame makes AppKit
+  // scale the layer transform as well (measured on Tahoe 26.7.1), which would hide the size field.
+  const NSSize frame = [view frame].size;
+  [view setFrameSize:NSMakeSize(frame.width + 1, frame.height)];
   layout.checked(in, MAC_HIT_REFUSED);
+  [view setFrameSize:frame];
   [view setBounds:bounds];
   layout.checked(in, MAC_HIT_SOURCE);
   [view setBoundsOrigin:in];
