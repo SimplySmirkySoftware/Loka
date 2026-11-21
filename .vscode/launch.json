@@ -2,6 +2,15 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Run (Linux DocumentSite)",
+      "type": "lldb-dap",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/Testing/DocumentSite",
+      "args": ["${workspaceFolder}/build/document-site", "${workspaceFolder}/example/DocumentSite/site.css"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Build: Linux DocumentSite"
+    },
+    {
       "name": "Loka: Preview Extension",
       "type": "extensionHost",
       "request": "launch",

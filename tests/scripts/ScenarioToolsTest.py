@@ -1003,6 +1003,7 @@ class StandaloneDebugEntryPointTest(unittest.TestCase):
             {
                 # The VS Code preview extension host (Web rail page 5), not an example.
                 "Loka: Preview Extension",
+                "Run (Linux DocumentSite)",
                 "Run (macOS HelloWorld)",
                 "Run (macOS MineSweeper)",
                 "Run (macOS SimpleViewer)",

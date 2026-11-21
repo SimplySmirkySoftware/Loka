@@ -2,6 +2,14 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Build: Linux DocumentSite",
+      "type": "shell",
+      "command": "cmake --preset testing && cmake --build build/Testing --target DocumentSite && cmake -E make_directory build/document-site",
+      "options": {"cwd": "${workspaceFolder}"},
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
       "label": "Build: Loka Preview Extension",
       "type": "shell",
       "command": "npm run build",
