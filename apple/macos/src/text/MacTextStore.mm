@@ -469,12 +469,10 @@ void MacTextStore::commitMarkedText()
   const bool marked = [view hasMarkedText];
   if (!this->matches(view) || !marked)
     return;
-  [view unmarkText];
-  if (!this->matches(view))
-    return;
-#ifdef LOKA_LIFECYCLE_AUDIT
-  assert(![view hasMarkedText]);
-#endif
+  // unmarkText keeps the text but does not tell the input method (Tahoe 26.7.1): a live
+  // composition would come back when the view is focused again and insert its text a
+  // second time. Settling also discards the input method's own composition.
+  this->settleComposition();
 }
 
 TextChunkResult

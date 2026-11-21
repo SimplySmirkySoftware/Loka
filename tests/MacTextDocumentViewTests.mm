@@ -1413,6 +1413,16 @@ namespace
     [panel release];
   }
 } // namespace
+namespace
+{
+  unsigned commandDiscards = 0;
+  IMP commandDiscardImpl = 0;
+  void countCommandDiscard(id self, SEL cmd)
+  {
+    ++commandDiscards;
+    ((void (*)(id, SEL))commandDiscardImpl)(self, cmd);
+  }
+} // namespace
 void testMacTextViewCompositionCommands()
 {
   const char *names[] = {"background document window", "document sheet", "key panel"};
@@ -1456,6 +1466,15 @@ void testMacTextViewCompositionCommands()
       NSString *body = [[v string] copy];
       const unsigned long revision = doc.fact()->get().textRevision();
       [f.phase begin:names[mode] row:&f.row()];
+      // unmarkText does not reach the input method; the command must also discard its
+      // composition, or a real IME re-inserts the same text when the view is focused again.
+      id context = [v respondsToSelector:@selector(inputContext)] ? [v inputContext] : nil;
+      Method discard = context ? class_getInstanceMethod([context class], @selector(discardMarkedText)) : 0;
+      commandDiscards = 0;
+      if (discard)
+        commandDiscardImpl = method_setImplementation(discard, reinterpret_cast<IMP>(&countCommandDiscard));
+      else
+        std::printf("[skip] %s: input context unavailable on this OS\n", names[mode]);
       LOKA_VERIFY(runEditCommand(f, v) && writes == 1 && [f.phase characters] && [f.phase notes]);
       LOKA_VERIFY([[v string] isEqual:body] && revision + 1 == doc.fact()->get().textRevision());
       [body release];
@@ -1465,6 +1484,12 @@ void testMacTextViewCompositionCommands()
       // A second commit reads no edit; its only write may drop the changed-range hint of the first.
       LOKA_VERIFY(f.app.commitTextInput() == TEXT_INPUT_SETTLED && writes <= 2 && edits == [f.phase characters]
                   && notes == [f.phase notes]);
+      if (discard)
+      {
+        method_setImplementation(discard, commandDiscardImpl);
+        // One discard for the marked command; the unmarked second commit sends none.
+        LOKA_VERIFY(commandDiscards == 1);
+      }
       TextPosition start, end;
       LOKA_VERIFY(doc.fact()->get().state() == settled.state()
                   && doc.fact()->get().textRevision() == settled.textRevision()

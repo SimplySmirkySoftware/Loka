@@ -291,6 +291,11 @@ documented behavior that no Loka probe has observed yet.
     when the call returns.
   - `[[view inputContext] discardMarkedText]` changes neither the body nor
     the marked text.
+  - `unmarkText` does not call `discardMarkedText`: the input method keeps
+    its own composition. With a real Japanese input method that composition
+    comes back when the view is focused again and inserts the same text a
+    second time (owner hand check, 4m-3). So the macOS `commitMarkedText` also
+    discards, as `settleTextComposition` does.
   - The storage delegate reports an edited range and a change in length for
     every change, Loka's own writes included.
   - `textDidChange:` fires for typing and for `unmarkText`. It does not fire
