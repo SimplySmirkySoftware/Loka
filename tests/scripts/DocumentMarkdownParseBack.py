@@ -3,21 +3,38 @@
 from itertools import groupby
 import argparse
 import ctypes
+import json
 import subprocess
 import sys
 
 def projection(parser, source):
-    tokens = parser.parse(source)
-    if not tokens:
-        return "", []
-    if any(t.type == "html_block" for t in tokens):
-        raise ValueError("html_block")
-    if len(tokens) == 1 and tokens[0].type == "fence" and not tokens[0].info:
-        return "c", [(c, 0, "") for c in tokens[0].content]
-    opening, inline, closing = tokens
-    kind = {"paragraph_open": "p", "heading_open": "h"}[opening.type]
-    if inline.type != "inline" or closing.tag != opening.tag or (kind == "h" and opening.tag != "h2"):
-        raise ValueError("unexpected block")
+    forest = []
+    stack = [("root", forest)]
+    for token in parser.parse(source):
+        if token.hidden and token.tag == "p" and stack[-1][0] == "li":
+            continue
+        if token.type == "inline":
+            stack[-1][1].extend(inline_glyphs(token))
+        elif token.type == "fence" and not token.info:
+            stack[-1][1].append(("pre", plain_glyphs(token.content)))
+        elif token.nesting == 1:
+            node = (token.tag, [])
+            stack[-1][1].append(node)
+            stack.append(node)
+        elif token.nesting == -1 and stack[-1][0] == token.tag:
+            stack.pop()
+        else:
+            raise ValueError(token.type)
+    if len(stack) != 1:
+        raise ValueError("unclosed block")
+    return forest
+
+
+def plain_glyphs(text):
+    return [(c, 0, "") for c in text]
+
+
+def inline_glyphs(inline):
     marks = []
     target = ""
     result = []
@@ -38,7 +55,7 @@ def projection(parser, source):
             result.extend((c, flags, target) for c in ("\n" if t == "hardbreak" else token.content))
         else:
             raise ValueError(t)
-    return kind, result
+    return result
 
 
 def decode(value):
@@ -66,11 +83,47 @@ def markdown_parser(markdown_it):
     return parser
 
 
+def expected_leaf(kind, glyphs):
+    return [({"h": "h2", "c": "pre", "p": "p"}[kind], glyphs)] if glyphs or kind != "p" else []
+
+
+def authored_forest(nodes):
+    forest = []
+    for tag, value in nodes:
+        if tag in ("blockquote", "ul"):
+            children = authored_forest(value)
+            if children:
+                forest.append((tag, children))
+        elif value or tag in ("h2", "pre"):
+            if tag == "h2":
+                value = value.replace("\n", " ")
+            if tag == "pre" and value and not value.endswith("\n"):
+                value += "\n"
+            forest.append((tag, plain_glyphs(value)))
+    return forest
+
+
+def containers(args, field, parse):
+    command = [args.executable, "--document-container-cases", str(args.seed), str(args.count)]
+    rows = subprocess.check_output(command, encoding="utf-8").splitlines()
+    for index, row in enumerate(rows):
+        fields = row.split("\t")
+        expected = authored_forest(json.loads(fields[0]))
+        source = decode(fields[field])
+        actual = parse(source)
+        if actual != expected:
+            print(f"case {index}, {source!r}, expected {expected!r}, got {actual!r}")
+            return 1
+    print(f"seed {args.seed}, {len(rows)} authored container forests, zero mismatches")
+    return int(len(rows) != args.count)
+
+
 def main():
     cli = argparse.ArgumentParser(description=__doc__)
     cli.add_argument("executable")
     cli.add_argument("seed", type=unsigned_decimal)
     cli.add_argument("count", type=unsigned_decimal)
+    cli.add_argument("--containers", action="store_true")
     args = cli.parse_args()
     try:
         import markdown_it
@@ -81,7 +134,12 @@ def main():
         sys.exit(77)
     parser = markdown_parser(markdown_it)
     print(f"markdown_it {markdown_it.__version__}, seed {args.seed}", flush=True)
-    data = subprocess.check_output([args.executable, "--document-markdown-cases", str(args.seed), str(args.count)], text=True)
+    # Stock maxNesting drops the innermost text at twenty quotes.
+    if any(t.type == "inline" and t.content == "x" for t in parser.parse("> " * 20 + "x\n")):
+        raise ValueError("stock nesting-limit fixture changed")
+    if args.containers:
+        return containers(args, 1, lambda source: projection(parser, source))
+    data = subprocess.check_output([args.executable, "--document-markdown-cases", str(args.seed), str(args.count)], encoding="utf-8")
     rows = data.splitlines()
     failures = refusals = 0
     for i, line in enumerate(rows):
@@ -107,7 +165,7 @@ def main():
                 actual = projection(parser, source)
             except (ValueError, KeyError, IndexError) as error:
                 actual = str(error)
-        if actual != (kind if expected or kind != "p" else "", expected):
+        if actual != expected_leaf(kind, expected):
             failures += 1
             if failures <= 5:
                 print(i, repr(source), "expected", expected, "got", actual)

@@ -1,28 +1,39 @@
 #!/usr/bin/env python3
-"""Compare the HTML5 fragment, authored projection and CommonMark tokens for each generated block."""
+"""Compare each parsed HTML5 fragment with its independently authored forest."""
 import argparse
 from itertools import groupby
 import subprocess
 import sys
 
-from DocumentMarkdownParseBack import decode, expected_glyphs, markdown_parser, projection, unsigned_decimal
+from DocumentMarkdownParseBack import containers, decode, expected_glyphs, expected_leaf, unsigned_decimal
 
 
 def html_projection(html5lib, source):
     fragment = html5lib.parseFragment(source, container="div", namespaceHTMLElements=False)
-    if fragment.text or len(fragment) > 1:
-        raise ValueError("unexpected fragment content")
-    if not len(fragment):
-        return "", [], []
-    block = fragment[0]
-    if block.tail != "\n":
-        raise ValueError("missing block separator")
-    if block.tag == "pre":
-        if (len(block) != 1 or block.text or block[0].tag != "code" or block[0].tail or len(block[0])):
-            raise ValueError("unexpected code block")
-        return "c", [(c, 0, "") for c in block[0].text or ""], []
+    def blocks(parent, lead=""):
+        # The fragment root carries no text; an emitted container carries exactly its formatting LF.
+        if (parent.text or "") != lead:
+            raise ValueError("unexpected container text")
+        result = []
+        for block in parent:
+            if block.tail != "\n":
+                raise ValueError("missing block separator")
+            if block.tag in ("ul", "blockquote"):
+                value = blocks(block, "\n")
+            elif block.tag == "pre":
+                if len(block) != 1 or block.text or block[0].tag != "code" or block[0].tail or len(block[0]):
+                    raise ValueError("unexpected code block")
+                value = [(c, 0, "") for c in block[0].text or ""]
+            elif block.tag in ("h2", "li", "p"):
+                value = inline_glyphs(block)
+            else:
+                raise ValueError(block.tag)
+            result.append((block.tag, value))
+        return result
+    return blocks(fragment)
 
-    kind = {"p": "p", "h2": "h"}[block.tag]  # The generator authors level 2.
+
+def inline_glyphs(block):
     rows, anchors = [], []
 
     def text(value, flags, target):
@@ -43,7 +54,9 @@ def html_projection(html5lib, source):
             text(child.tail, flags, target)
 
     visit(block, 0, "")
-    return kind, rows, anchors
+    if sorted(anchors) != list(anchor_ranges(rows)):
+        raise ValueError("anchor boundaries")
+    return rows
 
 
 def anchor_ranges(rows):
@@ -60,6 +73,7 @@ def main():
     cli.add_argument("executable")
     cli.add_argument("seed", type=unsigned_decimal)
     cli.add_argument("count", type=unsigned_decimal)
+    cli.add_argument("--containers", action="store_true")
     args = cli.parse_args()
     try:
         import html5lib
@@ -68,34 +82,23 @@ def main():
             raise
         print("[skip] html5lib not installed")
         return 77
-    try:
-        import markdown_it
-    except ModuleNotFoundError as error:
-        if error.name != "markdown_it":
-            raise
-        print("[skip] markdown_it token comparison")
-        parser = None
-    else:
-        parser = markdown_parser(markdown_it)
+    if args.containers:
+        return containers(args, 2, lambda source: html_projection(html5lib, source))
     lines = subprocess.check_output([args.executable, "--document-html-cases", str(args.seed),
-                                     str(args.count)], text=True).splitlines()
+                                     str(args.count)], encoding="utf-8").splitlines()
     comparisons = 0
     for i, line in enumerate(lines):
         kind, glyphs, md, html = line.split("\t")
         expected = expected_glyphs(glyphs)
-        block = kind if expected or kind != "p" else ""
         try:
-            actual, rows, anchors = html_projection(html5lib, decode(html))
-            if (actual, rows) != (block, expected) or anchors != list(anchor_ranges(expected)):
-                raise ValueError((actual, rows, anchors))
-            if parser and md != "REFUSED":
-                if projection(parser, decode(md)) != (actual, rows):
-                    raise ValueError("CommonMark token mismatch")
-                comparisons += 1
+            actual = html_projection(html5lib, decode(html))
+            if actual != expected_leaf(kind, expected):
+                raise ValueError(actual)
+            comparisons += 1
         except (ValueError, IndexError, KeyError) as error:
             print(f"seed {args.seed}, case {i}: {line!r}: {error}")
             return 1
-    print(f"seed {args.seed}, {len(lines)} HTML fragments, {comparisons} token comparisons")
+    print(f"seed {args.seed}, {len(lines)} HTML fragments, {comparisons} authored forest comparisons")
     return int(len(lines) != args.count)
 
 

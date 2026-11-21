@@ -47,6 +47,7 @@
 #include "MacImageViewTests.hpp"
 #include "MacTextEditorTests.hpp"
 #include "MacTextStoreTests.hpp"
+#include "MacTextDocumentViewTests.hpp"
 #include "MacInputDoorTests.hpp"
 #include "MacFocusTests.hpp"
 #endif
@@ -211,6 +212,7 @@
 #include "DocumentVocabularyTests.hpp"
 #include "DocumentHeadlessTests.hpp"
 #include "DocumentMarkdownTests.hpp"
+#include "DocumentContainerTests.hpp"
 #include "DocumentHtmlTests.hpp"
 #include "TextSpanWin32Tests.hpp"
 #include "RectSurfaceSeatExtentTests.hpp"
