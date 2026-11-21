@@ -242,6 +242,8 @@ private:
                          bool applyProjection);
   bool refuseNarrowingInScrollScope(int resultY);
   void refuseScrollViewShortRange();
+  /** Once per completed layout, display each view's own visible rows on W hosts. */
+  void repaintAfterPlacement();
   void performLayout(int clientWidth, int clientHeight, bool rebuildContexts);
   void clearContexts();
   void clearNodeContexts(loka::app::scene::Node *node);
@@ -281,6 +283,9 @@ private:
   TextFontTable textFonts_;
   PlatformContext *const platformContext_; // Ancestor outlives controller and captured Images.
   void *rootView_;
+#ifdef LOKA_LIFECYCLE_AUDIT
+  bool passRepainting_;
+#endif
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;
   loka::app::scene::PlatformLayoutHandlerRegistry layoutHandlerRegistry_;
   loka::app::scene::PlatformNodeHandlerRegistry nodeHandlerRegistry_;

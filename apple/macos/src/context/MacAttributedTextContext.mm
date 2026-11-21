@@ -163,6 +163,126 @@ namespace
   }
 #endif
 
+  /** Once per installed window-context draw, subtract this view's k damage rects from at most 16 pieces. */
+  bool MacRectsCover(const NSRect *rects, NSInteger count, NSRect target)
+  {
+    if (NSIsEmptyRect(target))
+      return false;
+    enum
+    {
+      capacity = 16
+    };
+    NSRect first[capacity], second[capacity];
+    NSRect *remaining = first, *next = second;
+    remaining[0] = target;
+    unsigned pieces = 1;
+    for (NSInteger r = 0; r < count && pieces; ++r)
+    {
+      unsigned used = 0;
+      for (unsigned i = 0; i < pieces; ++i)
+      {
+        const NSRect p = remaining[i], cut = NSIntersectionRect(p, rects[r]);
+        if (NSIsEmptyRect(cut))
+        {
+          if (used == capacity)
+            return false;
+          next[used++] = p;
+          continue;
+        }
+        const NSRect strips[] = {NSMakeRect(NSMinX(p), NSMinY(p), NSWidth(p), NSMinY(cut) - NSMinY(p)),
+                                 NSMakeRect(NSMinX(p), NSMaxY(cut), NSWidth(p), NSMaxY(p) - NSMaxY(cut)),
+                                 NSMakeRect(NSMinX(p), NSMinY(cut), NSMinX(cut) - NSMinX(p), NSHeight(cut)),
+                                 NSMakeRect(NSMaxX(cut), NSMinY(cut), NSMaxX(p) - NSMaxX(cut), NSHeight(cut))};
+        for (unsigned j = 0; j < 4; ++j)
+        {
+          if (!NSIsEmptyRect(strips[j]))
+          {
+            if (used == capacity)
+              return false;
+            next[used++] = strips[j];
+          }
+        }
+      }
+      pieces = used;
+      NSRect *swap = remaining;
+      remaining = next;
+      next = swap;
+    }
+    return pieces == 0;
+  }
+
+  /** Native evidence for one leaf. Only the enclosing owner retains the image. */
+  struct MacPresentedRecord
+  {
+    enum Path
+    {
+      NONE,
+      LAYER,
+      WINDOW
+    } path;
+    NSSize size;
+#if LOKA_MAC_HAS_CALAYER
+    CGImageRef image;
+    CGFloat scale;
+    NSString *gravity;
+#endif
+    /** One zero-initialized value per reset or factory call, no native reads. */
+    static MacPresentedRecord None()
+    {
+      MacPresentedRecord record = {};
+      return record;
+    }
+    /** One size copy per covering draw, no row walk. */
+    static MacPresentedRecord Window(NSSize size)
+    {
+      MacPresentedRecord record = None();
+      record.path = WINDOW;
+      record.size = size;
+      return record;
+    }
+#if LOKA_MAC_HAS_CALAYER
+    /** One borrowed tuple per successful layer display, no row walk. */
+    static MacPresentedRecord Layer(CGImageRef image, NSSize size, CGFloat scale, NSString *gravity)
+    {
+      MacPresentedRecord record = None();
+      record.path = LAYER;
+      record.image = image;
+      record.size = size;
+      record.scale = scale;
+      record.gravity = gravity;
+      return record;
+    }
+#endif
+  };
+
+#if defined(TEST_BUILD) && LOKA_MAC_HAS_CALAYER
+  // Scoped to the synthetic owner's same-image replacement. Observe the actual CG calls.
+  char *imageOperationTrace;
+  /** One bounded event per test-build image operation during the synthetic replacement. */
+  void RecordImageOperation(char event)
+  {
+    if (!imageOperationTrace)
+      return;
+    if (!imageOperationTrace[0])
+      imageOperationTrace[0] = event;
+    else
+      imageOperationTrace[1] = imageOperationTrace[1] ? '!' : event;
+  }
+  /** Once per owner retain in test builds, append one event only during the order pin. */
+  CGImageRef TraceImageRetain(CGImageRef image)
+  {
+    RecordImageOperation('+');
+    return CGImageRetain(image);
+  }
+  /** Once per owner release in test builds, append one event only during the order pin. */
+  void TraceImageRelease(CGImageRef image)
+  {
+    RecordImageOperation('-');
+    CGImageRelease(image);
+  }
+#define CGImageRetain TraceImageRetain
+#define CGImageRelease TraceImageRelease
+#endif
   /** View-owned deliberate twin of scene::PaintFact<T> and Toolbox presented_.
       Invalidation releases the retained image. Last value release can destroy this text's segments. */
   class MacTextPresentation
@@ -170,9 +290,7 @@ namespace
   public:
     MacTextPresentation()
         : installed_(NOTHING_INSTALLED),
-#if LOKA_MAC_HAS_CALAYER
-          image_(0),
-#endif
+          record_(MacPresentedRecord::None()),
 #ifdef LOKA_LIFECYCLE_AUDIT
           occupied_(false),
 #endif
@@ -181,7 +299,7 @@ namespace
     }
     ~MacTextPresentation()
     {
-      this->dropImage();
+      this->dropPresented();
     }
     /** One check before each invalidating mutation or guarded interval. */
     void assertIdle() const
@@ -218,21 +336,56 @@ namespace
       Interval(const Interval &);
       Interval &operator=(const Interval &);
     };
-    /** One handle release per invalidation, replacement or deallocation. */
-    void dropImage()
+    /** Sole writer, at most one retain and one release per commit, invalidation or destructor. */
+    void replace(const MacPresentedRecord &next)
     {
 #if LOKA_MAC_HAS_CALAYER
-      if (this->image_)
-        CGImageRelease(this->image_);
-      this->image_ = 0;
+#ifdef LOKA_LIFECYCLE_AUDIT
+      assert((next.image != 0) == (next.path == MacPresentedRecord::LAYER));
 #endif
+      if (next.image)
+        CGImageRetain(next.image);
+      if (this->record_.image)
+        CGImageRelease(this->record_.image);
+#endif
+      this->record_ = next;
+    }
+    /** One reset per invalidating door, no row walk. */
+    void dropPresented()
+    {
+      this->replace(MacPresentedRecord::None());
+    }
+    /** One path check per placement or hide, at most one reset. */
+    void dropWindowPresented()
+    {
+      if (this->record_.path == MacPresentedRecord::WINDOW)
+        this->dropPresented();
+    }
+    /** One tag and size comparison per partial draw or W preparation. */
+    bool matchesWindowSize(NSSize size) const
+    {
+      return this->record_.path == MacPresentedRecord::WINDOW && NSEqualSizes(this->record_.size, size);
+    }
+    /** At most twice per press, read this leaf's tuple and copy its value handle. */
+    bool queryWindowFact(NSWindow *window, NSSize size, MacPresentedText &out) const
+    {
+      if (!window || !this->matchesWindowSize(size))
+        return false;
+      out.value = this->value_;
+      out.width = this->width_;
+      return true;
     }
 #ifdef TEST_BUILD
-    /** O(1) test observation of the retained record, independently of native contents. */
+    /** One path read per test observation, no native reads. */
+    MacPresentedRecord::Path presentedPath() const
+    {
+      return this->record_.path;
+    }
+    /** One retained pointer read per fixture observation. */
     bool hasImage() const
     {
 #if LOKA_MAC_HAS_CALAYER
-      return this->image_ != 0;
+      return this->record_.image != 0;
 #else
       return false;
 #endif
@@ -241,7 +394,7 @@ namespace
     /** Once before storage replacement, releasing any previous image and value. */
     void dropInstalled()
     {
-      this->dropImage();
+      this->dropPresented();
       this->installed_ = NOTHING_INSTALLED;
       this->value_ = loka::app::AttributedString();
     }
@@ -271,21 +424,16 @@ namespace
     void commitLayer(CGImageRef image, NSSize size, CGFloat scale, NSString *gravity)
     {
       assert(this->installed());
-      CGImageRetain(image);
-      this->dropImage();
-      this->image_ = image;
-      this->size_ = size;
-      this->scale_ = scale;
-      this->gravity_ = gravity;
+      this->replace(MacPresentedRecord::Layer(image, size, scale, gravity));
     }
     /** One tuple comparison per checked preparation. No segment or pixel walk. */
-    bool queryFact(const MacLayerState &now, MacPresentedText &out) const
+    bool queryLayerFact(const MacLayerState &now, MacPresentedText &out) const
     {
-      if (!this->image_ || !now.layer || now.contents != (id)this->image_ || now.scale != this->scale_
-          || now.windowScale != this->scale_ || !NSEqualSizes(now.bounds.size, this->size_)
-          || !NSEqualPoints(now.bounds.origin, NSZeroPoint)
+      if (this->record_.path != MacPresentedRecord::LAYER || !now.layer || now.contents != (id)this->record_.image
+          || now.scale != this->record_.scale || now.windowScale != this->record_.scale
+          || !NSEqualSizes(now.bounds.size, this->record_.size) || !NSEqualPoints(now.bounds.origin, NSZeroPoint)
           || !CGRectEqualToRect(now.contentsRect, CGRectMake(0, 0, 1, 1))
-          || ![now.gravity isEqualToString:this->gravity_] || !now.identity)
+          || ![now.gravity isEqualToString:this->record_.gravity] || !now.identity)
         return false;
       out.value = this->value_;
       out.width = this->width_;
@@ -299,12 +447,7 @@ namespace
       VALUE_INSTALLED
     } installed_;
     loka::app::AttributedString value_;
-#if LOKA_MAC_HAS_CALAYER
-    CGImageRef image_;
-    NSSize size_;
-    CGFloat scale_;
-    NSString *gravity_; // Borrowed CA constant.
-#endif
+    MacPresentedRecord record_;
 #ifdef LOKA_LIFECYCLE_AUDIT
     bool occupied_;
 #endif
@@ -312,9 +455,54 @@ namespace
     MacTextPresentation(const MacTextPresentation &);
     MacTextPresentation &operator=(const MacTextPresentation &);
   };
+#if defined(TEST_BUILD) && LOKA_MAC_HAS_CALAYER
+#undef CGImageRetain
+#undef CGImageRelease
+#endif
 } // namespace
 
 #ifdef TEST_BUILD
+/** Exercise the factories and sole owner on two test images once. The caller keeps the first alive;
+    the second transfers its create retain here so destruction can be witnessed by its provider. */
+bool MacTestPresentedRecord(CGImageRef first, CGImageRef second, CFIndex &delta, char (&order)[3])
+{
+#if LOKA_MAC_HAS_CALAYER
+  const NSSize size = NSMakeSize(12, 34);
+  const MacPresentedRecord none = MacPresentedRecord::None(), window = MacPresentedRecord::Window(size),
+                           layer = MacPresentedRecord::Layer(first, size, 2, kCAGravityTopLeft);
+  {
+    MacTextPresentation countOwner;
+    countOwner.replace(layer);
+    const CFIndex before = CFGetRetainCount(first);
+    countOwner.replace(window);
+    delta = before - CFGetRetainCount(first);
+  }
+  MacTextPresentation owner;
+  owner.replace(layer);
+  imageOperationTrace = order;
+  owner.replace(layer);
+  imageOperationTrace = 0;
+  owner.replace(MacPresentedRecord::Layer(second, size, 1, kCAGravityBottomLeft));
+  CGImageRelease(second);
+  return none.path == MacPresentedRecord::NONE && NSEqualSizes(none.size, NSZeroSize) && !none.image && !none.gravity
+         && none.scale == 0 && window.path == MacPresentedRecord::WINDOW && NSEqualSizes(window.size, size)
+         && !window.image && !window.gravity && window.scale == 0 && layer.path == MacPresentedRecord::LAYER
+         && layer.image == first && NSEqualSizes(layer.size, size) && layer.scale == 2
+         && layer.gravity == kCAGravityTopLeft;
+#else
+  (void)first;
+  (void)delta;
+  (void)order;
+  CGImageRelease(second);
+  return false;
+#endif
+}
+/** One fixed-storage subtraction per synthetic fixture. */
+bool MacTestRectsCover(const NSRect *rects, NSInteger count, NSRect target)
+{
+  return MacRectsCover(rects, count, target);
+}
+
 /** One budget calculation for each synthetic size; no allocation or native sends. */
 bool MacTestTextBudget(NSSize size, CGFloat scale)
 {
@@ -338,6 +526,8 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
   NSTextContainer *container_;
   MacTextPresentation *presentation_;
 }
+/** Called once per layout visit or hide, checking only this leaf. */
+- (void)dropWindowPresentation;
 /** One size write and record invalidation per changed width. */
 - (void)applyContainerWidth:(CGFloat)width;
 /** One storage replacement and forced layout of this leaf per install. */
@@ -360,6 +550,8 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
 - (MacTextPresentation *)presentation;
 /** Read one native tuple per checked preparation. No glyph walk. */
 - (BOOL)queryPresentedFact:(MacPresentedText *)out;
+/** Once per installed W draw, compare the ambient graphics context to this window's context. */
+- (BOOL)drawUsesWindowContext:(NSWindow *)window;
 /** One dirty band or full bitmap per draw; walks only this view's own glyphs. */
 - (void)drawTextInRect:(NSRect)band;
 @end
@@ -459,10 +651,15 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
   MacLayerState now = ReadLayerState(self, [self layer], [self window]);
   now.layer = nil;
   MacPresentedText fact;
-  return presentation_->queryFact(now, fact);
+  return presentation_->queryLayerFact(now, fact);
 #else
   return NO;
 #endif
+}
+/** One tag read per test observation. */
+- (int)lokaPresentedPath
+{
+  return presentation_->presentedPath();
 }
 /** One owner-tag read per fixture observation. */
 - (BOOL)lokaHasInstalledText
@@ -475,31 +672,42 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
   return presentation_->hasImage();
 }
 #endif
+- (void)dropWindowPresentation
+{
+  if (presentation_)
+  {
+    presentation_->assertIdle();
+    presentation_->dropWindowPresented();
+  }
+}
 /** One invalidation per AppKit window transition, including removal. */
 - (void)viewWillMoveToWindow:(NSWindow *)window
 {
   if (presentation_)
   {
     presentation_->assertIdle();
-    presentation_->dropImage();
+    presentation_->dropPresented();
   }
   [super viewWillMoveToWindow:window];
 }
 - (BOOL)queryPresentedFact:(MacPresentedText *)out
 {
-#if LOKA_MAC_HAS_CALAYER
-  if (!MacTextLayerCapable())
-    return NO;
   NSWindow *window = [self window];
   if (!window)
     return NO;
+  if (!MacTextLayerCapable())
+  {
+    if (MacLateBoundLayer(self))
+      return NO;
+    return presentation_->queryWindowFact(window, [self bounds].size, *out);
+  }
+#if LOKA_MAC_HAS_CALAYER
   CALayer *layer = [self layer];
   if (!layer || ![layer respondsToSelector:@selector(contentsScale)])
     return NO;
   const MacLayerState now = ReadLayerState(self, layer, window);
-  return presentation_->queryFact(now, *out);
+  return presentation_->queryLayerFact(now, *out);
 #else
-  (void)out;
   return NO;
 #endif
 }
@@ -521,14 +729,14 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
   MacTextPresentation::Interval interval(*presentation_);
   if (!MacTextLayerCapable() || !presentation_->installed())
   {
-    presentation_->dropImage();
+    presentation_->dropPresented();
     return;
   }
   CALayer *layer = [self layer];
   NSWindow *window = [self window];
   if (!layer || !window)
   {
-    presentation_->dropImage();
+    presentation_->dropPresented();
     return;
   }
   const NSRect bounds = [self bounds];
@@ -538,7 +746,7 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
       || ![layer respondsToSelector:@selector(contentsAreFlipped)]
       || ![layer respondsToSelector:@selector(setContentsScale:)])
   {
-    presentation_->dropImage();
+    presentation_->dropPresented();
     return;
   }
   CardImage bitmap(static_cast<int>(width), static_cast<int>(height));
@@ -554,7 +762,7 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
 #endif
   if (!wrapper)
   {
-    presentation_->dropImage();
+    presentation_->dropPresented();
     return;
   }
   CGContextTranslateCTM(graphics, 0, height);
@@ -572,7 +780,7 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
 #endif
   if (!image)
   {
-    presentation_->dropImage();
+    presentation_->dropPresented();
     return;
   }
   NSString *gravity = [layer contentsAreFlipped] ? kCAGravityBottomLeft : kCAGravityTopLeft;
@@ -602,7 +810,7 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
   if ([self appliedWidth] != width)
   {
     presentation_->assertIdle();
-    presentation_->dropImage();
+    presentation_->dropPresented();
     [[self lokaTextContainer] setContainerSize:NSMakeSize(width, kMacTextContainerHeight)];
     presentation_->publishWidth(width);
   }
@@ -700,12 +908,40 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
   *out = chars;
   return MAC_HIT_SOURCE;
 }
+/** Once per native draw, paint this leaf's glyphs. Only installed W window draws walk its damage rects. */
 - (void)drawRect:(NSRect)dirty
 {
+  if (!presentation_)
+    return;
+  MacTextPresentation::Interval drawInterval(*presentation_);
+  NSWindow *window = [self window];
   const NSRect bounds = [self bounds];
   NSRectClip(bounds);
   const NSRect band = NSOffsetRect(NSIntersectionRect(dirty, bounds), -kMacTextOrigin.x, -kMacTextOrigin.y);
   [self drawTextInRect:band];
+  if (!window || MacTextLayerCapable() || MacLateBoundLayer(self))
+    return;
+  if (!presentation_->installed() || ![self drawUsesWindowContext:window])
+    return;
+  const NSRect *rects = 0;
+  NSInteger count = 0;
+  [self getRectsBeingDrawn:&rects count:&count];
+  if (MacRectsCover(rects, count, NSIntersectionRect([self visibleRect], bounds)))
+    presentation_->replace(MacPresentedRecord::Window(bounds.size));
+  else if (!presentation_->matchesWindowSize(bounds.size))
+    presentation_->dropPresented();
+}
+- (BOOL)drawUsesWindowContext:(NSWindow *)window
+{
+  NSGraphicsContext *current = [NSGraphicsContext currentContext];
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+  return current && current == [window graphicsContext];
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 }
 - (void)drawTextInRect:(NSRect)band
 {
@@ -1103,16 +1339,17 @@ void MacAttributedTextContext::onPropsApplied()
 
 void MacAttributedTextContext::readLifecycleFactOnAttach()
 {
-  [(NSView *)this->view_ setHidden:this->node_->lifecycleFact() != loka::app::scene::NODE_FACT_ATTACHED];
+  const bool hidden = this->node_->lifecycleFact() != loka::app::scene::NODE_FACT_ATTACHED;
+  if (hidden)
+    [(LokaAttributedTextView *)this->view_ dropWindowPresentation];
+  [(NSView *)this->view_ setHidden:hidden];
 }
 
 void MacAttributedTextContext::onFactChanged(loka::app::scene::NodeLifecycleFact,
                                              loka::app::scene::NodeLifecycleFact next)
 {
-#ifdef LOKA_LIFECYCLE_AUDIT
-  if (next == loka::app::scene::NODE_FACT_RETIRED && this->view_)
-    [(LokaAttributedTextView *)this->view_ presentation]->assertIdle();
-#endif
+  if (next != loka::app::scene::NODE_FACT_ATTACHED)
+    [(LokaAttributedTextView *)this->view_ dropWindowPresentation];
   [(NSView *)this->view_ setHidden:next != loka::app::scene::NODE_FACT_ATTACHED];
   if (next == loka::app::scene::NODE_FACT_RETIRED)
   {
@@ -1159,6 +1396,8 @@ short MacAttributedTextContext::layout(loka::app::scene::IPlatformController *, 
     assert([view appliedWidth] == constraint.pt);
 #endif
   state.height = Coordinate(this->projection_.height());
+  // Deliberate twin of Win32AttributedTextContext::relayout, even at an identical frame.
+  [view dropWindowPresentation];
   loka::macos::SetMacFrame(
       view,
       this->controller()->projection().projectFrame(loka::core::Frame(state.x, state.y, state.width, state.height)));
