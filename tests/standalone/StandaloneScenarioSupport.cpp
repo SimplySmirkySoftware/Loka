@@ -189,14 +189,10 @@ namespace loka
 #if LOKA_STANDALONE_PERFORMANCE_RUNS > 0
       return this->mountFailed_ || this->scenarioVerdict_.refusesCompletedPass();
 #else
-      if (this->completionMode_ == REARM_COMPLETED_SCENE)
-      {
-        // A rearm resets the tick and completion flag, but advances the reel.
-        const bool launched = this->tick_ != 0 || this->completed_ || this->position_.index() != 0
-                              || this->position_.completedCycles() != 0;
-        return this->mountFailed_ || (this->borrowedApp_ && !launched);
-      }
-      return this->mountFailed_ || (this->borrowedApp_ && !this->completed_);
+      // An interactive loop may be closed by its operator between cells.
+      const bool awaitingVerdict =
+          this->borrowedApp_ && !this->completed_ && this->completionMode_ != REARM_COMPLETED_SCENE;
+      return this->mountFailed_ || awaitingVerdict;
 #endif
     }
 

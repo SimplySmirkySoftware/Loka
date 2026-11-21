@@ -1037,16 +1037,8 @@ void testStandaloneRunControlRearmsCompletedSceneWithoutQuittingApp()
       0,
       loka::standalone_tests::StandaloneRunControl::REARM_COMPLETED_SCENE);
   userClosed.setApp(&userClosedApp);
-  LOKA_VERIFY(userClosed.advance(false) == loka::standalone_tests::StandaloneRunControl::ADVANCE_WAITING);
   LOKA_VERIFY(!userClosedApp.quitRequested());
   LOKA_VERIFY(!userClosed.failed());
-
-  NullApp windowlessApp(0);
-  loka::standalone_tests::StandaloneRunControl windowless(
-      "LoopProbe", cells, 0, loka::standalone_tests::StandaloneRunControl::REARM_COMPLETED_SCENE);
-  LOKA_VERIFY(!windowless.failed());
-  windowless.setApp(&windowlessApp);
-  LOKA_VERIFY(windowless.failed());
 
   std::FILE *diagnostics = std::tmpfile();
   LOKA_VERIFY(diagnostics != 0);

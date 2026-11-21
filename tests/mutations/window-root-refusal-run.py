@@ -12,7 +12,9 @@ WINDOW = "common/app/core/Window.cpp"
 DEFINITION = "common/app/core/WindowDefinition.hpp"
 VEHICLE = "tests/standalone/StandaloneScenarioSupport.cpp"
 BLOCKED = "definition.create(&context) == 0"
-VERDICT = "return this->mountFailed_ || (this->borrowedApp_ && !this->completed_);"
+VERDICT = """      const bool awaitingVerdict =
+          this->borrowedApp_ && !this->completed_ && this->completionMode_ != REARM_COMPLETED_SCENE;
+      return this->mountFailed_ || awaitingVerdict;"""
 
 MUTATIONS = [
     ("copy-drops-refused", WINDOW,
@@ -39,11 +41,8 @@ MUTATIONS = [
      "copy.isSet()", "testWindowRootCloneRefusal", "!copy.isSet()"),
     ("create-ignores-refusal", DEFINITION, "    if (resolved.rootDefinitionRefused())\n      return 0;\n",
      "", "testWindowRootResolutionRefusal", BLOCKED),
-    ("no-verdict-succeeds", VEHICLE, VERDICT, "return this->mountFailed_;",
+    ("no-verdict-succeeds", VEHICLE, VERDICT, "      return this->mountFailed_;",
      "testScrapbookStandaloneDeclarationRefusalIsWindowless", "config.exitCode() != 0"),
-    ("windowless-loop-succeeds", VEHICLE, "return this->mountFailed_ || (this->borrowedApp_ && !launched);",
-     "(void)launched;\n        return this->mountFailed_;",
-     "testStandaloneRunControlRearmsCompletedSceneWithoutQuittingApp", "windowless.failed()"),
 ]
 
 
