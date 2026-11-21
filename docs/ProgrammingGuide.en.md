@@ -2381,6 +2381,28 @@ Column()
   << doc::CodeBlock("Column() << Text(\"hello\")");
 ```
 
+Include `app/doc/List.hpp` and `app/doc/Quote.hpp` to group document blocks.
+
+```cpp
+Column()
+  << (doc::List() << doc::Item("Pack water.") << doc::Item("Bring a map."))
+  << (doc::Quote() << doc::Paragraph("Leave no trace."));
+```
+
+On screen, each item has a bullet and its continuation lines align with its
+body. A quote indents its blocks. Markdown writes tight bullet lists and
+prefixes quoted lines with `>`. HTML writes `ul` with `li` children and wraps
+quoted blocks in `blockquote`. An empty item shows a bullet on screen. Both
+exports omit empty items and containers with no emitted content.
+
+Items accept inline content and belong inside a list. Lists accept only items.
+A quote accepts paragraphs, headings, code blocks, lists and other quotes.
+Ordinary layout wrappers can surround these blocks. Numbered and nested lists
+are unavailable. A mis-nested tree can display on screen, but exporting it
+returns false and preserves the destination. These rules apply from the root
+passed to the export. Both exports accept at most 16 enclosing lists and quotes
+combined.
+
 Inline content is `AttributedString`. Use `Styled` for bold, italic, and other
 styles; `doc::Link` contributes a linked segment and `doc::Code` contributes
 monospace text. The latter is a visual convention, indistinguishable from
@@ -2421,6 +2443,10 @@ already mounted subtree on the main thread, include `app/doc/Html.hpp` or
 `app/doc/Markdown.hpp` and call `doc::WriteHtml(root, out)` or
 `doc::WriteMarkdown(root, out)`. [Sample tool](../example/DocumentPage/main.cpp)
 
+To make a standalone HTML page, wrap the fragment in a document with a title
+and place it inside `main`. The two-page example links its pages with relative
+`doc::Link` destinations and shares one stylesheet. [DocumentSite](../example/DocumentSite/main.cpp)
+
 Both exits preserve the meaning of attached document blocks in declaration order.
 Ordinary controls, underline, color, and font size are omitted. Empty headings
 and code blocks are kept. Empty paragraphs are omitted. On both exits, link
@@ -2460,7 +2486,7 @@ a paragraph in a LazyView's list updates the text on screen. `For` constructs
 its items initially and does not apply later edits. Document blocks take values
 and do not accept live `State<AttributedString>*` input.
 
-Both Heading and Paragraph accept `.activatedLink(box)`. The box belongs to the
+Heading, Paragraph, and Item accept `.activatedLink(box)`. The box belongs to the
 application. A Boundary can route its result through a lifecycle-owned Flow:
 
 ```cpp

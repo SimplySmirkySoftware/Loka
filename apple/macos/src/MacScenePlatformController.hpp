@@ -16,6 +16,7 @@
 #include "app/scene/projection/PlatformNodeHandler.hpp"
 
 class PlatformContext;
+class MacTextDocumentViewContext;
 
 namespace loka
 {
@@ -50,6 +51,7 @@ namespace loka
   namespace app
   {
     struct TextStyle;
+    class TextDocumentEditorNode;
     class RectSurfaceNode;
     class ScrollViewNode;
 
@@ -148,6 +150,13 @@ public:
                                                            loka::app::scene::TextStoreRow *,
                                                            loka::app::scene::TextStoreRow *&,
                                                            loka::app::scene::TextStoreReading &);
+  MacTextDocumentViewContext *createTextViewContext(loka::app::TextDocumentEditorNode &, void *);
+  virtual bool attachTextView(loka::app::scene::TextStoreRow &,
+                              loka::app::scene::NodeContext &,
+                              const loka::app::TextViewPresentation &);
+  virtual void detachTextView(loka::app::scene::TextStoreRow &);
+  virtual void applyTextViewPresentation(loka::app::scene::TextStoreRow &, const loka::app::TextViewPresentation &);
+  virtual void settleTextComposition(loka::app::scene::TextStoreRow &);
   virtual void retireTextStore(loka::app::scene::TextStoreRow &);
   virtual bool readTextStore(loka::app::scene::TextStoreRow &, loka::app::scene::TextStoreReading &);
   virtual bool peekTextStore(loka::app::scene::TextStoreRow &);

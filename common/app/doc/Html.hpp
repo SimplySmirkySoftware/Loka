@@ -2,6 +2,7 @@
 #define LOKA_APP_DOC_HTML_HPP
 
 #include "app/doc/detail/Projection.hpp"
+#include "app/doc/detail/ContainerWriter.hpp"
 
 namespace loka
 {
@@ -68,7 +69,7 @@ namespace loka
         };
 
         /** Owns one staged fragment for the synchronous tree borrow. */
-        class HtmlReader : public BlockReader
+        class HtmlReader : public ContainerWriter<HtmlReader>
         {
           /** Cost: once per inline block, walks its projected runs and appends their escaped bytes. */
           bool inlineBlock(const AttributedString &content, bool heading, const char *tag)
@@ -79,6 +80,7 @@ namespace loka
             input.normalizeEdges();
             if (!heading && input.runs.empty())
               return true;
+            this->beginLeaf();
             this->fragment += '<';
             this->fragment += tag;
             this->fragment += '>';
@@ -107,10 +109,29 @@ namespace loka
 
         public:
           std::string fragment;
+          /** Cost: HTML needs no separator between complete elements. */
+          void separator(unsigned) {}
+          /** Cost: one opening tag per emitted container. */
+          void open(Kind kind)
+          {
+            this->fragment += kind == LIST ? "<ul>\n" : "<blockquote>\n";
+          }
+          /** Cost: one closing tag per emitted container. */
+          void close(Kind kind)
+          {
+            this->fragment += kind == LIST ? "</ul>\n" : "</blockquote>\n";
+          }
+          /** Cost: each visited item checks one parent and projects its own runs once. */
+          virtual bool read(const ItemProps &p)
+          {
+            return this->accepts(true) && this->inlineBlock(p.content, false, "li");
+          }
 
           /** Cost: the walk projects the authored content once per attached heading. */
           virtual bool read(const HeadingProps &p)
           {
+            if (!this->accepts(false))
+              return false;
             char tag[] = "h1";
             tag[1] = static_cast<char>('0' + p.level());
             return this->inlineBlock(p.content, true, tag);
@@ -118,14 +139,19 @@ namespace loka
           /** Cost: the walk projects the authored content once per attached paragraph. */
           virtual bool read(const ParagraphProps &p)
           {
+            if (!this->accepts(false))
+              return false;
             return this->inlineBlock(p.content, false, "p");
           }
           /** Cost: the walk collects and escapes the body once per attached code block. */
           virtual bool read(const CodeBlockProps &p)
           {
+            if (!this->accepts(false))
+              return false;
             std::string body;
             if (!CollectCodeBlock(p.text, body))
               return false;
+            this->beginLeaf();
             this->fragment += "<pre><code>";
             for (size_t i = 0; i < body.size(); ++i)
               AppendHtmlByte(this->fragment, body[i], false);

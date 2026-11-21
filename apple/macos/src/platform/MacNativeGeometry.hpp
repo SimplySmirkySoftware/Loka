@@ -22,6 +22,12 @@ namespace loka
       return true;
     }
 
+    /** Native-to-native frame transfer (a replacement view takes its predecessor's place); nothing is projected. */
+    inline void CopyMacFrame(NSView *to, NSView *from)
+    {
+      [to setFrame:[from frame]];
+    }
+
     /** Width is projected; AppKit's unbounded measurement height stays native. */
     inline NSRect MacMeasurementBounds(const MacLength &width)
     {

@@ -6,8 +6,7 @@ Download the [map](<https://example.org/map>)
 survey --offline
 ```
 
-Pack a notebook.
+- Pack a notebook.
+- Bring water.
 
-Bring water.
-
-Record the trail conditions.
+> Record the trail conditions.

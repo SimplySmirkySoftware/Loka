@@ -22,6 +22,7 @@ void MacRetirableContext::retireNativeObjects(void *&primary, void *&auxiliary)
   {
     return;
   }
+  // Twin of MacTextDocumentViewContext::retireScroll.
   this->controller_->queueNativeRetirement(primary, auxiliary);
   primary = 0;
   auxiliary = 0;

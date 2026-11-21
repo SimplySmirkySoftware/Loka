@@ -22,6 +22,7 @@
 #include "context/MacCardBandContext.hpp"
 #include "context/MacEditTextContext.hpp"
 #include "context/MacTextEditorContext.hpp"
+#include "context/MacTextDocumentViewContext.hpp"
 #include "context/MacImageViewContext.hpp"
 #include "context/MacOpenFileDialogContext.hpp"
 #include "context/MacConfirmDialogContext.hpp"
@@ -48,6 +49,7 @@ void RegisterMacBuiltInSupport(MacScenePlatformController &controller)
   gridMetrics.gapY = 0;
   loka::app::layout::RegisterBuiltinNonZStackLayoutHandlers(
       controller.layoutHandlerRegistry_, &controller.rowLayoutMetrics(), &gridMetrics, MacSceneLayout::spacing());
+  RegisterMacTextDocumentViewNodeHandler(controller.nodeHandlerRegistry_);
   RegisterMacTextEditorNodeHandler(controller.nodeHandlerRegistry_);
   RegisterMacButtonNodeHandler(controller.nodeHandlerRegistry_);
   RegisterMacTextNodeHandler(controller.nodeHandlerRegistry_);
