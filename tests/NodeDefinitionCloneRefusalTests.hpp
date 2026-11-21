@@ -8,4 +8,15 @@ void testNodeDefinitionByValueRefusalKeepsPropsDropsChildren();
 void testNodeDefinitionDirectChildRefusalReleasesCandidate();
 void testNodeDefinitionCloneBypassesDerivedCopy();
 
+void testShowCloneRefusesSecondArm();
+void testShowCloneRefusesFirstArm();
+void testPolicyScopeCloneRefusesSecondChild();
+void testShowCloneRefusalPreservesDeclaredRoot();
+void testEmptyWrapperClones();
+void testShowClonePreservesArmsAndPolicies();
+void testPolicyScopeClonePreservesContentAndPolicies();
+void testRefusedByValueFragmentCopyIsEmpty();
+void testProbeArmSeatCloneRefusesOccupiedSlot();
+void testRetainedFragmentCloneRefusesChild();
+
 #endif
