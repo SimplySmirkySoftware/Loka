@@ -825,7 +825,8 @@ void testMacTextViewCompositionTransitions()
         LOKA_VERIFY(
             f.root().incomingAttachment.get().value()
             == (mode == REFUSED ? TextViewAttachment::VIEW_REFUSED_OCCUPIED : TextViewAttachment::VIEW_ATTACHED));
-      LOKA_VERIFY(writes == 1 && doc.fact()->get().textRevision() == revision + 1);
+      // Hide flushes its own completion; the next one only drops that write's changed-range hint.
+      LOKA_VERIFY(writes == (mode == HIDE_RETURN ? 2u : 1u) && doc.fact()->get().textRevision() == revision + 1);
       LOKA_VERIFY(doc.fact()->get().state() == (survives ? TEXT_DOCUMENT_MARKED : TEXT_DOCUMENT_READY));
       std::printf("%s revision=%lu writes=%u selection=%s marked=%s body=%s\n",
                   names[mode],
@@ -1460,8 +1461,14 @@ void testMacTextViewCompositionCommands()
       [body release];
       const unsigned notes = [f.phase notes];
       unsigned edits = [f.phase characters];
-      LOKA_VERIFY(f.app.commitTextInput() == TEXT_INPUT_SETTLED && writes == 1 && edits == [f.phase characters]
+      const TextDocumentFact settled = doc.fact()->get();
+      // A second commit reads no edit; its only write may drop the changed-range hint of the first.
+      LOKA_VERIFY(f.app.commitTextInput() == TEXT_INPUT_SETTLED && writes <= 2 && edits == [f.phase characters]
                   && notes == [f.phase notes]);
+      TextPosition start, end;
+      LOKA_VERIFY(doc.fact()->get().state() == settled.state()
+                  && doc.fact()->get().textRevision() == settled.textRevision()
+                  && doc.fact()->get().caret() == settled.caret() && !doc.fact()->get().queryChangedRange(start, end));
       [f.phase finish];
       doc.fact()->unbind(&countWrite, &writes);
     }
