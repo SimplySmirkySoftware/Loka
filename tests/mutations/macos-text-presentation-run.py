@@ -105,7 +105,7 @@ def layer_mutations():
 CONTROLLER = ROOT / "apple/macos/src/MacScenePlatformController.mm"
 Mutation = namedtuple("Mutation", "name path old new tests scope")
 W = "testMacTextWindow"
-TAHOE_SKIP = "[skip] Tahoe layers every view; W positives need an unlayered window"
+TAHOE_SKIP = "[skip] layered host; W positives need an unlayered window"
 HIT = "AttributedAccess::prepareTextHit(AttributedContext(node), p, hit, fact) == expected"
 RUN = "AttributedAccess::queryPressCandidate(context, point, run) == (target != 0)"
 NONE = "AttributedAccess::presentedPath(f.view) == AttributedAccess::NONE"
@@ -194,6 +194,8 @@ def mutations():
     add("drop-cap", capped, uncapped, "Cover", "!MacTestRectsCover(cuts, 17, target)", "both")
     add("untouched-append", "if (used == capacity)\n            return false;\n          next[used++] = p;",
         "next[used++] = p;", "Cover", "ASan:MacRectsCover", "asan")
+    add("split-append", "if (used == capacity)\n              return false;\n            next[used++] = strips[j];",
+        "next[used++] = strips[j];", "Cover", "ASan:MacRectsCover", "asan")
     add("empty-cover", "if (NSIsEmptyRect(target))\n      return false;",
         "if (NSIsEmptyRect(target))\n      return true;", "Cover", "!MacTestRectsCover(&target, 1, NSZeroRect)", "both")
     add("ignore-inherited-layer", "    if (MacLateBoundLayer(self))\n      return NO;\n", "", "LayerTransition", SIZE)
@@ -219,8 +221,8 @@ def mutations():
         "!obs.covered && AttributedAccess::presentedPath(f.view) == AttributedAccess::WINDOW")
     add("uninstalled-window", "!presentation_->installed() || ![self drawUsesWindowContext:window]",
         "![self drawUsesWindowContext:window]", "Uninstalled", NONE)
-    retain = "      if (next.image)\n        CGImageRetain(next.image);"
-    release = "      if (this->record_.image)\n        CGImageRelease(this->record_.image);"
+    retain = "      if (next.image)\n      {\n        CGImageRetain(next.image);\n#ifdef TEST_BUILD\n        loka::testing::noteMacPresentedImage('+');\n#endif\n      }"
+    release = "      if (this->record_.image)\n      {\n        CGImageRelease(this->record_.image);\n#ifdef TEST_BUILD\n        loka::testing::noteMacPresentedImage('-');\n#endif\n      }"
     add("release-first", retain + "\n" + release, release + "\n" + retain, "Record", 'std::strcmp(order, "+-") == 0', "both")
     add("retain-leak-on-window", release, release.replace("if (this->record_.image)", "if (this->record_.image && next.path != MacPresentedRecord::WINDOW)"),
         "Record", "delta == 1", "both")
@@ -254,6 +256,8 @@ def check_completion(test, data, tahoe, no_audit):
         if TAHOE_SKIP not in data.splitlines():
             raise ValueError("missing Tahoe skip")
         marker += " N"
+    elif w_fixture and "[run] " + test + " W" not in data.splitlines():
+        raise ValueError("missing W run marker")
     elif test in DEATH:
         for action, diagnostic in DEATH[test]:
             if not any(line.startswith("[child " + action + "]") and diagnostic in line for line in data.splitlines()):
@@ -344,7 +348,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rig", required=True)
     parser.add_argument("--host", choices=["tahoe", "mavericks"])
-    parser.add_argument("--asan", action="store_true", help="run the untouched append with an ASan build")
+    parser.add_argument("--asan", action="store_true", help="run unchecked appends with an ASan build")
     parser.add_argument("--no-audit", action="store_true", help="binary omits audit or assertions")
     parser.add_argument("--build", default=os.environ.get("LOKA_MUTATION_BUILD"))
     parser.add_argument("--test", default=os.environ.get("LOKA_MUTATION_TEST"))

@@ -38,6 +38,7 @@ void testMacTextWindowLayoutVisit();
 void testMacTextWindowPixels();
 void testMacTextWindowPassScope();
 void testMacTextWindowPassRepaint();
+void testMacTextWindowFocusExposure();
 void testMacTextWindowInterval();
 void testMacPassRepaintNoNestedLayout();
 void testMacTextWindowIntegration();

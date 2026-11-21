@@ -21,12 +21,14 @@
 #include <limits>
 
 #ifdef TEST_BUILD
+#include "../testing/MacPresentedOwnerTestAccess.hpp"
 namespace loka
 {
   namespace testing
   {
     bool refuseMacTextKitAllocation();
     bool refuseMacTextPresentationStep();
+    void noteMacPresentedImage(char event);
   }
 } // namespace loka
 #endif
@@ -255,34 +257,6 @@ namespace
 #endif
   };
 
-#if defined(TEST_BUILD) && LOKA_MAC_HAS_CALAYER
-  // Scoped to the synthetic owner's same-image replacement. Observe the actual CG calls.
-  char *imageOperationTrace;
-  /** One bounded event per test-build image operation during the synthetic replacement. */
-  void RecordImageOperation(char event)
-  {
-    if (!imageOperationTrace)
-      return;
-    if (!imageOperationTrace[0])
-      imageOperationTrace[0] = event;
-    else
-      imageOperationTrace[1] = imageOperationTrace[1] ? '!' : event;
-  }
-  /** Once per owner retain in test builds, append one event only during the order pin. */
-  CGImageRef TraceImageRetain(CGImageRef image)
-  {
-    RecordImageOperation('+');
-    return CGImageRetain(image);
-  }
-  /** Once per owner release in test builds, append one event only during the order pin. */
-  void TraceImageRelease(CGImageRef image)
-  {
-    RecordImageOperation('-');
-    CGImageRelease(image);
-  }
-#define CGImageRetain TraceImageRetain
-#define CGImageRelease TraceImageRelease
-#endif
   /** View-owned deliberate twin of scene::PaintFact<T> and Toolbox presented_.
       Invalidation releases the retained image. Last value release can destroy this text's segments. */
   class MacTextPresentation
@@ -344,9 +318,19 @@ namespace
       assert((next.image != 0) == (next.path == MacPresentedRecord::LAYER));
 #endif
       if (next.image)
+      {
         CGImageRetain(next.image);
+#ifdef TEST_BUILD
+        loka::testing::noteMacPresentedImage('+');
+#endif
+      }
       if (this->record_.image)
+      {
         CGImageRelease(this->record_.image);
+#ifdef TEST_BUILD
+        loka::testing::noteMacPresentedImage('-');
+#endif
+      }
 #endif
       this->record_ = next;
     }
@@ -376,6 +360,11 @@ namespace
       return true;
     }
 #ifdef TEST_BUILD
+    /** One borrowed tuple per synthetic owner observation, no row walk. */
+    const MacPresentedRecord &record() const
+    {
+      return this->record_;
+    }
     /** One path read per test observation, no native reads. */
     MacPresentedRecord::Path presentedPath() const
     {
@@ -455,47 +444,44 @@ namespace
     MacTextPresentation(const MacTextPresentation &);
     MacTextPresentation &operator=(const MacTextPresentation &);
   };
-#if defined(TEST_BUILD) && LOKA_MAC_HAS_CALAYER
-#undef CGImageRetain
-#undef CGImageRelease
-#endif
 } // namespace
 
 #ifdef TEST_BUILD
-/** Exercise the factories and sole owner on two test images once. The caller keeps the first alive;
-    the second transfers its create retain here so destruction can be witnessed by its provider. */
-bool MacTestPresentedRecord(CGImageRef first, CGImageRef second, CFIndex &delta, char (&order)[3])
+MacTestPresentedOwner::MacTestPresentedOwner()
+    : owner_(new MacTextPresentation)
+{
+}
+MacTestPresentedOwner::~MacTestPresentedOwner()
+{
+  delete static_cast<MacTextPresentation *>(this->owner_);
+}
+void MacTestPresentedOwner::window(NSSize size)
+{
+  static_cast<MacTextPresentation *>(this->owner_)->replace(MacPresentedRecord::Window(size));
+}
+void MacTestPresentedOwner::layer(CGImageRef image, NSSize size, CGFloat scale, NSString *gravity)
 {
 #if LOKA_MAC_HAS_CALAYER
-  const NSSize size = NSMakeSize(12, 34);
-  const MacPresentedRecord none = MacPresentedRecord::None(), window = MacPresentedRecord::Window(size),
-                           layer = MacPresentedRecord::Layer(first, size, 2, kCAGravityTopLeft);
-  {
-    MacTextPresentation countOwner;
-    countOwner.replace(layer);
-    const CFIndex before = CFGetRetainCount(first);
-    countOwner.replace(window);
-    delta = before - CFGetRetainCount(first);
-  }
-  MacTextPresentation owner;
-  owner.replace(layer);
-  imageOperationTrace = order;
-  owner.replace(layer);
-  imageOperationTrace = 0;
-  owner.replace(MacPresentedRecord::Layer(second, size, 1, kCAGravityBottomLeft));
-  CGImageRelease(second);
-  return none.path == MacPresentedRecord::NONE && NSEqualSizes(none.size, NSZeroSize) && !none.image && !none.gravity
-         && none.scale == 0 && window.path == MacPresentedRecord::WINDOW && NSEqualSizes(window.size, size)
-         && !window.image && !window.gravity && window.scale == 0 && layer.path == MacPresentedRecord::LAYER
-         && layer.image == first && NSEqualSizes(layer.size, size) && layer.scale == 2
-         && layer.gravity == kCAGravityTopLeft;
+  static_cast<MacTextPresentation *>(this->owner_)->replace(MacPresentedRecord::Layer(image, size, scale, gravity));
 #else
-  (void)first;
-  (void)delta;
-  (void)order;
-  CGImageRelease(second);
-  return false;
+  (void)image;
+  (void)size;
+  (void)scale;
+  (void)gravity;
 #endif
+}
+MacTestPresentedFields MacTestPresentedOwner::read() const
+{
+  const MacPresentedRecord &record = static_cast<const MacTextPresentation *>(this->owner_)->record();
+  MacTestPresentedFields fields = {};
+  fields.path = record.path;
+  fields.size = record.size;
+#if LOKA_MAC_HAS_CALAYER
+  fields.image = record.image;
+  fields.scale = record.scale;
+  fields.gravity = record.gravity;
+#endif
+  return fields;
 }
 /** One fixed-storage subtraction per synthetic fixture. */
 bool MacTestRectsCover(const NSRect *rects, NSInteger count, NSRect target)

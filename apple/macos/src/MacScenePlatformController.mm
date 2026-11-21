@@ -658,33 +658,29 @@ namespace
 #endif
 
 #ifdef TEST_BUILD
+namespace loka
+{
+  namespace testing
+  {
+    void enterMacPlacementRepaint();
+    void leaveMacPlacementRepaint();
+  } // namespace testing
+} // namespace loka
 namespace
 {
-  unsigned repaintEntries, repaintDepth;
-  /** Lexically delimit receiver interpositions once per placement door in test builds. */
+  /** Bracket each placement door once for the test receiver hooks, no row walk. */
   struct MacTestRepaintInterval
   {
     MacTestRepaintInterval()
     {
-      ++repaintDepth;
-      ++repaintEntries;
+      loka::testing::enterMacPlacementRepaint();
     }
     ~MacTestRepaintInterval()
     {
-      --repaintDepth;
+      loka::testing::leaveMacPlacementRepaint();
     }
   };
 } // namespace
-/** One serial read per ordered receiver observation, independent of the audit. */
-unsigned MacTestRepaintEntries()
-{
-  return repaintEntries;
-}
-/** One interval read per receiver observation. */
-bool MacTestInsideRepaint()
-{
-  return repaintDepth != 0;
-}
 #endif
 
 void MacScenePlatformController::repaintAfterPlacement()

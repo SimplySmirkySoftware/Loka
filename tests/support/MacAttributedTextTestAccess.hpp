@@ -17,8 +17,15 @@ bool MacTestEligibleRun(const MacTextHit &hit,
 /** One out-of-line budget check per test size. */
 bool MacTestTextBudget(NSSize size, CGFloat scale);
 
-/** One synthetic owner's count, call-order and factory observations per fixture. */
-bool MacTestPresentedRecord(CGImageRef first, CGImageRef second, CFIndex &delta, char (&order)[3]);
+#include "testing/MacPresentedOwnerTestAccess.hpp"
+namespace loka
+{
+  namespace testing
+  {
+    /** Arm or disarm one borrowed buffer around the synthetic same-image replacement. */
+    void traceMacPresentedImage(char *buffer);
+  } // namespace testing
+} // namespace loka
 /** Pass trace reads, once per receiver hook in the test binary. */
 unsigned MacTestRepaintEntries();
 /** One lexical interval read per forwarded native send. */

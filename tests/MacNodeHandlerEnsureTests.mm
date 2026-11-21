@@ -5349,6 +5349,26 @@ namespace
     return window;
   }
 
+  /** Once per process, display a plain view in a scratch window. Layers appear only at the first display
+      (Tahoe), so the fixture's own leaf cannot answer before its record is observed. */
+  bool HostLayersPlainViews()
+  {
+    static int answer = -1;
+    if (answer < 0)
+    {
+      NSWindow *scratch = [[[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 64, 32)
+                                                       styleMask:LOKA_MAC_WINDOW_STYLE_TITLED
+                                                         backing:NSBackingStoreBuffered
+                                                           defer:NO] autorelease];
+      NSView *plain = [[[NSView alloc] initWithFrame:NSMakeRect(0, 0, 32, 16)] autorelease];
+      [[scratch contentView] addSubview:plain];
+      [scratch display];
+      answer = MacLateBoundLayer(plain) ? 1 : 0;
+      [scratch orderOut:nil];
+    }
+    return answer == 1;
+  }
+
   struct WindowDrawFixture
   {
     HitTestPool pool;
@@ -5372,10 +5392,10 @@ namespace
       [window orderOut:nil];
     }
 
-    /** One path admission per fixture. Tahoe verifies N at a point from this leaf. */
+    /** One path admission per fixture. A layered leaf verifies N at a point from this leaf. */
     bool unlayered(const char *test)
     {
-      if (loka::dsl::testing::DarwinMajor() == 25)
+      if (HostLayersPlainViews())
       {
         [window display];
         MacPresentedText fact;
@@ -5385,7 +5405,7 @@ namespace
             AttributedAccess::prepareTextHit(AttributedContext(layout.node), FirstLinkPoint(layout.node), hit, fact)
             == MAC_HIT_REFUSED);
         std::printf("[complete] %s N\n", test);
-        std::puts("[skip] Tahoe layers every view; W positives need an unlayered window");
+        std::puts("[skip] layered host; W positives need an unlayered window");
         return false;
       }
       LOKA_VERIFY(!MacLateBoundLayer(view));
@@ -5511,6 +5531,15 @@ void testMacTextWindowCover()
     cuts[i] = NSMakeRect(32 - 2 * i, 0, 1, NSHeight(target));
   cuts[16] = target;
   LOKA_VERIFY(!MacTestRectsCover(cuts, 17, target));
+  // The last ascending cut appends the seventeenth piece as a split strip.
+  for (int i = 0; i < 16; ++i)
+    cuts[i] = NSMakeRect(1 + 2 * i, 0, 1, NSHeight(target));
+  LOKA_VERIFY(!MacTestRectsCover(cuts, 17, target));
+  NSRect band = target;
+  band.size.height /= 2;
+  LOKA_VERIFY(!MacTestRectsCover(&band, 1, target));
+  band.origin.y += band.size.height;
+  LOKA_VERIFY(!MacTestRectsCover(&band, 1, target));
   Completed(__func__);
 }
 
@@ -5778,7 +5807,32 @@ void testMacTextWindowRecord()
   CGImageRef first = RecordImage(firstReleased), second = RecordImage(secondReleased);
   CFIndex delta = 0;
   char order[3] = {};
-  LOKA_VERIFY(MacTestPresentedRecord(first, second, delta, order));
+  const NSSize size = NSMakeSize(12, 34);
+  {
+    MacTestPresentedOwner owner;
+    MacTestPresentedFields fields = owner.read();
+    LOKA_VERIFY(fields.path == AttributedAccess::NONE && NSEqualSizes(fields.size, NSZeroSize) && !fields.image
+                && !fields.gravity && fields.scale == 0);
+    owner.layer(first, size, 2, kCAGravityTopLeft);
+    fields = owner.read();
+    LOKA_VERIFY(fields.path == AttributedAccess::LAYER && NSEqualSizes(fields.size, size) && fields.image == first
+                && fields.gravity == kCAGravityTopLeft && fields.scale == 2);
+    const CFIndex before = CFGetRetainCount(first);
+    owner.window(size);
+    delta = before - CFGetRetainCount(first);
+    fields = owner.read();
+    LOKA_VERIFY(fields.path == AttributedAccess::WINDOW && NSEqualSizes(fields.size, size) && !fields.image
+                && !fields.gravity && fields.scale == 0);
+  }
+  {
+    MacTestPresentedOwner owner;
+    owner.layer(first, size, 2, kCAGravityTopLeft);
+    loka::testing::traceMacPresentedImage(order);
+    owner.layer(first, size, 2, kCAGravityTopLeft);
+    loka::testing::traceMacPresentedImage(0);
+    owner.layer(second, size, 1, kCAGravityBottomLeft);
+    CGImageRelease(second);
+  }
   LOKA_VERIFY(delta == 1);
   LOKA_VERIFY(std::strcmp(order, "+-") == 0);
   LOKA_VERIFY(!firstReleased && secondReleased == 1);
@@ -5833,6 +5887,12 @@ void testMacTextWindowRouting()
     VerifyLayerRouting(leaf, f.window);
   }
   HitTestPool pool;
+  if (!MacTextLayerCapable())
+  {
+    std::puts("[skip] capable/nil-layer routing arm requires native L");
+    Completed(__func__);
+    return;
+  }
   NSWindow *window = PresentationWindow();
   LOKA_VERIFY(window);
   CheckedLayout native(window, LinkText("native", "B"));
@@ -6211,6 +6271,9 @@ void testMacTextWindowPassRepaint()
 }
 
 #include "MacInputDoor.hpp"
+#include "context/MacTextDocumentViewContext.hpp"
+#include "text/MacTextStore.hpp"
+#include "support/MacWindowSession.hpp"
 #include "platform/null/NullPlatformContext.hpp"
 #include "testing/MacWindowTestAccess.hpp"
 
@@ -6256,26 +6319,146 @@ namespace
       c.declare(Column() << AttributedText(LinkText("mounted", "link")) << Button(ButtonProps().text("sibling")));
     }
   };
+#endif
+  /** Own one mounted window per observation or reentry child, using ordinary app teardown. */
   class RepaintApp : public MacApp
   {
   public:
-    explicit RepaintApp(Window &window)
+    explicit RepaintApp(MacWindow *window)
         : MacApp(0)
     {
-      this->group_ = new AppComponentGroup(std::vector<AppComponent *>(1, &window));
-    }
-    virtual ~RepaintApp()
-    {
-      this->group_->build();
-    }
-    virtual void quit() {}
-    void flush()
-    {
+      this->group_ = new AppComponentGroup(std::vector<AppComponent *>(1, window));
+      window->setApp(this);
       this->flushWindowInvalidations();
     }
+    virtual void quit() {}
   };
-#endif
+
+  class ExposureRoot : public BoundaryNodeFor<ExposureRoot>
+  {
+  public:
+    TextDocument documentBody;
+    Focus<int> focus;
+    NodeState<loka::core::Frame> viewport;
+
+    /** Declare one document, focus endpoint and outer viewport for the mounted scene. */
+    explicit ExposureRoot(const BoundaryPropsFor<ExposureRoot> &props)
+        : BoundaryNodeFor<ExposureRoot>(props)
+    {
+      this->document(this->documentBody);
+      this->state(this->focus);
+      this->state(this->viewport, loka::core::Frame());
+    }
+    /** Compose once. The spacer places the link and editor below the initial clip. */
+    virtual void composeNode(NodeComposition &c)
+    {
+      const AttributedString link =
+          Linked("H", TextStyle().color(TEXT_COLOR_BLACK), LinkTarget(loka::core::String("ink")));
+      c.declare(Box().height(160).padding(12)
+                << (ScrollView(this->viewport)
+                    << (VStack()
+                        << Box().height(300) << AttributedText(link).testId("link")
+                        << TextDocumentEditor(this->documentBody).focusedAs(this->focus, 1).testId("editor"))));
+    }
+  };
+
+  /** Read one clip, one calibrated backing pixel and the link candidate once per focus transfer. */
+  void
+  ObserveFocusExposure(const char *operation, NSClipView *clip, NSPoint before, AttributedTextNode &link, NSPoint ink)
+  {
+    NSPoint after = [clip bounds].origin;
+    MacAttributedTextContext &context = AttributedContext(link);
+    NSView *view = AttributedAccess::view(context);
+    NSView *root = [[view window] contentView];
+    NSPoint pixel = [root convertPoint:ink fromView:view];
+    bool inBacking = NSPointInRect(pixel, [root bounds]);
+    const char *colour = inBacking ? (ReadBacking(view, ink) == BACKING_INK ? "yes" : "no") : "outside-window";
+    AttributedString::LinkRun run = {0, 0, LinkTarget()};
+    bool candidate = AttributedAccess::queryPressCandidate(context, ink, run);
+    std::printf("[observe] %s outer clip (%g,%g) -> (%g,%g) glyph visible=%d ink=%s candidate=%d\n",
+                operation,
+                before.x,
+                before.y,
+                after.x,
+                after.y,
+                NSPointInRect(ink, [view visibleRect]) ? 1 : 0,
+                colour,
+                candidate ? 1 : 0);
+  }
 } // namespace
+
+/** One mounted outer scroll document, one posted focus tick and one focused store replacement per W run. */
+void testMacTextWindowFocusExposure()
+{
+  WindowDrawFixture f;
+  if (!f.unlayered(__func__))
+    return;
+  using namespace loka::dsl;
+  using namespace loka::dsl::testing;
+  NullPlatformContext platform;
+  MacWindow *window = new MacWindow(
+      &platform, WindowProps().frame(60, 60, 320, 240).visible(true).scene(new Scene(Boundary<ExposureRoot>())));
+  RepaintApp app(window);
+  app.flushInvalidationsTick();
+  NSWindow *native = (NSWindow *)MacWindowTestAccess::nativeWindow(*window);
+  LOKA_VERIFY(native && loka::testing::MacRequestKeyWindow(native));
+  Scene *scene = window->scene();
+  ExposureRoot *boundary = static_cast<ExposureRoot *>(SceneTestAccess::rootBoundary(*scene));
+  Node *linkNode = 0, *editorNode = 0;
+  FlowError error;
+  LOKA_VERIFY(LookupNodeById(scene, "link", linkNode, error) == FLOW_STEP_SUCCEEDED);
+  LOKA_VERIFY(LookupNodeById(scene, "editor", editorNode, error) == FLOW_STEP_SUCCEEDED);
+  LOKA_VERIFY(linkNode->nodeTypeKey() == loka::app::scene::NodeTypeToken<AttributedTextNode>()
+              && editorNode->nodeTypeKey() == loka::app::scene::NodeTypeToken<TextDocumentEditorNode>());
+  AttributedTextNode *link = static_cast<AttributedTextNode *>(linkNode);
+  TextDocumentEditorNode *editor = static_cast<TextDocumentEditorNode *>(editorNode);
+  NSView *view = AttributedAccess::view(AttributedContext(*link));
+  MacTextDocumentViewContext *editing = static_cast<MacTextDocumentViewContext *>(editor->getContext());
+  NSScrollView *outer = [view enclosingScrollView];
+  NSClipView *clip = [outer contentView];
+  LOKA_VERIFY(boundary && view && !MacLateBoundLayer(view) && clip && editing && editing->store() &&
+              [editing->scroll() enclosingScrollView] == outer);
+  LOKA_VERIFY([native makeFirstResponder:[native contentView]]);
+  NSRect glyph = [AttributedAccess::manager(view) boundingRectForGlyphRange:NSMakeRange(0, 1)
+                                                            inTextContainer:AttributedAccess::container(view)];
+  [view scrollRectToVisible:glyph];
+  [native display];
+  NSPoint ink = NSZeroPoint;
+  LOKA_VERIFY(FindInkInRect(view, glyph, ink));
+  Candidate(AttributedContext(*link), ink, "ink");
+  // Park the glyph one point below the clip, within the surrounding window padding.
+  NSView *document = [outer documentView];
+  NSPoint parked = [document convertPoint:ink fromView:view];
+  parked.x = [clip bounds].origin.x;
+  parked.y -= NSHeight([clip bounds]) + 1;
+  NSTextView *old = [[editing->store()->view() retain] autorelease];
+  for (int step = 0; step < 2; ++step)
+  {
+    [clip scrollToPoint:parked];
+    [outer reflectScrolledClipView:clip];
+    [native display];
+    NSPoint before = [clip bounds].origin;
+    LOKA_VERIFY(!NSPointInRect(ink, [view visibleRect]));
+    if (step == 0)
+    {
+      LOKA_VERIFY([native firstResponder] != old);
+      boundary->focus.post(1);
+      app.flushInvalidationsTick();
+      ObserveFocusExposure("focus request", clip, before, *link, ink);
+      LOKA_VERIFY([native firstResponder] == old && boundary->focus.state()->get().is(1));
+    }
+    else
+    {
+      LOKA_VERIFY([native firstResponder] == old && [old window] == native);
+      LOKA_VERIFY(boundary->documentBody.replace(TextReplacement::Empty()) == POST_ACCEPTED);
+      app.reconcileAtCompletion();
+      ObserveFocusExposure("document replacement", clip, before, *link, ink);
+      LOKA_VERIFY(editing->store() && editing->store()->view() != old &&
+                  [editing->scroll() documentView] == editing->store()->view());
+    }
+  }
+  Completed(__func__);
+}
 
 /** Once per test run, two re-executed children, each making one invalidating call during a W draw. */
 void testMacTextWindowInterval()
@@ -6310,19 +6493,17 @@ void testMacPassRepaintNoNestedLayout()
   if (std::getenv(childActionKey))
   {
     NullPlatformContext platform;
-    MacWindow window(&platform,
-                     WindowProps().frame(60, 60, 320, 160).visible(true).scene(new Scene(Boundary<RepaintRoot>())));
+    MacWindow *window = new MacWindow(
+        &platform, WindowProps().frame(60, 60, 320, 160).visible(true).scene(new Scene(Boundary<RepaintRoot>())));
     RepaintApp app(window);
-    app.flush();
-    window.setApp(&app);
-    NSWindow *native = (NSWindow *)loka::dsl::testing::MacWindowTestAccess::nativeWindow(window);
+    NSWindow *native = (NSWindow *)loka::dsl::testing::MacWindowTestAccess::nativeWindow(*window);
     NSView *root = [native contentView];
     NSView *leaf = FindDescendant(root, NSClassFromString(@"LokaAttributedTextView"));
     LOKA_VERIFY(leaf && !MacLateBoundLayer(leaf));
     InstallPixelControl(root);
     [native display];
-    nestedResizeWindow = &window;
-    MacInputDoor::windowResize(window);
+    nestedResizeWindow = window;
+    MacInputDoor::windowResize(*window);
     _exit(1);
   }
   VerifyAttributedChildAssertion("nestedResize", __func__, "MacPassRepaint", "nested layout reached");
