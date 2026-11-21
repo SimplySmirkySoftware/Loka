@@ -267,7 +267,7 @@ def killed(oracle, data):
         # Hosts stop at different assertions of the same pin; each alternative is that pin's own text.
         return any(killed(alternative, data) for alternative in oracle)
     if oracle.startswith("death:"):
-        action = oracle[5:]
+        action = oracle[len("death:"):]
         if not all(line in data.splitlines() for line in ("[returned] " + action, "[parent failure] " + action + " returned")):
             return False
         oracle = PARENT
