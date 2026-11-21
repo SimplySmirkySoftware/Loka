@@ -18,6 +18,7 @@ using namespace loka::macos::testing;
 #define MAC_STORE_ALLOC(stage, expression) (expression)
 #endif
 
+/** NSTextView owns composition. Kernel transitions and command entry settle its marked text. */
 @interface LokaTextDocumentView : NSTextView
 @end
 
@@ -87,25 +88,6 @@ MacTextDocumentViewContext *MacTextStore::fromNativeFocus(NSResponder *responder
 }
 
 @implementation LokaTextDocumentView
-// As in LokaTextEditorView (#862, #1264), refuse before AppKit creates a mark.
-- (void)abandonComposition
-{
-  if ([self respondsToSelector:@selector(inputContext)])
-    [[self inputContext] discardMarkedText];
-}
-- (void)setMarkedText:(id)text selectedRange:(NSRange)selection replacementRange:(NSRange)replacement
-{
-  (void)text;
-  (void)selection;
-  (void)replacement;
-  [self abandonComposition];
-}
-- (void)setMarkedText:(id)text selectedRange:(NSRange)selection
-{
-  (void)text;
-  (void)selection;
-  [self abandonComposition];
-}
 - (NSUndoManager *)qualifiedManager:(SEL)action
 {
   MacTextStore *row = MacTextStore::attachedRow(self);

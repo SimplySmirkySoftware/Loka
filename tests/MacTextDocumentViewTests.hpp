@@ -2,7 +2,12 @@
 #define LOKA_MAC_TEXT_DOCUMENT_VIEW_TESTS_HPP
 void testMacTextViewAttachDetach();
 void testMacTextViewPresentation();
-void testMacTextViewCompositionRefused();
+void testMacTextViewComposition();
+void testMacTextViewCompositionTransitions();
+void testMacTextViewCompositionCommands();
+void testMacTextViewCompositionCallback();
+void testMacTextViewCompositionUndo();
+void testMacTextViewImeHandCheck();
 void testMacTextViewUndo();
 void testMacTextViewFocus();
 void testMacTextViewReplacement();

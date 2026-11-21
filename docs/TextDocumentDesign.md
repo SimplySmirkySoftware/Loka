@@ -298,6 +298,10 @@ documented behavior that no Loka probe has observed yet.
     storage.
   - Neither a storage write (`replaceCharactersInRange:withString:`) nor the
     view's `setString:` registers an undo action.
+  - On Tahoe 26.7.1 x86_64 a synthetic mark survived transfer to a field,
+    loss of key-window status and removal from the superview. On a read-only
+    NSTextView subclass AppKit refused both marking selectors, with zero
+    character edits, both focused and unfocused.
   - Not yet observed: the order in which a real input method calls
     `setMarkedText:` and `insertText:`, and Mac OS X 10.4 to 10.6.
 - **Toolbox MLTE 1.3** (Mac OS 9.2):
@@ -525,7 +529,7 @@ controller exits retire live rows before that drain. Splice returns the inherite
 `UNAVAILABLE`. The 4m-1 store row is runtime-verified on macOS 26 (Tahoe) and build-verified with the 10.9 and 10.6
 SDK toolchains. macOS 10.4–10.6 behavior is not runtime-verified.
 
-### macOS document view (4m-2b)
+### macOS document view and composition (4m-3)
 
 The context owns one scroll view. Initial mount and retained attachment install
 it under the projection parent before the row lends its text view as the
@@ -549,9 +553,13 @@ The controller reserves the document editor handler token. Native focus
 recognition follows the document view's delegate to its live row, checks view
 identity, then reads the linked context. Undo and redo use the same resolution,
 require editability and consult the row's undo manager on validation and again
-on execution. Both marked-text selectors refuse input in every placement and
-editability state until 4m-3. The synthetic marking fixture exercises settlement
-directly. Real IME qualification and runtime verification on 10.4–10.6 remain open.
+on execution. The document view inherits both native marking selectors. The
+kernel settles a mark before detachment, read-only attachment and read-only
+presentation. Command entry commits marked rows across the App's windows
+before dispatch. The storage delegate notes character edits for the outer
+publisher. While marked, replacement and splice report COMPOSING and a caret
+request stays pending. The owner's Japanese IME hand check supplies real-input
+evidence. Mac OS X 10.4–10.6 composition remains unqualified.
 
 ### Win32 store row and parking (4w-1)
 

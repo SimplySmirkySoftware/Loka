@@ -218,18 +218,16 @@ void testMacTextStoreChanges()
   }
   for (unsigned selector = 0; selector < 2; ++selector)
   {
-    loka::testing::MacVerifyMarkRefused(view, selector != 0);
+    loka::testing::MacSendMark(view, selector != 0);
+    LOKA_VERIFY(controller.readTextStore(row, reading) && reading.changed() && reading.marked());
+    NSString *before = [[storage string] copy];
+    controller.commitMarkedText(row);
+    LOKA_VERIFY(controller.peekTextStore(row) && [[storage string] isEqualToString:before]);
+    [before release];
+    LOKA_VERIFY(controller.readTextStore(row, reading) && reading.changed() && !reading.marked());
+    controller.commitMarkedText(row);
     LOKA_VERIFY(!controller.peekTextStore(row));
   }
-  loka::testing::MacSyntheticMark(view);
-  LOKA_VERIFY(controller.readTextStore(row, reading) && reading.marked());
-  NSString *before = [[storage string] copy];
-  controller.commitMarkedText(row);
-  LOKA_VERIFY(controller.peekTextStore(row) && [[storage string] isEqualToString:before]);
-  [before release];
-  LOKA_VERIFY(controller.readTextStore(row, reading) && reading.changed() && !reading.marked());
-  controller.commitMarkedText(row);
-  LOKA_VERIFY(!controller.peekTextStore(row));
 }
 void testMacTextStoreChunks()
 {
@@ -539,6 +537,9 @@ void testMacTextStoreRetirement()
     LOKA_VERIFY(observedStoreCalls() > 0 && [delegate undoManagerForTextView:view]);
     LOKA_VERIFY(controller.readTextStore(row, reading) && reading.changed());
     NSUndoManager *undo = [[view undoManager] retain];
+    loka::testing::MacSendMark(view);
+    LOKA_VERIFY(controller.readTextStore(row, reading) && reading.changed() && reading.marked());
+    [view retain];
     observeStoreCalls(&Access::store(row)); // From retire entry through the post-retire edit.
     row.retire();
     row.retire();
@@ -555,6 +556,10 @@ void testMacTextStoreRetirement()
     observeStoreCalls(&Access::store(row)); // Drain and the following pool boundary.
     controller.drainNativeRetirements();
     LOKA_VERIFY([[storage layoutManagers] count] == 0 && ![undo canUndo]);
+    loka::testing::MacSendMark(view);
+    [view insertText:@"late" replacementRange:NSMakeRange(NSNotFound, 0)];
+    LOKA_VERIFY(!observedStoreCalls());
+    [view release];
     [undo release];
     [storage release];
     [delegate release];
@@ -731,18 +736,13 @@ void testMacTextStoreConformance()
   LOKA_VERIFY(root.text.queryPositionAtUtf8(1, caret) && root.text.fact()->get().caret() == caret);
   for (unsigned selector = 0; selector < 2; ++selector)
   {
-    loka::testing::MacVerifyMarkRefused(view, selector != 0);
-    LOKA_VERIFY(!controller.peekTextStore(*controller.fresh));
+    loka::testing::MacSendMark(view, selector != 0);
     app.reconcileAtCompletion();
-    LOKA_VERIFY(root.text.fact()->get().state() == TEXT_DOCUMENT_READY
-                && root.text.fact()->get().textRevision() == revision);
+    LOKA_VERIFY(root.text.fact()->get().state() == TEXT_DOCUMENT_MARKED);
+    LOKA_VERIFY(app.commitTextInput() == TEXT_INPUT_SETTLED);
+    LOKA_VERIFY(![view hasMarkedText] && root.text.fact()->get().state() == TEXT_DOCUMENT_READY
+                && root.text.fact()->get().textRevision() > revision);
   }
-  loka::testing::MacSyntheticMark(view);
-  app.reconcileAtCompletion();
-  LOKA_VERIFY(root.text.fact()->get().state() == TEXT_DOCUMENT_MARKED);
-  LOKA_VERIFY(app.commitTextInput() == TEXT_INPUT_SETTLED);
-  LOKA_VERIFY(root.text.fact()->get().state() == TEXT_DOCUMENT_READY
-              && root.text.fact()->get().textRevision() > revision);
 }
 void testMacTextStoreWindowClose()
 {

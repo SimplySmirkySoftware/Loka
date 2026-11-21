@@ -1,5 +1,10 @@
 #include "MacTextDocumentViewTests.hpp"
 #include "MacApp.hpp"
+#include "MacInputDoor.hpp"
+#include "testing/app/TextInputCommitTestHooks.hpp"
+#include <algorithm>
+#include <cstdlib>
+#include <unistd.h>
 #include "MacWindow.hpp"
 #include "MacScenePlatformController.hpp"
 #include "context/MacEditTextContext.hpp"
@@ -13,6 +18,7 @@
 #include "core/util/StateTrackerGuard.hpp"
 #include "support/LifecycleFactTestAccess.hpp"
 #include "support/MacSyntheticMark.hpp"
+#include "support/MacCompositionProbe.hpp"
 #include "support/MacWindowSession.hpp"
 #include "support/TextDocumentAccess.hpp"
 #include "support/TextStoreConformance.hpp"
@@ -27,6 +33,10 @@
 using namespace loka::app;
 using namespace loka::app::scene;
 using namespace loka::macos::testing;
+
+@protocol LokaHandInputSource
+- (NSString *)selectedKeyboardInputSource;
+@end
 
 @protocol LokaPhaseRowOwner
 - (MacTextStore *)owner;
@@ -52,6 +62,7 @@ struct PhaseCounts
 - (void)finish;
 - (void)recordCall:(const MacTextStore *)row kind:(StoreCall)call;
 - (unsigned)characters;
+- (unsigned)notes;
 - (unsigned)discards;
 - (void)discardMarkedText;
 - (void)alternateUndo:(id)sender;
@@ -144,6 +155,10 @@ namespace
 {
   return discards_;
 }
+- (unsigned)notes
+{
+  return objects_[0].marks;
+}
 - (unsigned)characters
 {
   return objects_[0].characters;
@@ -188,6 +203,7 @@ namespace
     Focus<int> focus;
     NodeState<loka::core::String> field;
     NodeState<bool> shown;
+    NodeState<TextViewAttachment> incomingAttachment;
     explicit ViewRoot(const BoundaryPropsFor<ViewRoot> &props)
         : BoundaryNodeFor<ViewRoot>(props)
     {
@@ -195,6 +211,7 @@ namespace
       this->state(this->focus);
       this->state(this->field, loka::core::String("field"));
       this->state(this->shown, true);
+      this->state(this->incomingAttachment, TextViewAttachment());
     }
     virtual void composeNode(NodeComposition &c)
     {
@@ -214,7 +231,10 @@ namespace
     }
     void install(MacWindow *window)
     {
-      this->group_ = new AppComponentGroup(std::vector<AppComponent *>(1, window));
+      if (this->group_)
+        this->group_->adopt(window);
+      else
+        this->group_ = new AppComponentGroup(std::vector<AppComponent *>(1, window));
       window->setApp(this);
     }
     void flush()
@@ -456,7 +476,7 @@ void testMacTextViewPresentation()
   }
   else
     std::printf("[skip] input context unavailable on this OS\n");
-  loka::testing::MacSyntheticMark(v);
+  loka::testing::MacSendMark(v);
   TextStoreReading marked;
   LOKA_VERIFY(f.row().read(marked) && marked.marked());
   [f.phase begin:"settle-marked" row:&f.row()];
@@ -474,7 +494,7 @@ void testMacTextViewPresentation()
               [f.row().undoManager() canUndo] && ![f.phase characters]);
   [body release];
   [f.phase finish];
-  loka::testing::MacSyntheticMark(v);
+  loka::testing::MacSendMark(v);
   NSString *committed = [[v string] copy];
   [f.phase begin:"presentation" row:&f.row()];
   f.present(true);
@@ -495,25 +515,334 @@ void testMacTextViewPresentation()
   [f.phase finish];
   f.present(false);
   LOKA_VERIFY([v isEditable]);
-  loka::testing::MacSyntheticMark(v);
+  loka::testing::MacSendMark(v);
   f.detach();
   LOKA_VERIFY(![v hasMarkedText] && ![v window]);
 }
-void testMacTextViewCompositionRefused()
+namespace
+{
+  void countWrite(void *data)
+  {
+    ++*static_cast<unsigned *>(data);
+  }
+  void markAndLeave(Fixture &f)
+  {
+    NSTextView *v = f.row().view();
+    LOKA_VERIFY([f.native() makeFirstResponder:v]);
+    loka::testing::MacSendMark(v);
+    LOKA_VERIFY([v markedRange].length && [f.native() makeFirstResponder:f.field()]);
+    LOKA_VERIFY([f.field() currentEditor] && [v markedRange].length);
+  }
+} // namespace
+void testMacTextViewComposition()
 {
   Fixture f;
-  if (!f.key("composition first responder"))
-    return;
   NSTextView *v = f.row().view();
-  for (unsigned readOnly = 0; readOnly < 2; ++readOnly)
+  bool key = f.key("composition with first responder");
+  TextDocument &doc = f.root().text;
+  for (unsigned selector = 0; selector < 2; ++selector)
   {
-    f.present(readOnly != 0);
-    LOKA_VERIFY([f.native() makeFirstResponder:v] && [f.native() firstResponder] == v);
-    for (unsigned selector = 0; selector < 2; ++selector)
+    f.present(false);
+    if (key)
+      LOKA_VERIFY([f.native() makeFirstResponder:v]);
+    TextPosition caret = doc.fact()->get().caret();
+    [f.phase begin:"mark" row:&f.row()];
+    unsigned writes = 0;
+    doc.fact()->bind(&countWrite, &writes, false);
+    loka::testing::MacSendMark(v, selector != 0);
+    doc.post(caret);
+    LOKA_VERIFY([v hasMarkedText] && [v markedRange].length && f.row().pending() && !writes);
+    f.app.reconcileAtCompletion();
+    LOKA_VERIFY(doc.fact()->get().state() == TEXT_DOCUMENT_MARKED && writes == 1 && [f.phase characters] &&
+                [f.phase notes]);
+    LOKA_VERIFY(loka::app::testing::TextDocumentAccess::pending(doc));
+    TextStoreReading reading;
+    LOKA_VERIFY(f.row().read(reading) && reading.marked() && !reading.changed());
+    LOKA_VERIFY(f.app.commitTextInput() == TEXT_INPUT_SETTLED && ![v hasMarkedText]);
+    doc.fact()->unbind(&countWrite, &writes);
+    [f.phase finish];
+    f.present(true);
+    for (unsigned focus = 0; focus < (key ? 2u : 1u); ++focus)
     {
-      loka::testing::MacVerifyMarkRefused(v, selector != 0);
-      LOKA_VERIFY(!f.row().pending());
+      LOKA_VERIFY([f.native() makeFirstResponder:focus ? (NSResponder *)v : f.field()]);
+      LOKA_VERIFY(focus ? [f.native() firstResponder] == v : [f.native() firstResponder] != v);
+      NSString *body = [[v string] copy];
+      [f.phase begin:"read-only mark" row:&f.row()];
+      std::printf("read-only selector=%u first=%d inputContext=%p\n",
+                  selector,
+                  [f.native() firstResponder] == v,
+                  [v respondsToSelector:@selector(inputContext)] ? (void *)[v inputContext] : 0);
+      loka::testing::MacSendMark(v, selector != 0);
+      LOKA_VERIFY([[v string] isEqual:body] && ![v hasMarkedText] && ![v markedRange].length && ![f.phase characters]
+                  && !f.row().pending());
+      [f.phase finish];
+      [body release];
     }
+  }
+}
+
+// Observe the native entry before AppKit can change selection, discard a mark or remove the view.
+namespace
+{
+  class TransitionWitness;
+  TransitionWitness *transition = 0;
+  class TransitionWitness
+  {
+    Method setter_, removal_, discard_, sizing_;
+    IMP set_, remove_, discardImpl_, sizeImpl_;
+    NSTextView *view_;
+    unsigned setters_, removals_;
+    bool attaching_, retiring_;
+    static void sizeForAttach(id view, SEL cmd, NSSize size)
+    {
+      TransitionWitness &w = *transition;
+      reinterpret_cast<void (*)(id, SEL, NSSize)>(w.sizeImpl_)(view, cmd, size);
+      if (view == w.view_ && w.setters_ == 1 && [view superview] && ![view isEditable]
+          && !MacTextStore::attachedRow(view))
+      {
+        // Last native attach operation, before the kernel links the claim. Re-arm one existing character
+        // so skipping post-link settlement is visible at the second read-only setter.
+        [view setEditable:YES];
+        NSRange first = NSMakeRange(0, 1);
+        NSString *same = [[view string] substringWithRange:first];
+        [view setMarkedText:same selectedRange:NSMakeRange(1, 0) replacementRange:first];
+        LOKA_VERIFY([view markedRange].length);
+      }
+    }
+    static void discardMark(id context, SEL cmd)
+    {
+      TransitionWitness &w = *transition;
+      if ([w.view_ inputContext] == context)
+        LOKA_VERIFY(![w.view_ hasMarkedText]);
+      reinterpret_cast<void (*)(id, SEL)>(w.discardImpl_)(context, cmd);
+    }
+    static void setEditable(id view, SEL cmd, BOOL editable)
+    {
+      TransitionWitness &w = *transition;
+      if (view == w.view_ && !editable)
+      {
+        std::printf("setEditable:NO #%u linked=%d marked=%d\n",
+                    w.setters_ + 1,
+                    MacTextStore::attachedRow(view) != 0,
+                    [view hasMarkedText]);
+        LOKA_VERIFY(![view hasMarkedText]);
+        if (w.attaching_)
+        {
+          LOKA_VERIFY((MacTextStore::attachedRow(view) != 0) == (w.setters_ != 0));
+          if (w.setters_)
+            LOKA_VERIFY([view isEditable]);
+        }
+        ++w.setters_;
+      }
+      reinterpret_cast<void (*)(id, SEL, BOOL)>(w.set_)(view, cmd, editable);
+    }
+    static void removeView(id view, SEL cmd)
+    {
+      TransitionWitness &w = *transition;
+      if (view == w.view_ && [view superview])
+      {
+        std::printf("removeFromSuperview marked=%d\n", [view hasMarkedText]);
+        // Window teardown can withdraw the root document before its child's context is peeled.
+        // Direct retirement only cuts routes. A surviving parked row must have settled here.
+        LOKA_VERIFY(w.retiring_ || ![view hasMarkedText]);
+        MacTextStore *row = MacTextStore::attachedRow(view);
+        if (row && !w.retiring_)
+        {
+          NSRange selection = [view selectedRange];
+          BOOL undo = [row->undoManager() canUndo];
+          bool pending = row->pending();
+          reinterpret_cast<void (*)(id, SEL)>(w.remove_)(view, cmd);
+          LOKA_VERIFY(NSEqualRanges(selection, [view selectedRange]) && [row->undoManager() canUndo] == undo
+                      && row->pending() == pending);
+          ++w.removals_;
+          return;
+        }
+        ++w.removals_;
+      }
+      reinterpret_cast<void (*)(id, SEL)>(w.remove_)(view, cmd);
+    }
+
+  public:
+    TransitionWitness(NSTextView *view, bool attaching, bool retiring)
+        : discard_(0),
+          sizing_(0),
+          view_(view),
+          setters_(0),
+          removals_(0),
+          attaching_(attaching),
+          retiring_(retiring)
+    {
+      LOKA_VERIFY(!transition);
+      transition = this;
+      id context = [view respondsToSelector:@selector(inputContext)] ? [view inputContext] : nil;
+      if (context && !retiring)
+      {
+        discard_ = class_getInstanceMethod([context class], @selector(discardMarkedText));
+        discardImpl_ = method_setImplementation(discard_, reinterpret_cast<IMP>(&discardMark));
+      }
+      if (attaching)
+      {
+        sizing_ = class_getInstanceMethod([view class], @selector(setMinSize:));
+        sizeImpl_ = method_setImplementation(sizing_, reinterpret_cast<IMP>(&sizeForAttach));
+      }
+      setter_ = class_getInstanceMethod([view class], @selector(setEditable:));
+      removal_ = class_getInstanceMethod([view class], @selector(removeFromSuperview));
+      set_ = method_setImplementation(setter_, reinterpret_cast<IMP>(&setEditable));
+      remove_ = method_setImplementation(removal_, reinterpret_cast<IMP>(&removeView));
+    }
+    ~TransitionWitness()
+    {
+      if (sizing_)
+        method_setImplementation(sizing_, sizeImpl_);
+      if (discard_)
+        method_setImplementation(discard_, discardImpl_);
+      method_setImplementation(setter_, set_);
+      method_setImplementation(removal_, remove_);
+      transition = 0;
+    }
+    void expect(unsigned setters, unsigned removals) const
+    {
+      LOKA_VERIFY(setters_ == setters && removals_ == removals);
+    }
+  };
+} // namespace
+void testMacTextViewCompositionTransitions()
+{
+  enum Transition
+  {
+    COMPATIBLE,
+    READ_ONLY_PROPS,
+    HIDE_RETURN,
+    REFUSED,
+    EVICTED,
+    RETIRED_FACT,
+    CLEAR_CONTEXT,
+    DESTROY_WINDOW,
+    READ_ONLY_ATTACH
+  };
+  const char *names[] = {"compatible",
+                         "read-only",
+                         "retained hide/return",
+                         "occupied refusal",
+                         "eviction",
+                         "retired delivery",
+                         "setContext(0)",
+                         "window destruction",
+                         "read-only attach"};
+  for (unsigned mode = 0; mode < sizeof names / sizeof names[0]; ++mode)
+  {
+    Fixture f;
+    if (!f.key(names[mode]))
+      continue;
+    TextDocument &doc = f.root().text;
+    NSTextView *v = f.row().view();
+    const MacTextStore *const watched = &f.row();
+    TextDocumentEditorNode incoming(TextDocumentEditorProps(doc).attachment(f.root().incomingAttachment));
+    type(v, @"body");
+    f.app.reconcileAtCompletion();
+    [f.phase begin:names[mode] row:&f.row()];
+    markAndLeave(f);
+    NSString *body = [[v string] copy];
+    NSRange range = [v markedRange], selection = [v selectedRange];
+    unsigned writes = 0;
+    unsigned long revision = doc.fact()->get().textRevision();
+    std::printf("%s before revision=%lu selection=%s marked=%s body=%s notes=%u\n",
+                names[mode],
+                revision,
+                [NSStringFromRange(selection) UTF8String],
+                [NSStringFromRange(range) UTF8String],
+                [body UTF8String],
+                [f.phase notes]);
+    LOKA_VERIFY([f.phase notes] && f.row().pending());
+    doc.fact()->bind(&countWrite, &writes, false);
+    TransitionWitness witness(v, mode == READ_ONLY_ATTACH, mode == DESTROY_WINDOW);
+    if (mode == COMPATIBLE || mode == READ_ONLY_PROPS)
+      f.present(mode == READ_ONLY_PROPS);
+    else if (mode == HIDE_RETURN)
+      f.show(false);
+    else if (mode == REFUSED || mode == EVICTED)
+    {
+      if (mode == EVICTED)
+        NotifySubtreeNodeDetached(&f.node());
+      MacTextDocumentViewContext *ctx = f.rail().createTextViewContext(incoming, f.rail().projectionParentView());
+      LOKA_VERIFY(ctx && incoming.adoptContext(ctx));
+      ctx->readLifecycleFactOnAttach();
+      LOKA_VERIFY(ctx->store() == (mode == EVICTED ? &f.row() : 0));
+      LOKA_VERIFY(f.ctx().store() == (mode == REFUSED ? &f.row() : 0));
+      if (mode == EVICTED)
+        LifecycleFactTestAccess::DeliverFacts(&f.node());
+    }
+    else if (mode == RETIRED_FACT)
+    {
+      LifecycleFactTestAccess::MarkSubtreeRetired(&f.node());
+      LifecycleFactTestAccess::DeliverFacts(&f.node());
+    }
+    else if (mode == CLEAR_CONTEXT)
+      f.node().setContext(0);
+    else if (mode == DESTROY_WINDOW)
+    {
+      // Destruction withdraws the publisher. The recorder owns the native view across reclaim.
+      doc.fact()->unbind(&countWrite, &writes);
+      [f.native() close];
+      f.app.flush();
+    }
+    else
+    {
+      f.detach();
+      f.present(true);
+      // A deliberately marked, editable parked row exercises the first read-only setter on attach.
+      loka::testing::MacSendMark(v);
+      LOKA_VERIFY([v markedRange].length);
+      NodeContext *focus = 0;
+      LOKA_VERIFY(f.rail().readNativeFocus(focus) && focus != &f.ctx() && !f.rail().applyNativeFocus(f.ctx()));
+      LOKA_VERIFY([v markedRange].length);
+      [body release];
+      body = [[v string] copy];
+      f.attach();
+    }
+    const bool survives = mode == COMPATIBLE || mode == REFUSED;
+    witness.expect(mode == READ_ONLY_PROPS    ? 1
+                   : mode == READ_ONLY_ATTACH ? 2
+                                              : 0,
+                   survives || mode == READ_ONLY_PROPS ? 0 : 1);
+    if (mode == DESTROY_WINDOW)
+    {
+      LOKA_VERIFY(![v delegate] && ![v superview]);
+      observeStoreCalls(watched, phaseCall);
+      [v insertText:@"late" replacementRange:NSMakeRange(NSNotFound, 0)];
+      LOKA_VERIFY(!observedStoreCalls());
+    }
+    else
+      LOKA_VERIFY([[v string] isEqual:body] && ([v hasMarkedText] != NO) == survives);
+    if (survives)
+      LOKA_VERIFY(NSEqualRanges([v markedRange], range) && NSEqualRanges([v selectedRange], selection));
+    if (mode != DESTROY_WINDOW)
+    {
+      if (mode != HIDE_RETURN)
+        LOKA_VERIFY(f.row().pending() && [f.row().undoManager() canUndo]);
+      f.app.reconcileAtCompletion();
+      if (mode == REFUSED || mode == EVICTED)
+        LOKA_VERIFY(
+            f.root().incomingAttachment.get().value()
+            == (mode == REFUSED ? TextViewAttachment::VIEW_REFUSED_OCCUPIED : TextViewAttachment::VIEW_ATTACHED));
+      LOKA_VERIFY(writes == 1 && doc.fact()->get().textRevision() == revision + 1);
+      LOKA_VERIFY(doc.fact()->get().state() == (survives ? TEXT_DOCUMENT_MARKED : TEXT_DOCUMENT_READY));
+      std::printf("%s revision=%lu writes=%u selection=%s marked=%s body=%s\n",
+                  names[mode],
+                  doc.fact()->get().textRevision(),
+                  writes,
+                  [NSStringFromRange([v selectedRange]) UTF8String],
+                  [NSStringFromRange([v markedRange]) UTF8String],
+                  [[v string] UTF8String]);
+      if (mode == HIDE_RETURN)
+      {
+        f.show(true);
+        LOKA_VERIFY(f.ctx().store() == &f.row() && ![v hasMarkedText] && [[v string] isEqual:body]);
+      }
+      doc.fact()->unbind(&countWrite, &writes);
+    }
+    [body release];
+    [f.phase finish];
   }
 }
 void testMacTextViewUndo()
@@ -654,6 +983,7 @@ namespace
   if (swappingOld && responder != swappingOld && [responder isKindOfClass:[NSTextView class]]
       && MacTextStore::fromNativeFocus(responder))
   {
+    LOKA_VERIFY(![swappingOld hasMarkedText]);
     ++focusOffers;
     NSTextView *fresh = (NSTextView *)responder;
     [[fresh textStorage] replaceCharactersInRange:NSMakeRange(0, 1) withString:@"n"];
@@ -679,6 +1009,37 @@ void testMacTextViewReplacement()
     Fixture f(false);
     if (mode && !f.key("focused replacement"))
       continue;
+    if (mode)
+    {
+      TextDocument &doc = f.root().text;
+      TextPosition caret = doc.fact()->get().caret();
+      TextSplice splice;
+      LOKA_VERIFY(TextSplice::FromUtf8(caret, caret, "x", 1, TextPlacement::End(), splice) == TEXT_DOCUMENT_OK);
+      markAndLeave(f);
+      MacTextStore *original = &f.row();
+      NSTextView *marked = original->view();
+      NSString *body = [[marked string] copy];
+      NSRange range = [marked markedRange];
+      doc.post(caret);
+      f.replace("refused");
+      LOKA_VERIFY(doc.replaceReply()->get().reason() == TEXT_REPLACE_COMPOSING);
+      unsigned long length;
+      LOKA_VERIFY(!doc.queryLength(length) && loka::app::testing::TextDocumentAccess::pending(doc));
+      LOKA_VERIFY(&f.row() == original && f.ctx().store() == original && f.row().view() == marked &&
+                  [[marked string] isEqual:body] && NSEqualRanges(range, [marked markedRange]));
+      LOKA_VERIFY(f.app.commitTextInput() == TEXT_INPUT_SETTLED && ![marked hasMarkedText]);
+      // Exercise the independent splice decision inside a test-only editable interval.
+      f.present(true);
+      [marked setEditable:YES];
+      markAndLeave(f);
+      LOKA_VERIFY(doc.splice(splice) == POST_ACCEPTED);
+      f.app.reconcileAtCompletion();
+      LOKA_VERIFY(doc.spliceReply()->get().kind() == Reply<TextSplice>::REFUSED
+                  && doc.spliceReply()->get().reason() == TEXT_SPLICE_COMPOSING && [marked markedRange].length);
+      LOKA_VERIFY(f.app.commitTextInput() == TEXT_INPUT_SETTLED && ![marked hasMarkedText]);
+      [marked setEditable:NO];
+      [body release];
+    }
     f.present(true);
     NSWindow *w = f.native();
     NSTextView *old = [f.row().view() retain];
@@ -934,4 +1295,644 @@ void testMacTextViewClaimAuthority()
   [impostor setDelegate:[v delegate]];
   LOKA_VERIFY(!MacTextStore::fromNativeFocus(impostor) && ![impostor validateMenuItem:undo]);
   [impostor setDelegate:delegate];
+}
+
+namespace
+{
+  struct CommitProbe
+  {
+    Fixture &fixture;
+    unsigned step;
+    static void unmarkCallback(void *data)
+    {
+      CommitProbe &probe = *static_cast<CommitProbe *>(data);
+      Fixture &f = probe.fixture;
+      Scene *original = f.window->scene();
+      LOKA_VERIFY(++probe.step == 1 && original->isBorrowOpen() && original->textDocuments().isPublishing());
+      std::puts("NOTE_EDIT enter -> editTextChange enter");
+      MacEditTextContext *field =
+          static_cast<MacEditTextContext *>(find(&f.root(), NodeTypeToken<EditTextNode>())->getContext());
+      [f.field() setStringValue:@"nested"];
+      MacInputDoor::editTextChange(*field);
+      LOKA_VERIFY(f.root().field.get().equals(loka::core::String("nested")));
+      std::puts("editTextChange exit -> inner commit");
+      LOKA_VERIFY(f.app.commitTextInput() == TEXT_INPUT_UNAVAILABLE);
+      LOKA_VERIFY(f.window->sceneManager()->requestReplacement(new Scene(Boundary<ViewRoot>())));
+      loka::app::testing::AppTestAccess::flushWindowInvalidations(f.app);
+      LOKA_VERIFY(f.window->scene() == original);
+      original->requestInvalidate(NODE_DIRTY_PROPS);
+      LOKA_VERIFY(!original->flushInvalidation());
+      ++probe.step;
+      std::puts("NOTE_EDIT exit");
+    }
+  };
+} // namespace
+void testMacTextViewCompositionCallback()
+{
+  Fixture f;
+  NSTextView *v = f.row().view();
+  loka::testing::MacSendMark(v);
+  f.app.reconcileAtCompletion();
+  TextDocument &doc = f.root().text;
+  LOKA_VERIFY([v markedRange].length && doc.fact()->get().state() == TEXT_DOCUMENT_MARKED);
+  unsigned writes = 0;
+  doc.fact()->bind(&countWrite, &writes, false);
+  [f.phase begin:"command callback" row:&f.row()];
+  CommitProbe probe = {f, 0};
+  loka::testing::observeTextInputCommits(0, 0);
+  onNextCharacterEdit(&f.row(), &CommitProbe::unmarkCallback, &probe);
+  LOKA_VERIFY(f.app.commitTextInput() == TEXT_INPUT_SETTLED);
+  onNextCharacterEdit(0, 0, 0);
+  LOKA_VERIFY(probe.step == 2 && writes == 1 && loka::testing::textInputCommitCount() == 2);
+  LOKA_VERIFY(doc.fact()->get().state() == TEXT_DOCUMENT_READY && ![v hasMarkedText]);
+  doc.fact()->unbind(&countWrite, &writes);
+  loka::testing::observeTextInputCommits(0, 0);
+  [f.phase finish];
+}
+
+namespace
+{
+  struct ReadyCommand
+  {
+    TextDocument &document;
+    NSTextView *view;
+    unsigned calls;
+    bool ready;
+    static void handle(void *data)
+    {
+      ReadyCommand &cmd = *static_cast<ReadyCommand *>(data);
+      cmd.ready = cmd.document.fact()->get().state() == TEXT_DOCUMENT_READY && ![cmd.view hasMarkedText];
+      ++cmd.calls;
+    }
+  };
+  bool runEditCommand(Fixture &f, NSTextView *marked)
+  {
+    ReadyCommand handler = {f.root().text, marked, 0, false};
+    loka::core::EmitterState command;
+    command.bind(&ReadyCommand::handle, &handler, false);
+    MenuBarDefinition bar;
+    bar << (Menu("Edit") << MenuItem("Check document").onClick(&command));
+    const MenuSources sources = {&bar, 0, 0};
+    if (f.app.menuAttachment().project(sources))
+    {
+      NSMenuItem *item = [[[[NSApp mainMenu] itemAtIndex:0] submenu] itemAtIndex:0];
+      if ([item action] == @selector(handleMenuAction:) && [marked markedRange].length)
+        [[item target] performSelector:[item action] withObject:item];
+    }
+    f.app.menuAttachment().disconnect();
+    command.unbind(&ReadyCommand::handle, &handler);
+    return handler.calls == 1 && handler.ready;
+  }
+  NSPanel *newPanel()
+  {
+    NSPanel *panel = [[NSPanel alloc] initWithContentRect:NSMakeRect(90, 90, 240, 120)
+                                                styleMask:LOKA_MAC_WINDOW_STYLE_TITLED | LOKA_MAC_WINDOW_STYLE_CLOSABLE
+                                                  backing:NSBackingStoreBuffered
+                                                    defer:NO];
+    [panel setReleasedWhenClosed:NO];
+    return panel;
+  }
+  void beginSheet(NSWindow *parent, NSPanel *sheet)
+  {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    [NSApp beginSheet:sheet modalForWindow:parent modalDelegate:nil didEndSelector:0 contextInfo:0];
+#pragma clang diagnostic pop
+  }
+  void closePanel(NSPanel *panel)
+  {
+    if ([panel sheetParent])
+    {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+      [NSApp endSheet:panel];
+#pragma clang diagnostic pop
+    }
+    [panel orderOut:nil];
+    [panel release];
+  }
+} // namespace
+void testMacTextViewCompositionCommands()
+{
+  const char *names[] = {"background document window", "document sheet", "key panel"};
+  for (unsigned mode = 0; mode < 3; ++mode)
+  {
+    Fixture f;
+    NSWindow *other = nil;
+    NSPanel *panel = nil;
+    if (!mode)
+    {
+      WindowProps props;
+      props.frame(400, 40, 320, 240).visible(true).scene(new Scene(Boundary<ViewRoot>()));
+      MacWindow *second = new MacWindow(&f.platform, props);
+      f.app.install(second);
+      f.app.flush();
+      other = (NSWindow *)loka::dsl::testing::MacWindowTestAccess::nativeWindow(*second);
+      ViewRoot *root = static_cast<ViewRoot *>(SceneAccess::rootBoundary(*second->scene()));
+      LOKA_VERIFY(loka::app::testing::TextDocumentAccess::registration(root->text)->store());
+    }
+    if (!f.key(names[mode]))
+      continue;
+    NSTextView *v = f.row().view();
+    LOKA_VERIFY([f.native() makeFirstResponder:v]);
+    loka::testing::MacSendMark(v);
+    f.app.reconcileAtCompletion();
+    if (mode)
+    {
+      panel = newPanel();
+      other = panel;
+      if (mode == 1)
+        beginSheet(f.native(), panel);
+    }
+    bool key = mode == 1 ? [f.native() attachedSheet] == panel : loka::testing::MacRequestKeyWindow(other);
+    if (key)
+    {
+      LOKA_VERIFY((mode == 1 || ([other isKeyWindow] && ![f.native() isKeyWindow])) && [v markedRange].length);
+      LOKA_VERIFY(mode != 1 || [f.native() attachedSheet] == panel);
+      TextDocument &doc = f.root().text;
+      unsigned writes = 0;
+      doc.fact()->bind(&countWrite, &writes, false);
+      NSString *body = [[v string] copy];
+      const unsigned long revision = doc.fact()->get().textRevision();
+      [f.phase begin:names[mode] row:&f.row()];
+      LOKA_VERIFY(runEditCommand(f, v) && writes == 1 && [f.phase characters] && [f.phase notes]);
+      LOKA_VERIFY([[v string] isEqual:body] && revision + 1 == doc.fact()->get().textRevision());
+      [body release];
+      const unsigned notes = [f.phase notes];
+      unsigned edits = [f.phase characters];
+      LOKA_VERIFY(f.app.commitTextInput() == TEXT_INPUT_SETTLED && writes == 1 && edits == [f.phase characters]
+                  && notes == [f.phase notes]);
+      [f.phase finish];
+      doc.fact()->unbind(&countWrite, &writes);
+    }
+    else
+      std::printf("[skip] %s did not become key: %s\n", names[mode], loka::testing::MacKeyRefusalReason());
+    closePanel(panel);
+  }
+}
+
+// An independent undo action leaves the native mark in place while both live history branches execute.
+@interface LokaHistoryWitness : NSObject
+{
+  NSUndoManager *manager_;
+  unsigned calls_;
+}
+- (void)arm:(NSUndoManager *)manager;
+- (void)step:(id)sender;
+- (unsigned)calls;
+@end
+@implementation LokaHistoryWitness
+- (void)arm:(NSUndoManager *)manager
+{
+  manager_ = manager;
+  [manager_ registerUndoWithTarget:self selector:@selector(step:) object:nil];
+}
+- (void)step:(id)sender
+{
+  (void)sender;
+  ++calls_;
+  [self arm:manager_];
+}
+- (unsigned)calls
+{
+  return calls_;
+}
+@end
+void testMacTextViewCompositionUndo()
+{
+  Fixture f;
+  NSTextView *v = f.row().view();
+  NSUndoManager *manager = f.row().undoManager();
+  [manager setGroupsByEvent:NO];
+  [manager beginUndoGrouping];
+  loka::testing::MacSendMark(v);
+  [manager endUndoGrouping];
+  LokaHistoryWitness *history = [[LokaHistoryWitness alloc] init];
+  [manager beginUndoGrouping];
+  [history arm:manager];
+  [manager endUndoGrouping];
+  NSMenuItem *undo = verb(@selector(undo:)), *redo = verb(@selector(redo:));
+  LOKA_VERIFY([v markedRange].length && [v validateMenuItem:undo] && ![v validateMenuItem:redo]);
+  send(v, @selector(undo:));
+  LOKA_VERIFY([history calls] == 1 && [v markedRange].length && [v validateMenuItem:redo]);
+  send(v, @selector(redo:));
+  LOKA_VERIFY([history calls] == 2 && [v markedRange].length);
+  [manager removeAllActionsWithTarget:history];
+  [history release];
+  [manager setGroupsByEvent:YES];
+  // Scope the real text change and its commit to an explicit native undo group.
+  LOKA_VERIFY(f.app.commitTextInput() == TEXT_INPUT_SETTLED);
+  f.replace("base");
+  v = f.row().view();
+  [v setSelectedRange:NSMakeRange(4, 0)];
+  manager = f.row().undoManager();
+  [manager setGroupsByEvent:NO];
+  [manager beginUndoGrouping];
+  loka::testing::MacSendMark(v);
+  LOKA_VERIFY(f.app.commitTextInput() == TEXT_INPUT_SETTLED);
+  [manager endUndoGrouping];
+  LOKA_VERIFY([[v string] isEqual:@"basek"]);
+  send(v, @selector(undo:));
+  LOKA_VERIFY([[v string] isEqual:@"base"]);
+  send(v, @selector(redo:));
+  LOKA_VERIFY([[v string] isEqual:@"basek"]);
+  if (f.key("menu commits before undo dispatch"))
+  {
+    LOKA_VERIFY([f.native() makeFirstResponder:v]);
+    MenuBarDefinition bar;
+    bar << EditMenu();
+    const MenuSources sources = {&bar, 0, 0};
+    LOKA_VERIFY(f.app.menuAttachment().project(sources));
+    NSMenu *menu = [[[NSApp mainMenu] itemAtIndex:0] submenu];
+    [manager setGroupsByEvent:YES];
+    loka::testing::MacSendMark(v);
+    LOKA_VERIFY([v markedRange].length);
+    [menu performActionForItemAtIndex:0];
+    LOKA_VERIFY(![v hasMarkedText] && [[v string] isEqual:@"basek"]);
+    f.app.menuAttachment().disconnect();
+  }
+}
+
+namespace
+{
+  enum HandCase
+  {
+    READ_ONLY,
+    DETACH,
+    REPLACE,
+    RETRY_REPLACE,
+    SHEET,
+    PANEL,
+    CLOSE,
+    FIELD_FOCUS,
+    APP_RETURN,
+    HAND_COUNT
+  };
+  const char *const handNames[] = {"Read-only toggle",
+                                   "Detach/Reattach",
+                                   "Replace",
+                                   "Commit+Replace retry",
+                                   "Sheet",
+                                   "Key panel",
+                                   "Close window",
+                                   "Field focus",
+                                   "App switch/return"};
+  enum Verdict
+  {
+    RETRY,
+    PASS,
+    FAIL
+  };
+  const char *const verdictNames[] = {"RETRY", "PASS", "FAIL"};
+  /** A single interactive run owns its log and all observations until close or timeout. */
+  class HandRun
+  {
+    Fixture &f_;
+    FILE *log_;
+    Verdict results_[HAND_COUNT];
+    unsigned writes_, depth_, maximum_, callbacks_;
+    loka::core::State<TextDocumentFact> *fact_;
+    Method delegateMethod_;
+    IMP original_;
+    static HandRun *active_;
+    static void edited(id delegate, SEL cmd, NSNotification *note)
+    {
+      HandRun &run = *active_;
+      ++run.depth_;
+      ++run.callbacks_;
+      if (run.depth_ > run.maximum_)
+        run.maximum_ = run.depth_;
+      std::fprintf(run.log_,
+                   "callback=%u enter depth=%u mask=%lu row=%p\n",
+                   run.callbacks_,
+                   run.depth_,
+                   (unsigned long)[(NSTextStorage *)[note object] editedMask],
+                   (void *)[(id<LokaPhaseRowOwner>)delegate owner]);
+      reinterpret_cast<void (*)(id, SEL, NSNotification *)>(run.original_)(delegate, cmd, note);
+      std::fprintf(run.log_, "callback exit depth=%u\n", run.depth_--);
+    }
+    void outcome(HandCase which, Verdict verdict)
+    {
+      if (results_[which] != FAIL && (results_[which] != PASS || verdict == FAIL))
+        results_[which] = verdict;
+      std::fprintf(log_, "%s %s\n", handNames[which], verdictNames[verdict]);
+      std::printf("%s %s\n", handNames[which], verdictNames[verdict]);
+      std::fflush(log_);
+    }
+    static void written(void *data)
+    {
+      HandRun &run = *static_cast<HandRun *>(data);
+      ++run.writes_;
+      run.snapshot("publication");
+    }
+
+  public:
+    HandRun(Fixture &f, FILE *log)
+        : f_(f),
+          log_(log),
+          writes_(0),
+          depth_(0),
+          maximum_(0),
+          callbacks_(0)
+    {
+      std::fill(results_, results_ + HAND_COUNT, RETRY);
+      active_ = this;
+      delegateMethod_ =
+          class_getInstanceMethod([[f.row().view() delegate] class], @selector(textStorageDidProcessEditing:));
+      original_ = method_setImplementation(delegateMethod_, reinterpret_cast<IMP>(&edited));
+      fact_ = f.root().text.fact();
+      fact_->bind(&written, this, false);
+    }
+    ~HandRun()
+    {
+      unbind();
+      method_setImplementation(delegateMethod_, original_);
+      active_ = 0;
+      for (unsigned i = 0; i < HAND_COUNT; ++i)
+      {
+        std::fprintf(log_, "final %s %s\n", handNames[i], verdictNames[results_[i]]);
+        std::printf("final %s %s\n", handNames[i], verdictNames[results_[i]]);
+      }
+    }
+    void unbind()
+    {
+      if (fact_)
+        fact_->unbind(&written, this);
+      fact_ = 0;
+    }
+    void snapshot(const char *stage)
+    {
+      TextDocument &doc = f_.root().text;
+      MacTextStore &row = f_.row();
+      NSTextView *view = row.view();
+      NSWindow *window = [view window];
+      NSString *source = nil;
+      id context = [view respondsToSelector:@selector(inputContext)] ? [view inputContext] : nil;
+      if ([context respondsToSelector:@selector(selectedKeyboardInputSource)])
+        source = [(id<LokaHandInputSource>)context selectedKeyboardInputSource];
+      std::fprintf(log_,
+                   "%s row=%p view=%p window=%p key=%p responder=%p source=%s body=%s selection=%s mark=%s "
+                   "pending=%d fact=%d revision=%lu writes=%u reply=%d reason=%d callbacks=%u maxDepth=%u\n",
+                   stage,
+                   (void *)&row,
+                   (void *)view,
+                   (void *)window,
+                   (void *)[NSApp keyWindow],
+                   (void *)[window firstResponder],
+                   source ? [source UTF8String] : "(none)",
+                   [[view string] UTF8String],
+                   [NSStringFromRange([view selectedRange]) UTF8String],
+                   [NSStringFromRange([view markedRange]) UTF8String],
+                   row.pending(),
+                   (int)doc.fact()->get().state(),
+                   doc.fact()->get().textRevision(),
+                   writes_,
+                   (int)doc.replaceReply()->get().kind(),
+                   doc.replaceReply()->get().kind() == Reply<TextReplacement>::REFUSED
+                       ? (int)doc.replaceReply()->get().reason()
+                       : -1,
+                   callbacks_,
+                   maximum_);
+      std::fflush(log_);
+    }
+    void focusOutcome(HandCase which, NSString *priorBody, NSRange priorRange)
+    {
+      snapshot(handNames[which]);
+      NSTextView *view = f_.row().view();
+      bool marked = [view hasMarkedText] && [view markedRange].length;
+      bool consistent = f_.root().text.fact()->get().state() == (marked ? TEXT_DOCUMENT_MARKED : TEXT_DOCUMENT_READY);
+      std::fprintf(log_,
+                   "before focus change body=%s mark=%s\n",
+                   [priorBody UTF8String],
+                   [NSStringFromRange(priorRange) UTF8String]);
+      bool preserved = [[view string] isEqual:priorBody] && (!marked || NSEqualRanges([view markedRange], priorRange));
+      outcome(which, consistent && maximum_ <= 1 ? (preserved ? PASS : RETRY) : FAIL);
+    }
+    void act(HandCase which)
+    {
+      NSWindow *window = f_.native();
+      NSTextView *v = f_.row().view();
+      snapshot(handNames[which]);
+      if (![window isKeyWindow] || [window firstResponder] != v || ![v hasMarkedText] || ![v markedRange].length)
+      {
+        outcome(which, RETRY);
+        return;
+      }
+      NSString *body = [[v string] copy];
+      NSRange range = [v markedRange];
+      TextDocument &doc = f_.root().text;
+      bool passed = false;
+      bool retry = false;
+      if (which == READ_ONLY || which == DETACH)
+      {
+        if (which == READ_ONLY)
+          f_.present(true);
+        else
+          f_.show(false);
+        f_.app.reconcileAtCompletion();
+        snapshot("settled");
+        passed = ![v hasMarkedText] && [[v string] isEqual:body] && doc.fact()->get().state() == TEXT_DOCUMENT_READY
+                 && (which == READ_ONLY ? ![v isEditable] : ![v superview]);
+        if (which == READ_ONLY)
+          f_.present(false);
+        else
+          f_.show(true);
+        passed = passed && f_.ctx().store() == &f_.row() && [v isEditable] && [v window] == window;
+      }
+      else if (which == REPLACE || which == RETRY_REPLACE)
+      {
+        f_.replace("replacement");
+        passed = doc.replaceReply()->get().kind() == Reply<TextReplacement>::REFUSED
+                 && doc.replaceReply()->get().reason() == TEXT_REPLACE_COMPOSING && f_.row().view() == v &&
+                 [[v string] isEqual:body] && NSEqualRanges([v markedRange], range);
+        snapshot("replacement receipt");
+        if (which == RETRY_REPLACE && passed)
+        {
+          passed = f_.app.commitTextInput() == TEXT_INPUT_SETTLED && ![v hasMarkedText] && [[v string] isEqual:body];
+          snapshot("command commit");
+          f_.replace("replacement");
+          passed = passed && doc.replaceReply()->get().kind() == Reply<TextReplacement>::GRANTED &&
+                   [[f_.row().view() string] isEqual:@"replacement"];
+        }
+      }
+      else if (which == SHEET || which == PANEL)
+      {
+        NSPanel *panel = newPanel();
+        if (which == SHEET)
+          beginSheet(window, panel);
+        else
+          [panel makeKeyAndOrderFront:nil];
+        retry = (which == SHEET ? [window attachedSheet] != panel : !loka::testing::MacWaitForKeyStatus(panel, true))
+                || ![v markedRange].length;
+        snapshot("auxiliary window before Edit command");
+        if (!retry)
+        {
+          passed = runEditCommand(f_, v) && ![v hasMarkedText] && [[v string] isEqual:body];
+        }
+        closePanel(panel);
+      }
+      else
+      {
+        [v retain];
+        const MacTextStore *retiring = &f_.row();
+        observeStoreCalls(retiring);
+        f_.row().undoManager();
+        const unsigned control = observedStoreCalls();
+        observeStoreCalls(0);
+        [window performClose:nil];
+        passed = ![window isVisible] && ![v hasMarkedText] && [[v string] isEqual:body]
+                 && doc.fact()->get().state() == TEXT_DOCUMENT_READY;
+        snapshot("native close returned");
+        if (![window isVisible])
+        {
+          unbind();
+          f_.app.flush();
+          observeStoreCalls(retiring);
+          unsigned nativeAttempts = 0;
+          ++nativeAttempts;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+          [v insertText:@"synthetic late delivery"];
+#pragma clang diagnostic pop
+          unsigned calls = observedStoreCalls();
+          observeStoreCalls(0);
+          std::fprintf(log_,
+                       "synthetic post-retirement view=%p nativeAttempts=%u lokaCalls=%u\n",
+                       (void *)v,
+                       nativeAttempts,
+                       calls);
+          std::fprintf(log_, "live delegate control calls=%u\n", control);
+          passed = passed && control == 1 && ![v delegate] && calls == 0;
+        }
+        [v release];
+      }
+      [body release];
+      if ([window isVisible])
+        snapshot("action returned");
+      outcome(which, retry ? RETRY : passed && maximum_ <= 1 ? PASS : FAIL);
+    }
+  };
+  HandRun *HandRun::active_ = 0;
+} // namespace
+@interface LokaHandButton : NSButton
+{
+  HandRun *run_;
+}
+- (void)install:(HandRun *)run;
+@end
+@implementation LokaHandButton
+- (BOOL)acceptsFirstResponder
+{
+  return NO;
+}
+- (void)install:(HandRun *)run
+{
+  run_ = run;
+  [self setRefusesFirstResponder:YES];
+  [self setTarget:self];
+  [self setAction:@selector(performCase:)];
+}
+- (void)performCase:(id)sender
+{
+  (void)sender;
+  run_->act(static_cast<HandCase>([self tag]));
+}
+@end
+
+void testMacTextViewImeHandCheck()
+{
+  const char *enable = std::getenv("LOKA_HAND_CHECK");
+  if (!enable || std::strcmp(enable, "1") != 0)
+  {
+    std::puts("[skip] hand check: set LOKA_HAND_CHECK=1");
+    return;
+  }
+  Fixture f;
+  char path[] = "/tmp/loka-ime-XXXXXX";
+  int fd = mkstemp(path);
+  LOKA_VERIFY(fd >= 0);
+  FILE *log = fdopen(fd, "w");
+  LOKA_VERIFY(log);
+  std::printf("IME hand-check log %s\n", path);
+  const char *candidate = std::getenv("LOKA_CANDIDATE");
+  std::fprintf(log,
+               "candidate=%s os=%s\n",
+               candidate ? candidate : "(unspecified)",
+               [[[NSProcessInfo processInfo] operatingSystemVersionString] UTF8String]);
+  NSWindow *window = [f.native() retain];
+  [window setTitle:@"Japanese IME hand check"];
+  [window setContentSize:NSMakeSize(540, 350)];
+  {
+    HandRun run(f, log);
+    for (unsigned i = 0; i <= CLOSE; ++i)
+    {
+      LokaHandButton *button =
+          [[LokaHandButton alloc] initWithFrame:NSMakeRect(10 + (i % 3) * 176, 190 + (i / 3) * 42, 172, 36)];
+      [button setTag:i];
+      [button setTitle:[NSString stringWithUTF8String:handNames[i]]];
+      [button setBezelStyle:LOKA_MAC_BUTTON_BEZEL_STYLE];
+      [button install:&run];
+      [[window contentView] addSubview:button];
+      [button release];
+    }
+    f.key("interactive document window");
+    [window makeFirstResponder:f.row().view()];
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:600];
+    NSString *departedBody = nil;
+    NSRange departedRange = NSMakeRange(NSNotFound, 0);
+    while ([window isVisible] && [deadline timeIntervalSinceNow] > 0)
+    {
+      NSAutoreleasePool *iteration = [[NSAutoreleasePool alloc] init];
+#if defined(MAC_OS_X_VERSION_MAX_ALLOWED) && MAC_OS_X_VERSION_MAX_ALLOWED >= 101200
+      const NSEventMask mask = NSEventMaskAny;
+#else
+      const NSUInteger mask = NSAnyEventMask;
+#endif
+      NSTextView *document = f.row().view();
+      bool markedAtEntry = [window isKeyWindow] && [window firstResponder] == document && [document markedRange].length;
+      NSString *priorBody = markedAtEntry ? [[[document string] copy] autorelease] : nil;
+      NSRange priorRange = [document markedRange];
+      NSEvent *event = [NSApp nextEventMatchingMask:mask
+                                          untilDate:[NSDate dateWithTimeIntervalSinceNow:0.1]
+                                             inMode:NSDefaultRunLoopMode
+                                            dequeue:YES];
+      if (event)
+        [NSApp sendEvent:event];
+      if ([window isVisible])
+      {
+        f.app.flush();
+        if (markedAtEntry && ![NSApp isActive])
+        {
+          run.snapshot("departed app while composing");
+          [departedBody release];
+          departedBody = [priorBody retain];
+          departedRange = priorRange;
+        }
+        if (departedBody && [window isKeyWindow] && [NSApp isActive])
+        {
+          run.focusOutcome(APP_RETURN, departedBody, departedRange);
+          [departedBody release];
+          departedBody = nil;
+        }
+        if (markedAtEntry && document == f.row().view() && [f.field() currentEditor] &&
+            [window firstResponder] == [f.field() currentEditor])
+          run.focusOutcome(FIELD_FOCUS, priorBody, priorRange);
+        if (event)
+          run.snapshot("event completed");
+        [NSApp updateWindows];
+      }
+      [iteration drain];
+    }
+    [departedBody release];
+    NSArray *views = [[window contentView] subviews];
+    for (NSUInteger i = 0; i < [views count]; ++i)
+    {
+      id view = [views objectAtIndex:i];
+      if ([view isKindOfClass:[LokaHandButton class]])
+        [view setTarget:nil];
+    }
+  }
+  [window release];
+  std::fclose(log);
+  std::printf("IME hand-check log %s\n", path);
 }

@@ -1224,6 +1224,7 @@ namespace loka
 
 #if defined(TEST_BUILD) && defined(__APPLE__)
 #include "../apple/macos/src/text/MacTextStore.hpp"
+#include "support/MacCompositionProbe.hpp"
 namespace loka
 {
   namespace macos
@@ -1260,6 +1261,20 @@ namespace loka
         --viewPreparationFailures;
         return true;
       }
+      namespace
+      {
+        struct CharacterObserver
+        {
+          const MacTextStore *row;
+          void (*callback)(void *);
+          void *context;
+        } nextEdit = {};
+      } // namespace
+      void onNextCharacterEdit(const MacTextStore *row, void (*callback)(void *), void *context)
+      {
+        CharacterObserver observer = {row, callback, context};
+        nextEdit = observer;
+      }
       void observeStoreCalls(const MacTextStore *row, StoreCallObserver observer)
       {
         storeCallObserver = observer;
@@ -1272,6 +1287,12 @@ namespace loka
       }
       void recordStoreCall(const MacTextStore *row, StoreCall call)
       {
+        if (call == NOTE_EDIT && row == nextEdit.row && nextEdit.callback)
+        {
+          CharacterObserver observer = nextEdit;
+          nextEdit = CharacterObserver();
+          observer.callback(observer.context);
+        }
         if (storeCallObserver)
           storeCallObserver(row, call);
         if (row == observedRow)
