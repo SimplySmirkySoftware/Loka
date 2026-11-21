@@ -524,6 +524,7 @@ namespace loka
       namespace
       {
         int g_observedMainDefinitionCloneFailures = 0;
+        bool g_refuseObservedMainCreation = false;
         int g_scenarioReelDriverAllocationFailures = 0;
       } // namespace
 
@@ -545,6 +546,16 @@ namespace loka
           return false;
         }
         return true;
+      }
+
+      void refuseObservedMainCreation(bool refuse)
+      {
+        g_refuseObservedMainCreation = refuse;
+      }
+
+      bool observedMainCreationRefused()
+      {
+        return g_refuseObservedMainCreation;
       }
 
       void failObservedMainDefinitionClones(int count)

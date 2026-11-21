@@ -13,6 +13,8 @@ namespace loka
       void failObservedMainDefinitionClones(int count);
       void allowObservedMainDefinitionClones();
       bool shouldCloneObservedMainDefinition();
+      void refuseObservedMainCreation(bool refuse);
+      bool observedMainCreationRefused();
     } // namespace testing
 #endif
 
@@ -44,6 +46,10 @@ namespace loka
 
       virtual app::scene::Node *create() const
       {
+#ifdef TEST_BUILD
+        if (testing::observedMainCreationRefused())
+          return 0;
+#endif
         app::scene::Node *node = Base::create();
         if (this->observed_)
         {

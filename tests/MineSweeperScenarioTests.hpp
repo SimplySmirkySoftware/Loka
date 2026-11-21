@@ -7,6 +7,7 @@ void testMineSweeperNewGameTwiceHoldsFinalSceneAndMatchesAudit();
 void testMineSweeperSeededRevealDrivesCells();
 void testMineSweeperDifferentSeedRefusesFixedBoardAudit();
 void testMineSweeperStandaloneFlowWritesExpectedAudit();
+void testMineSweeperStandaloneDeclarationRefusalIsWindowless();
 void testMineSweeperStandaloneMountRefusalFailsClosed();
 
 #endif // LOKA_TESTS_MINESWEEPER_SCENARIO_TESTS_HPP

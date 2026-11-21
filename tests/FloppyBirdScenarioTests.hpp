@@ -6,6 +6,7 @@ void testFloppyBirdGameModelResetReplaysSeededScenario();
 void testFloppyBirdFixedStepFlapsHoldFinalSceneAndMatchAudit();
 void testFloppyBirdDifferentSeedRefusesFixedCheckpointAudit();
 void testFloppyBirdStandaloneFlowWritesExpectedAudit();
+void testFloppyBirdStandaloneDeclarationRefusalIsWindowless();
 void testFloppyBirdStandaloneMountRefusalFailsClosed();
 
 #endif // LOKA_TESTS_FLOPPY_BIRD_SCENARIO_TESTS_HPP

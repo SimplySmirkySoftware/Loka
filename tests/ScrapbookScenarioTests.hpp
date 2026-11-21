@@ -4,6 +4,7 @@
 void testScrapbookRigLaunchRequiresConfigAndRefusesStandaloneTour();
 void testScrapbookStandaloneTourAdvancesInOrderAndHoldsFinalScene();
 void testScrapbookStandaloneMenuMatchesExample();
+void testScrapbookStandaloneDeclarationRefusalIsWindowless();
 void testScrapbookStandaloneMountRefusalFailsClosed();
 void testScenarioAuditFileWritesReadableRecords();
 void testScrapbookObservedStringAuditMatchesTrackedExpectation();
