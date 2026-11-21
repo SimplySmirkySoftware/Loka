@@ -88,6 +88,10 @@ int main(int argc, char **argv)
   LOKA_VERIFY(!outputs.add("..", "parent"));
   LOKA_VERIFY(!outputs.add("SITE.CSS", "case alias of the stylesheet"));
   LOKA_VERIFY(!outputs.add("Index.html", "case alias of a page"));
+  LOKA_VERIFY(!outputs.add("index.html.", "trailing dot"));
+  LOKA_VERIFY(!outputs.add("a.b.html", "dot in the stem"));
+  LOKA_VERIFY(!outputs.add(".html", "empty stem"));
+  LOKA_VERIFY(!outputs.add("page.htm", "another suffix"));
   LOKA_VERIFY(!document_site::addPage(outputs, "unrendered.html", " ", page));
   LOKA_VERIFY(!outputs.add(std::string("index.html\0alias", 16), "truncated"));
   if (std::strcmp(argv[1], "refuse") == 0)

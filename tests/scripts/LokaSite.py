@@ -83,7 +83,7 @@ def links(directory):
                     assert href.startswith(REPO)
                 else:
                     target = (directory / url.path).resolve()
-                    assert target.parent == directory and target.is_file()
+                    assert target.parent == directory.resolve() and target.is_file()
 
 
 def parse(directory):

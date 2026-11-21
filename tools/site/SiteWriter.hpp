@@ -173,28 +173,32 @@ namespace document_site
     friend bool writeSite(const std::string &, const char *, const SiteOutputs &);
 
     /**
-     * A page name is lowercase ASCII letters, digits, '.', '-' and '_', and starts with a letter or digit. That
-     * leaves out path separators, "." and "..", and names that differ only by case, which a case-insensitive
-     * output directory would fold onto one file.
+     * A page name is a stem of lowercase ASCII letters, digits and '-', starting with a letter or digit, followed
+     * by ".html". No two such names can denote one file: there is no path separator, no "." or "..", no case to
+     * fold, no trailing dot to drop, and the stylesheet's name is not of this shape.
      * Cost: add calls once per offered name, walking that name's bytes.
      */
-    static bool isPortableName(const std::string &name)
+    static bool isPageName(const std::string &name)
     {
-      for (size_t i = 0; i < name.size(); ++i)
+      static const char Suffix[] = ".html";
+      const size_t suffix = sizeof(Suffix) - 1;
+      if (name.size() <= suffix || name.compare(name.size() - suffix, suffix, Suffix) != 0)
+        return false;
+      for (size_t i = 0; i < name.size() - suffix; ++i)
       {
         const char c = name[i];
         const bool alnum = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
-        if (!alnum && (i == 0 || (c != '.' && c != '-' && c != '_')))
+        if (!alnum && (i == 0 || c != '-'))
           return false;
       }
-      return !name.empty();
+      return true;
     }
 
   public:
     /** Cost: addPage calls once per rendered page, scanning this site's names and copying the admitted bytes. */
     bool add(const std::string &name, const std::string &bytes)
     {
-      if (!isPortableName(name) || name == "site.css")
+      if (!isPageName(name))
         return false;
       for (Pages::const_iterator page = this->pages_.begin(); page != this->pages_.end(); ++page)
         if (page->first == name)

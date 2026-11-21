@@ -23,8 +23,8 @@ MUTATIONS = [
     ("publish-as-staged", "Files", [
         ("return file->stage(bytes);", "return file->stage(bytes) && file->publish();"),
         ('files.stage(directory, "site.css", css) && files.publish()', 'files.stage(directory, "site.css", css)')]),
-    ("reserved-name", "Refusal", [('|| name == "site.css"', "")]),
-    ("any-name", "Refusal", [("if (!isPortableName(name) || ", "if (")]),
+    ("any-name", "Refusal", [("if (!isPageName(name))", "if (name.empty())")]),
+    ("any-suffix", "Refusal", [("name.compare(name.size() - suffix, suffix, Suffix) != 0", "false")]),
     ("ignore-stylesheet", "Output", [
         ('std::fopen(path, "rb")', '(static_cast<void>(path), std::fopen("../../tools/site/site.css", "rb"))')]),
 ]
