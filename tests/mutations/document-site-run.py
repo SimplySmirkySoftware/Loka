@@ -24,6 +24,7 @@ MUTATIONS = [
         ("return file->stage(bytes);", "return file->stage(bytes) && file->publish();"),
         ('files.stage(directory, "site.css", css) && files.publish()', 'files.stage(directory, "site.css", css)')]),
     ("reserved-name", "Refusal", [('|| name == "site.css"', "")]),
+    ("any-name", "Refusal", [("if (!isPortableName(name) || ", "if (")]),
     ("ignore-stylesheet", "Output", [
         ('std::fopen(path, "rb")', '(static_cast<void>(path), std::fopen("../../tools/site/site.css", "rb"))')]),
 ]

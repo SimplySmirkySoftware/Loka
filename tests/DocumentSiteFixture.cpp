@@ -84,6 +84,10 @@ int main(int argc, char **argv)
   LOKA_VERIFY(!outputs.add("", "empty"));
   LOKA_VERIFY(!outputs.add("nested/page", "slash"));
   LOKA_VERIFY(!outputs.add("site.css", "reserved"));
+  LOKA_VERIFY(!outputs.add(".", "directory"));
+  LOKA_VERIFY(!outputs.add("..", "parent"));
+  LOKA_VERIFY(!outputs.add("SITE.CSS", "case alias of the stylesheet"));
+  LOKA_VERIFY(!outputs.add("Index.html", "case alias of a page"));
   LOKA_VERIFY(!document_site::addPage(outputs, "unrendered.html", " ", page));
   LOKA_VERIFY(!outputs.add(std::string("index.html\0alias", 16), "truncated"));
   if (std::strcmp(argv[1], "refuse") == 0)

@@ -172,12 +172,29 @@ namespace document_site
 
     friend bool writeSite(const std::string &, const char *, const SiteOutputs &);
 
+    /**
+     * A page name is lowercase ASCII letters, digits, '.', '-' and '_', and starts with a letter or digit. That
+     * leaves out path separators, "." and "..", and names that differ only by case, which a case-insensitive
+     * output directory would fold onto one file.
+     * Cost: add calls once per offered name, walking that name's bytes.
+     */
+    static bool isPortableName(const std::string &name)
+    {
+      for (size_t i = 0; i < name.size(); ++i)
+      {
+        const char c = name[i];
+        const bool alnum = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+        if (!alnum && (i == 0 || (c != '.' && c != '-' && c != '_')))
+          return false;
+      }
+      return !name.empty();
+    }
+
   public:
     /** Cost: addPage calls once per rendered page, scanning this site's names and copying the admitted bytes. */
     bool add(const std::string &name, const std::string &bytes)
     {
-      if (name.empty() || name.find('/') != std::string::npos || name.find('\0') != std::string::npos
-          || name == "site.css")
+      if (!isPortableName(name) || name == "site.css")
         return false;
       for (Pages::const_iterator page = this->pages_.begin(); page != this->pages_.end(); ++page)
         if (page->first == name)
