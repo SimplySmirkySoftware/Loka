@@ -32,6 +32,9 @@ MAC_ALLOWLIST = {
     "apple/macos/src/platform/MacNativeGeometry.hpp": {"NSMakeRect", "setFrame", "scrollPoint"},
     # drawRect text centring: native bounds and native measured glyph size.
     "apple/macos/src/context/MacCellContext.mm": {"NSMakeRect"},
+    # MacRectsCover: residual strips of AppKit's damage rects inside the leaf's own
+    # visible bounds, never layout units (B3 3b-3v2 W presentation).
+    "apple/macos/src/context/MacAttributedTextContext.mm": {"NSMakeRect"},
     # drawRect IMAGE_FIT_COVER source crop: decoded pixels, never layout units.
     "apple/macos/src/context/MacImageViewContext.mm": {"NSMakeRect"},
     # drawRect edge blend: one-point rows of the view's native bounds.
