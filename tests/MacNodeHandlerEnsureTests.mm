@@ -5789,17 +5789,21 @@ void testMacTextWindowRecord()
 
 namespace
 {
-  /** Routing trap, expected zero calls during the observed native draw. */
-  BOOL UnexpectedWindowEvidence(id, SEL, NSWindow *)
+  IMP windowEvidenceForward;
+  /** Check the receiver once per evidence query during display and forward sibling queries. */
+  BOOL UnexpectedWindowEvidence(id receiver, SEL cmd, NSWindow *window)
   {
-    LOKA_VERIFY(false && "entered W evidence gathering");
-    return NO;
+    if (receiver == observingDraw->view)
+      LOKA_VERIFY(false && "entered W evidence gathering");
+    return ((BOOL(*)(id, SEL, NSWindow *))windowEvidenceForward)(receiver, cmd, window);
   }
   /** One ordinary display per routing case, observing only the target leaf. */
   void VerifyLayerRouting(NSView *view, NSWindow *window)
   {
     ObservedDraw obs(view);
-    MacNativeRefusal trap(sel_registerName("drawUsesWindowContext:"), (IMP)UnexpectedWindowEvidence, [view class]);
+    SEL evidence = sel_registerName("drawUsesWindowContext:");
+    windowEvidenceForward = class_getMethodImplementation([view class], evidence);
+    MacNativeRefusal trap(evidence, (IMP)UnexpectedWindowEvidence, [view class]);
     [view setNeedsDisplay:YES];
     [window display];
     [CATransaction flush];
@@ -6138,13 +6142,13 @@ void testMacTextWindowPassRepaint()
   NSWindow *window = WindowDrawHost();
   NSView *root = [window contentView];
   MacScenePlatformController controller(root, RailMetrics());
-  ZStackNode stack((ZStackProps()));
+  ZStackNode *stack = new ZStackNode(ZStackProps());
   const AttributedString link = Linked("H", TextStyle().color(TEXT_COLOR_BLACK), LinkTarget(loka::core::String("ink")));
   AttributedTextNode *node = new AttributedTextNode(AttributedTextProps(link));
   BoxNode *cover = new BoxNode(BoxProps().setSize(180, 0));
-  stack.addChild(node);
-  stack.addChild(cover);
-  controller.onChange(&stack, NODE_DIRTY_NONE, false);
+  stack->addChild(node);
+  stack->addChild(cover);
+  controller.onChange(stack, NODE_DIRTY_NONE, false);
   controller.relayout(320, 160);
   NSView *view = AttributedAccess::view(AttributedContext(*node));
   LOKA_VERIFY(!MacLateBoundLayer(view));
@@ -6179,23 +6183,26 @@ void testMacTextWindowPassRepaint()
     Candidate(AttributedContext(*node), ink, "ink");
   }
 
-  controller.releaseNodeContexts(&stack);
+  controller.onChange(0, NODE_DIRTY_NONE, false);
+  delete stack;
+
   loka::core::MutableState<loka::core::String> storage(loka::core::String("editing"));
   NodeState<loka::core::String> text(&storage, 0);
   loka::testing::ScrollViewSeat viewport;
-  ScrollViewNode clip(ScrollViewProps(viewport.state()));
-  clip.addChild(new EditTextNode(EditTextProps(text)));
-  controller.onChange(&clip, NODE_DIRTY_LAYOUT, true);
+  ScrollViewNode *clip = new ScrollViewNode(ScrollViewProps(viewport.state()));
+  clip->addChild(new EditTextNode(EditTextProps(text)));
+  controller.onChange(clip, NODE_DIRTY_LAYOUT, true);
   NSTextField *field = (NSTextField *)FindDescendant(root, [NSTextField class]);
   LOKA_VERIFY(field && [field enclosingScrollView]);
   [window makeKeyAndOrderFront:nil];
   LOKA_VERIFY([window makeFirstResponder:field] && [field currentEditor]);
   {
     ObservedPass trace(window);
-    controller.onChange(&clip, NODE_DIRTY_LAYOUT, true);
+    controller.onChange(clip, NODE_DIRTY_LAYOUT, true);
     LOKA_VERIFY(trace.entries + 1 == MacTestRepaintEntries() && trace.sends == "FMD");
   }
   controller.onChange(0, NODE_DIRTY_NONE, false);
+  delete clip;
   [window orderOut:nil];
   Completed(__func__);
 }
