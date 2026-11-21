@@ -1104,6 +1104,7 @@ void testMacAttributedTextSourceLateFailure()
 }
 
 #include <objc/runtime.h>
+#include <objc/message.h>
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 
@@ -1130,7 +1131,8 @@ namespace
   NSTextContainer *countedContainer;
   NSLayoutManager *installingManager;
   IMP installImpl, forceImpl, sizeImpl, displayImpl;
-  BOOL CountInstall(id self, SEL cmd, NSAttributedString *value, CGFloat *extent)
+  BOOL CountInstall(
+      id self, SEL cmd, NSAttributedString *value, const loka::app::AttributedString *snapshot, CGFloat *extent)
   {
     countedLeaf = self;
     countedContainer = AttributedAccess::container(self);
@@ -1139,7 +1141,8 @@ namespace
     else
       ++richClears;
     installingManager = AttributedAccess::manager(self);
-    BOOL result = ((BOOL(*)(id, SEL, NSAttributedString *, CGFloat *))installImpl)(self, cmd, value, extent);
+    BOOL result = ((BOOL(*)(id, SEL, NSAttributedString *, const loka::app::AttributedString *, CGFloat *))installImpl)(
+        self, cmd, value, snapshot, extent);
     installingManager = nil;
     return result;
   }
@@ -1167,7 +1170,7 @@ namespace
   public:
     MacMeasurementCounter()
         : install_(prepare(NSClassFromString(@"LokaAttributedTextView"),
-                           sel_registerName("installValue:extent:"),
+                           sel_registerName("installValue:snapshot:extent:"),
                            installImpl),
                    (IMP)CountInstall,
                    NSClassFromString(@"LokaAttributedTextView")),
@@ -2765,6 +2768,8 @@ namespace loka
 {
   namespace testing
   {
+    void failMacTextPresentationStep(unsigned ordinal);
+    void failMacCardBitmaps(unsigned count);
     void failMacTextKitAllocation(unsigned ordinal);
   }
 } // namespace loka
@@ -2986,7 +2991,7 @@ void testMacAttributedTextKitLifetime()
   NSView *root = [[[NSView alloc] initWithFrame:NSMakeRect(0, 0, 160, 160)] autorelease];
   Class leaf = NSClassFromString(@"LokaAttributedTextView");
   releasePartial = class_getMethodImplementation(leaf, @selector(dealloc));
-  for (int ordinal = 1; ordinal <= 3; ++ordinal)
+  for (int ordinal = 1; ordinal <= 4; ++ordinal)
   {
     RetirementController controller(root);
     int deaths[4] = {};
@@ -3326,6 +3331,7 @@ namespace
       }
     return changed;
   }
+  BOOL UseRectDrawing(id, SEL);
   void VerifyViewClipping(NSView *parent, NSView *view)
   {
     if (![view respondsToSelector:@selector(setClipsToBounds:)])
@@ -3336,6 +3342,7 @@ namespace
     LOKA_VERIFY([view clipsToBounds]);
     NSRect original = [view frame];
     [view setFrame:NSMakeRect(0, 40, 8, 40)];
+    MacNativeRefusal fallback(@selector(wantsUpdateLayer), (IMP)UseRectDrawing, [view class]);
     MacNativeRefusal paint(@selector(drawRect:), (IMP)PaintUnclipped, [view class]);
     [view setHidden:YES];
     NSBitmapImageRep *empty = CaptureParent(parent);
@@ -3444,8 +3451,8 @@ void testMacAttributedTextWindow()
     if ([view respondsToSelector:@selector(setWantsLayer:)])
     {
       Class leaf = [view class];
-      layerDraw = class_getMethodImplementation(leaf, @selector(drawRect:));
-      MacNativeRefusal record(@selector(drawRect:), (IMP)CountLayerPaint, leaf);
+      layerDraw = class_getMethodImplementation(leaf, @selector(drawTextInRect:));
+      MacNativeRefusal record(@selector(drawTextInRect:), (IMP)CountLayerPaint, leaf);
       [view setWantsLayer:YES];
       [view display];
       if (![view layer])
@@ -3526,12 +3533,13 @@ namespace
     _exit(1);
   }
 
-  void VerifyAttributedChildAssertion(const char *action)
+  void VerifyAttributedChildAssertion(const char *action,
+                                      const char *testName = "testMacAttributedTextChildAssertions",
+                                      const char *diagnostic = "AttributedText cannot host children")
   {
     // The runner's single-name entry executes only the selected test in the new image.
     char *binary = (*_NSGetArgv())[0];
-    char test[] = "testMacAttributedTextChildAssertions";
-    char *args[] = {binary, test, 0};
+    char *args[] = {binary, const_cast<char *>(testName), 0};
     std::string setting = std::string(childActionKey) + "=" + action;
     std::vector<char *> environment;
     for (char **entry = *_NSGetEnviron(); *entry; ++entry)
@@ -3571,7 +3579,7 @@ namespace
     char line[1024];
     bool diagnosed = false;
     while (std::fgets(line, sizeof(line), errors))
-      if (std::strstr(line, "AttributedText cannot host children"))
+      if (std::strstr(line, diagnostic))
         diagnosed = true;
     std::fclose(errors);
     if (result != pid || !WIFSIGNALED(status) || WTERMSIG(status) != SIGABRT || !diagnosed)
@@ -3704,7 +3712,7 @@ namespace
     void expect(NSPoint point, MacTextHitAnswer answer, size_t first = 0, size_t last = 0)
     {
       MacTextHit out = {TextSegmentRange(97).through(99), -1};
-      const MacTextHitAnswer actual = AttributedAccess::prepareTextHit(AttributedContext(node), point, out);
+      const MacTextHitAnswer actual = AttributedAccess::prepareSourceHit(AttributedContext(node), point, out);
       if (actual != answer)
         std::fprintf(stderr, "hit at (%g, %g): expected %d, got %d\n", point.x, point.y, answer, actual);
       LOKA_VERIFY(actual == answer);
@@ -4180,4 +4188,1084 @@ void testMacTextHitRefusals()
   LOKA_VERIFY(first.shown && partial.lookup(p) == 0 && p.x < first.cutoff);
   VerifySource(AttributedContext(partial.node), first.chars.location, NSMaxRange(first.chars), 0, 0);
   partial.expect(p, MAC_HIT_REFUSED);
+}
+
+namespace
+{
+  NSWindow *borrowedWindow;
+  NSWindow *ReturnBorrowedWindow(id, SEL)
+  {
+    return borrowedWindow;
+  }
+  CALayer *testLayer;
+  CALayer *ReturnTestLayer(id, SEL)
+  {
+    return testLayer;
+  }
+  CALayer *UnexpectedLayer(id, SEL)
+  {
+    LOKA_VERIFY(false && "unexpected layer read");
+    return nil;
+  }
+  NSRect UnexpectedBounds(id, SEL)
+  {
+    LOKA_VERIFY(false && "unexpected geometry read");
+    return NSZeroRect;
+  }
+  CGFloat DifferentScale(id, SEL)
+  {
+    return 37;
+  }
+  void RefuseLayerRequest(id, SEL, BOOL wants)
+  {
+    LOKA_VERIFY(!wants);
+  }
+  BOOL invertedFlip;
+  BOOL OppositeFlip(id, SEL)
+  {
+    return invertedFlip;
+  }
+  IMP instancesRespond;
+  BOOL HideUpdateLayer(id cls, SEL cmd, SEL query)
+  {
+    return query == @selector(wantsUpdateLayer) ? NO : ((BOOL(*)(id, SEL, SEL))instancesRespond)(cls, cmd, query);
+  }
+
+  NSWindow *PresentationWindow()
+  {
+    if (!MacTextLayerCapable())
+    {
+      std::puts("[skip] this artifact/runtime has no L");
+      return nil;
+    }
+    NSWindow *window = [NSScreen mainScreen] ? [[[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 320, 160)
+                                                                            styleMask:LOKA_MAC_WINDOW_STYLE_TITLED
+                                                                              backing:NSBackingStoreBuffered
+                                                                                defer:NO] autorelease]
+                                             : nil;
+    if (!window)
+      std::puts("[skip] no window for the checked preparation");
+    return window;
+  }
+
+  /** Complete one ordinary host display, including its implicit transaction. */
+  void DisplayWindow(NSWindow *window)
+  {
+    [window displayIfNeeded];
+    // A layer-backed window runs updateLayer when the implicit transaction commits, which an app's run loop
+    // does at the end of the same turn (Tahoe 26.7.1: no image after displayIfNeeded alone, presented after the
+    // flush in ZStack, Cell and ScrollView). The flush is that commit, not a second display of the leaf.
+    [CATransaction flush];
+  }
+
+  /** One host display followed by a parent capture limited to the visible part of this leaf's text. */
+  void VerifyRedFallbackInk(HitLayout &layout)
+  {
+    NSView *view = layout.view;
+    NSView *parent = [view superview];
+    // Search the leaf's whole frame: with translated bounds, 10.9's unflipped parent places the converted
+    // text rectangle on the other half of the frame from the ink (Mavericks 10.9.5). Text A is blue, so any
+    // red ink in the frame is B's fallback drawing, not a stale layer image.
+    NSRect region = NSIntersectionRect([parent bounds], [view frame]);
+    LOKA_VERIFY(!NSIsEmptyRect(region));
+    [view setNeedsDisplay:YES];
+    // Caching can itself draw. Witness foreground submission in the ordinary display before capturing.
+    {
+      SEL draw = @selector(drawGlyphsForGlyphRange:atPoint:);
+      Class cls = [layout.manager class];
+      drawInk = class_getMethodImplementation(cls, draw);
+      MacNativeRefusal ink(draw, (IMP)RecordInk, cls);
+      submitted.foregrounds = 0;
+      DisplayWindow([view window]);
+      LOKA_VERIFY(submitted.foregrounds && submitted.foreground.length);
+    }
+    MacPresentedText fact;
+    LOKA_VERIFY(![view queryPresentedFact:&fact]);
+    NSBitmapImageRep *image = [parent bitmapImageRepForCachingDisplayInRect:region];
+    LOKA_VERIFY(image);
+    [parent cacheDisplayInRect:region toBitmapImageRep:image];
+    bool redInk = false;
+    for (NSInteger y = 0; y < [image pixelsHigh] && !redInk; ++y)
+      for (NSInteger x = 0; x < [image pixelsWide] && !redInk; ++x)
+      {
+        NSColor *color = [[image colorAtX:x y:y] colorUsingColorSpace:[NSColorSpace deviceRGBColorSpace]];
+        redInk = [color alphaComponent] > 0.25 && [color redComponent] > [color greenComponent] + 0.25 &&
+                 [color redComponent] > [color blueComponent] + 0.25;
+      }
+    LOKA_VERIFY(redInk);
+    LOKA_VERIFY(![view queryPresentedFact:&fact]);
+  }
+
+  void DisplayText(NSView *view)
+  {
+    [view setNeedsDisplay:YES];
+    [view displayIfNeeded];
+    MacPresentedText fact;
+    LOKA_VERIFY([view queryPresentedFact:&fact]);
+  }
+
+  struct CheckedLayout : HitLayout
+  {
+    CheckedLayout(NSWindow *window, const AttributedString &value)
+        : HitLayout(value, 200, BlockStyle().wrap(TEXT_WRAP_WORD))
+    {
+      NSView *parent = [view superview];
+      [parent setFrame:[[window contentView] bounds]];
+      [window setContentView:parent];
+      LOKA_VERIFY([view window] == window && ![window isVisible]);
+      DisplayText(view);
+    }
+
+    NSPoint point()
+    {
+      return HitCentre(HitCluster(*this, glyph(0)).visibleRect());
+    }
+
+    void install(const AttributedString &value)
+    {
+      node.props.text(value);
+      node.getContext()->onPropsApplied();
+      node.layout(&controller, state);
+    }
+
+    void checked(NSPoint p, MacTextHitAnswer expected)
+    {
+      const AttributedString seed = Styled("seed", Bold);
+      MacPresentedText fact = {seed, -2};
+      MacTextHit hit = {TextSegmentRange(90).through(91), -3};
+      LOKA_VERIFY(AttributedAccess::prepareTextHit(AttributedContext(node), p, hit, fact) == expected);
+      if (expected == MAC_HIT_SOURCE)
+      {
+        LOKA_VERIFY(hit.containerWidth == fact.width && fact.width == AttributedAccess::width(view));
+        LOKA_VERIFY(fact.value.hasSameSegmentValues(node.props.text_->get()));
+      }
+      else
+      {
+        LOKA_VERIFY(fact.width == -2 && fact.value.hasSameSegmentValues(seed));
+        LOKA_VERIFY(hit.containerWidth == -3 && hit.source.first() == 90 && hit.source.last() == 91);
+      }
+    }
+  };
+
+  AttributedString LinkText(const char *body, const char *target)
+  {
+    return Linked(body, TextStyle(), LinkTarget(loka::core::String(target)));
+  }
+
+  void Candidate(
+      const MacAttributedTextContext &context, NSPoint point, const char *target, size_t first = 0, size_t last = 0)
+  {
+    const LinkTarget seed(loka::core::String("untouched"));
+    AttributedString::LinkRun run = {97, 99, seed};
+    LOKA_VERIFY(AttributedAccess::queryPressCandidate(context, point, run) == (target != 0));
+    if (target)
+      LOKA_VERIFY(run.first == first && run.last == last && run.target == LinkTarget(loka::core::String(target)));
+    else
+      LOKA_VERIFY(run.first == 97 && run.last == 99 && run.target == seed);
+  }
+} // namespace
+
+void testMacTextLayerCapability()
+{
+  LOKA_VERIFY(MacTextLayerCompiledIn());
+  HitTestPool pool;
+  Class meta = object_getClass((id)[NSView class]);
+  instancesRespond = class_getMethodImplementation(meta, @selector(instancesRespondToSelector:));
+  {
+    MacNativeRefusal noCapability(@selector(instancesRespondToSelector:), (IMP)HideUpdateLayer, meta);
+    Class leafClass = NSClassFromString(@"LokaAttributedTextView");
+    MacNativeRefusal record(@selector(setWantsLayer:), (IMP)RefuseLayerRequest, leafClass);
+    NSView *leaf = [[[leafClass alloc] initWithFrame:NSZeroRect] autorelease];
+    LOKA_VERIFY(leaf && !MacTextLayerCapable());
+  }
+  LOKA_VERIFY(MacTextLayerCapable()
+              == (MacTextLayerCompiledIn() && [NSView instancesRespondToSelector:@selector(wantsUpdateLayer)]));
+  std::printf("leaf compiled=1 runtime L=%d\n", int(MacTextLayerCapable()));
+}
+
+namespace
+{
+  struct StorageWriteProbe
+  {
+    NSTextStorage *target;
+    NSView *view;
+    IMP original;
+    bool observed, sawInstalled, sawImage;
+  };
+  StorageWriteProbe *storageWriteProbe;
+
+  /** Sample both owner fields at entry to the target storage's write and forward every call. */
+  void ObserveStorageWrite(id receiver, SEL cmd, NSAttributedString *value)
+  {
+    StorageWriteProbe &probe = *storageWriteProbe;
+    if (receiver == probe.target)
+    {
+      probe.observed = true;
+      probe.sawInstalled |= [probe.view lokaHasInstalledText] != NO;
+      probe.sawImage |= [probe.view lokaHasPresentationImage] != NO;
+    }
+    ((void (*)(id, SEL, NSAttributedString *))probe.original)(receiver, cmd, value);
+  }
+} // namespace
+
+void testMacTextPresentationFailedReplacement()
+{
+  HitTestPool pool;
+  NSWindow *window = PresentationWindow();
+  if (!window)
+    return;
+  const AttributedString a = LinkText("old", "A"), b = LinkText("new", "B");
+  CheckedLayout layout(window, a);
+  MacPresentedText fact;
+  LOKA_VERIFY([layout.view queryPresentedFact:&fact] && fact.value.hasSameSegmentValues(a));
+  NSAttributedString *nativeB = [[[NSAttributedString alloc] initWithString:@"new"] autorelease];
+  CGFloat extent;
+  NSTextStorage *storage = AttributedAccess::storage(layout.view);
+  Class cls = object_getClass(storage);
+  SEL setter = @selector(setAttributedString:);
+  StorageWriteProbe probe = {storage, layout.view, class_getMethodImplementation(cls, setter), false, false, false};
+  storageWriteProbe = &probe;
+  {
+    MacNativeRefusal observe(setter, (IMP)ObserveStorageWrite, cls);
+    loka::testing::failMacTextPresentationStep(1);
+    LOKA_VERIFY(![layout.view installValue:nativeB snapshot:&b extent:&extent]);
+  }
+  storageWriteProbe = 0;
+  LOKA_VERIFY(![layout.view lokaHasInstalledText]);
+  LOKA_VERIFY(![layout.view lokaHasPresentationImage]);
+  LOKA_VERIFY(![layout.view queryPresentedFact:&fact]);
+  LOKA_VERIFY([[storage string] isEqualToString:@"new"]);
+  LOKA_VERIFY(probe.observed && !probe.sawInstalled && !probe.sawImage);
+}
+
+namespace
+{
+  struct LayerActionProbe
+  {
+    CALayer *target;
+    IMP gravity, contents, scale;
+    enum Write
+    {
+      GRAVITY = 1,
+      CONTENTS = 2,
+      SCALE = 4
+    };
+    unsigned observed, actionsEnabled;
+
+    /** Sample the active transaction once per setter entry on the observed layer. */
+    void record(id receiver, Write bit)
+    {
+      if (receiver == this->target)
+      {
+        this->observed |= bit;
+        if (![[CATransaction valueForKey:kCATransactionDisableActions] boolValue])
+          this->actionsEnabled |= bit;
+      }
+    }
+  };
+  LayerActionProbe *actionProbe;
+
+  void ObserveGravity(id receiver, SEL cmd, NSString *gravity)
+  {
+    actionProbe->record(receiver, LayerActionProbe::GRAVITY);
+    ((void (*)(id, SEL, NSString *))actionProbe->gravity)(receiver, cmd, gravity);
+  }
+  void ObserveContents(id receiver, SEL cmd, id contents)
+  {
+    actionProbe->record(receiver, LayerActionProbe::CONTENTS);
+    ((void (*)(id, SEL, id))actionProbe->contents)(receiver, cmd, contents);
+  }
+  void ObserveScale(id receiver, SEL cmd, CGFloat scale)
+  {
+    actionProbe->record(receiver, LayerActionProbe::SCALE);
+    ((void (*)(id, SEL, CGFloat))actionProbe->scale)(receiver, cmd, scale);
+  }
+} // namespace
+
+void testMacTextPresentationLayerActions()
+{
+  HitTestPool pool;
+  NSWindow *window = PresentationWindow();
+  if (!window)
+    return;
+  CheckedLayout layout(window, LinkText("writes", "A"));
+  CALayer *layer = [layout.view layer];
+  Class cls = object_getClass(layer);
+  LayerActionProbe probe = {
+    layer,
+    class_getMethodImplementation(cls, @selector(setContentsGravity:)),
+    class_getMethodImplementation(cls, @selector(setContents:)),
+    class_getMethodImplementation(cls, @selector(setContentsScale:)),
+    0,
+    0
+  };
+  [CATransaction begin];
+  [CATransaction setValue:(id)kCFBooleanFalse forKey:kCATransactionDisableActions];
+  LOKA_VERIFY(![[CATransaction valueForKey:kCATransactionDisableActions] boolValue]);
+  actionProbe = &probe;
+  {
+    MacNativeRefusal gravity(@selector(setContentsGravity:), (IMP)ObserveGravity, cls);
+    MacNativeRefusal contents(@selector(setContents:), (IMP)ObserveContents, cls);
+    MacNativeRefusal scale(@selector(setContentsScale:), (IMP)ObserveScale, cls);
+    [layout.view updateLayer];
+  }
+  actionProbe = 0;
+  LOKA_VERIFY(probe.observed == (LayerActionProbe::GRAVITY | LayerActionProbe::CONTENTS | LayerActionProbe::SCALE));
+  LOKA_VERIFY(probe.actionsEnabled == 0);
+  LOKA_VERIFY(![[CATransaction valueForKey:kCATransactionDisableActions] boolValue]);
+  [CATransaction commit];
+}
+
+void testMacTextPresentationOwner()
+{
+  HitTestPool pool;
+  NSWindow *window = PresentationWindow();
+  if (!window)
+    return;
+  const AttributedString value = LinkText("one two three four five six seven", "A");
+  CheckedLayout layout(window, value);
+  NSView *view = layout.view;
+  const CGFloat width = [view appliedWidth];
+  MacPresentedText fact;
+  [view applyContainerWidth:width];
+  LOKA_VERIFY([view queryPresentedFact:&fact]);
+  const CGFloat narrow = NSMaxX(HitCluster(layout, layout.glyph(4)).visibleRect());
+  [view applyContainerWidth:narrow];
+  LOKA_VERIFY(![view lokaHasPresentationImage] && [view lokaHasInstalledText]);
+  VerifyTextKitWidth(view, narrow);
+  [layout.manager glyphRangeForTextContainer:layout.container];
+  [view setFrameSize:NSMakeSize(width, [layout.manager usedRectForTextContainer:layout.container].size.height * 4)];
+  DisplayText(view);
+  HitCluster wrapped(layout, layout.glyph(8));
+  LOKA_VERIFY(NSMinY(wrapped.line) > NSMinY(HitCluster(layout, 0).line));
+  layout.checked(HitCentre(wrapped.visibleRect()), MAC_HIT_SOURCE);
+  NSBitmapImageRep *wrappedImage =
+      [[[NSBitmapImageRep alloc] initWithCGImage:(CGImageRef)[[view layer] contents]] autorelease];
+  const CGFloat scale = [window backingScaleFactor];
+  bool wrappedInk = false;
+  for (NSInteger y = static_cast<NSInteger>(std::ceil(NSMinY(wrapped.line) * scale));
+       y < std::floor(NSMaxY(wrapped.line) * scale) && y < [wrappedImage pixelsHigh];
+       ++y)
+    for (NSInteger x = 0; x < [wrappedImage pixelsWide]; ++x)
+    {
+      NSUInteger pixel[5] = {};
+      [wrappedImage getPixel:pixel atX:x y:y];
+      if (pixel[3])
+        wrappedInk = true;
+    }
+  LOKA_VERIFY(wrappedInk);
+  LOKA_VERIFY([view installValue:nil snapshot:0 extent:0]);
+  LOKA_VERIFY(![view lokaHasInstalledText] && ![view lokaHasPresentationImage]);
+  {
+    MacNativeRefusal noInstalled(@selector(layer), (IMP)UnexpectedLayer, [view class]);
+    [view updateLayer];
+  }
+  LOKA_VERIFY(![view lokaHasPresentationImage]);
+  const AttributedString empty;
+  CGFloat extent;
+  NSAttributedString *native = [[[NSAttributedString alloc] initWithString:@""] autorelease];
+  loka::testing::failMacTextPresentationStep(1);
+  LOKA_VERIFY(![view installValue:native snapshot:&empty extent:&extent]);
+  LOKA_VERIFY(![view lokaHasInstalledText]);
+  LOKA_VERIFY([view installValue:native snapshot:&empty extent:&extent]);
+  LOKA_VERIFY([view lokaHasInstalledText] && ![view lokaHasPresentationImage]);
+  DisplayText(view);
+  LOKA_VERIFY([view queryPresentedFact:&fact] && fact.value.empty());
+  for (unsigned refusal = 0; refusal <= 3; ++refusal)
+  {
+    id old = [[[view layer] contents] retain];
+    if (refusal == 0)
+      loka::testing::failMacCardBitmaps(1);
+    else
+      loka::testing::failMacTextPresentationStep(refusal);
+    [view updateLayer];
+    LOKA_VERIFY(![view lokaHasPresentationImage] && ![view queryPresentedFact:&fact]);
+    LOKA_VERIFY([[view layer] contents] == old);
+    [old release];
+    DisplayText(view);
+  }
+
+  testLayer = [[view layer] retain];
+  [view removeFromSuperview];
+  LOKA_VERIFY(![view window] && ![view lokaHasPresentationImage]);
+  {
+    MacNativeRefusal presentLayer(@selector(layer), (IMP)ReturnTestLayer, [view class]);
+    MacNativeRefusal noGeometry(@selector(bounds), (IMP)UnexpectedBounds, [view class]);
+    [view updateLayer];
+  }
+  {
+    MacNativeRefusal noRead(@selector(layer), (IMP)UnexpectedLayer, [view class]);
+    LOKA_VERIFY(![view lokaHasPresentationImage] && ![view queryPresentedFact:&fact]);
+  }
+  [testLayer release];
+  testLayer = nil;
+  NSWindow *other = PresentationWindow();
+  LOKA_VERIFY(other);
+  [[other contentView] addSubview:view];
+  LOKA_VERIFY(![view lokaHasPresentationImage]);
+  DisplayText(view);
+  [[window contentView] addSubview:view];
+  LOKA_VERIFY(![view lokaHasPresentationImage]);
+  DisplayText(view);
+  [view retain];
+  loka::app::scene::LifecycleFactTestAccess::MarkSubtreeRetired(&layout.node);
+  loka::app::scene::LifecycleFactTestAccess::DeliverFacts(&layout.node);
+  LOKA_VERIFY(![view window] && ![view lokaHasInstalledText] && ![view lokaHasPresentationImage]);
+  [view release];
+}
+
+void testMacTextPresentationDeallocation()
+{
+  HitTestPool pool;
+  NSWindow *window = PresentationWindow();
+  if (!window)
+    return;
+  // A window move normally consumes the retain before dealloc. Supply just the two native reads
+  // to an unparented leaf so the destructor is the first invalidating operation. AppKit autoreleases
+  // references to the leaf during setup, so setup and release each drain their own pool; otherwise
+  // dealloc waits for the outer drain (measured on Tahoe: retainCount 8 at release).
+  const AttributedString value;
+  NSView *leaf = nil;
+  CGImageRef image = 0;
+  {
+    HitTestPool setup;
+    leaf = [[NSClassFromString(@"LokaAttributedTextView") alloc] initWithFrame:[[window contentView] bounds]];
+    CGFloat extent;
+    [leaf applyContainerWidth:NSWidth([leaf bounds])];
+    NSAttributedString *native = [[[NSAttributedString alloc] initWithString:@""] autorelease];
+    LOKA_VERIFY([leaf installValue:native snapshot:&value extent:&extent]);
+    testLayer = [[CALayer alloc] init];
+    borrowedWindow = window;
+    {
+      MacNativeRefusal layer(@selector(layer), (IMP)ReturnTestLayer, [leaf class]);
+      MacNativeRefusal attached(@selector(window), (IMP)ReturnBorrowedWindow, [leaf class]);
+      [leaf updateLayer];
+      LOKA_VERIFY([leaf lokaHasPresentationImage]);
+    }
+    image = CGImageRetain((CGImageRef)[testLayer contents]);
+  }
+  LOKA_VERIFY(image);
+  CFIndex before = CFGetRetainCount(image);
+  {
+    HitTestPool teardown;
+    [leaf release];
+  }
+  LOKA_VERIFY(CFGetRetainCount(image) == before - 1);
+  CGImageRelease(image);
+  [testLayer release];
+  testLayer = nil;
+  borrowedWindow = nil;
+}
+
+void testMacTextPresentationCheck()
+{
+  HitTestPool pool;
+  NSWindow *window = PresentationWindow();
+  if (!window)
+    return;
+  const AttributedString value = LinkText("visible", "A");
+  CheckedLayout layout(window, value);
+  NSView *view = layout.view;
+  [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
+  const NSPoint in = layout.point();
+  const NSPoint outside = NSMakePoint(NSMaxX([view bounds]), in.y);
+  layout.install(value);
+  layout.checked(in, MAC_HIT_REFUSED);
+  layout.checked(outside, MAC_HIT_REFUSED);
+  DisplayText(view);
+  layout.checked(in, MAC_HIT_SOURCE);
+  layout.checked(outside, MAC_HIT_NONE);
+  LOKA_VERIFY(![view lokaFactWithAbsentLayer]);
+  {
+    MacNativeRefusal nilLayer(@selector(layer), (IMP)ReturnTestLayer, [view class]);
+    MacNativeRefusal noGeometry(@selector(bounds), (IMP)UnexpectedBounds, [view class]);
+    [view updateLayer];
+    LOKA_VERIFY(![view lokaHasPresentationImage]);
+  }
+  DisplayText(view);
+  CALayer *layer = [view layer];
+  {
+    MacNativeRefusal scaleRead(@selector(backingScaleFactor), (IMP)DifferentScale, [window class]);
+    layout.checked(in, MAC_HIT_REFUSED);
+  }
+  invertedFlip = ![layer contentsAreFlipped];
+  {
+    MacNativeRefusal flipRead(@selector(contentsAreFlipped), (IMP)OppositeFlip, [layer class]);
+    layout.checked(in, MAC_HIT_SOURCE);
+  }
+  id image = [[layer contents] retain];
+  [layer setContents:nil];
+  layout.checked(in, MAC_HIT_REFUSED);
+  [layer setContents:image];
+  [image release];
+  CGFloat scale = [layer contentsScale];
+  [layer setContentsScale:scale + 1];
+  layout.checked(in, MAC_HIT_REFUSED);
+  [layer setContentsScale:scale];
+  [layer setContentsRect:CGRectMake(0, 0, 0.5, 1)];
+  layout.checked(in, MAC_HIT_REFUSED);
+  [layer setContentsRect:CGRectMake(0, 0, 1, 1)];
+  NSString *gravity = [layer contentsGravity];
+  [layer setContentsGravity:kCAGravityCenter];
+  layout.checked(in, MAC_HIT_REFUSED);
+  [layer setContentsGravity:gravity];
+  [layer setTransform:CATransform3DMakeScale(2, 1, 1)];
+  layout.checked(in, MAC_HIT_REFUSED);
+  [layer setTransform:CATransform3DIdentity];
+  NSRect bounds = [view bounds];
+  // Resize the frame, not the bounds alone: a bounds size unequal to the frame makes AppKit
+  // scale the layer transform as well (measured on Tahoe 26.7.1), which would hide the size field.
+  const NSSize frame = [view frame].size;
+  [view setFrameSize:NSMakeSize(frame.width + 1, frame.height)];
+  layout.checked(in, MAC_HIT_REFUSED);
+  [view setFrameSize:frame];
+  [view setBounds:bounds];
+  layout.checked(in, MAC_HIT_SOURCE);
+  [view setBoundsOrigin:in];
+  layout.checked(in, MAC_HIT_REFUSED);
+  [view updateLayer];
+  LOKA_VERIFY(![view lokaHasPresentationImage]);
+  [view setBounds:bounds];
+  DisplayText(view);
+  layout.checked(in, MAC_HIT_SOURCE);
+  layout.install(value);
+  CaptureParent(view);
+  layout.checked(in, MAC_HIT_SOURCE);
+  layout.install(value);
+  NSBitmapImageRep *destination = [view bitmapImageRepForCachingDisplayInRect:[view bounds]];
+  NSGraphicsContext *graphics = [NSGraphicsContext graphicsContextWithBitmapImageRep:destination];
+  LOKA_VERIFY(graphics);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  [layer renderInContext:(CGContextRef)[graphics graphicsPort]];
+#pragma clang diagnostic pop
+  layout.checked(in, MAC_HIT_SOURCE);
+  layout.install(Styled(RawAttributed("a\xF0\x9F", 3), TextStyle())
+                 + Styled(RawAttributed("\x98\x80", 2), TextStyle()));
+  DisplayText(view);
+  layout.checked(HitCentre(HitCluster(layout, layout.glyph(1)).visibleRect()), MAC_HIT_REFUSED);
+}
+
+void testMacTextPresentationCandidate()
+{
+  HitTestPool pool;
+  NSWindow *window = PresentationWindow();
+  if (!window)
+    return;
+  const AttributedString a = LinkText("body", "A"), b = LinkText("body", "B");
+  CheckedLayout layout(window, a);
+  MacAttributedTextContext &context = AttributedContext(layout.node);
+  const NSPoint point = layout.point();
+  Candidate(context, point, "A");
+  loka::core::MutableState<AttributedString> live(a);
+  layout.node.props.text(&live);
+  live.set(b);
+  Candidate(context, point, 0);
+  layout.install(b);
+  Candidate(context, point, 0);
+  DisplayText(layout.view);
+  Candidate(context, point, "B");
+  layout.install(Styled("body", TextStyle()));
+  DisplayText(layout.view);
+  Candidate(context, point, 0);
+  layout.install(LinkText("e", "A") + LinkText("\xCC\x81x", "B"));
+  DisplayText(layout.view);
+  Candidate(context, layout.point(), 0);
+  layout.install(LinkText("e", "A") + LinkText("\xCC\x81x", "A"));
+  DisplayText(layout.view);
+  Candidate(context, layout.point(), "A", 0, 1);
+  layout.install(LinkText("f", "A") + LinkText("i", "B"));
+  DisplayText(layout.view);
+  if (HitCluster(layout, 0).chars.length == 2)
+  {
+    std::puts("formed fi cluster crosses destinations");
+    Candidate(context, layout.point(), 0);
+  }
+  else
+    std::puts("[skip] fi ligature not formed");
+  layout.install(a);
+  DisplayText(layout.view);
+  Candidate(context, point, "A");
+  NotifySubtreeNodeDetached(&layout.node);
+  Candidate(context, point, 0);
+  NotifySubtreeNodeAttached(&layout.node);
+  Candidate(context, point, "A");
+  // Take the test's installed context out of the public slot before replacing it. setContext would delete it.
+  layout.node.context = 0;
+  layout.node.layoutProjected(&layout.controller, layout.state);
+  LOKA_VERIFY(layout.node.getContext() && layout.node.getContext() != &context);
+  Candidate(context, layout.point(), 0);
+  context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  delete &context;
+  MacAttributedTextContext &replacement = AttributedContext(layout.node);
+  replacement.onPropsApplied();
+  Candidate(replacement, point, 0);
+}
+
+void testMacTextPresentationSnapshotLifetime()
+{
+  HitTestPool pool;
+  HitLayout layout(LinkText("owned", "value"));
+  MacAttributedTextContext &context = AttributedContext(layout.node);
+  LOKA_VERIFY(AttributedAccess::snapshot(context).hasSameSegmentValues(layout.node.props.text_->get()));
+  context.onPropsApplied();
+  LOKA_VERIFY(!AttributedAccess::complete(context) && AttributedAccess::snapshot(context).segmentCount() == 0);
+}
+
+void testMacTextPresentationTranslatedOrigin()
+{
+  HitTestPool pool;
+  NSWindow *window = PresentationWindow();
+  if (!window)
+    return;
+  const AttributedString a = Linked("HHHH", Blue, LinkTarget(loka::core::String("A")));
+  const AttributedString b = Linked("HHHH", Red, LinkTarget(loka::core::String("B")));
+  CheckedLayout layout(window, a);
+  NSView *view = layout.view;
+  const NSRect frame = [view frame];
+  const NSPoint glyph = layout.point();
+  Candidate(AttributedContext(layout.node), glyph, "A");
+  [view setBoundsOrigin:glyph];
+  layout.install(b);
+  LOKA_VERIFY(NSEqualRects(frame, [view frame]) && NSEqualPoints([view bounds].origin, glyph));
+  VerifyRedFallbackInk(layout);
+  LOKA_VERIFY(![view wantsUpdateLayer]);
+  layout.expect(glyph, MAC_HIT_SOURCE);
+  layout.checked(glyph, MAC_HIT_REFUSED);
+  Candidate(AttributedContext(layout.node), glyph, 0);
+  [view setBoundsOrigin:NSZeroPoint];
+  [view setNeedsDisplay:YES];
+  DisplayWindow(window);
+  layout.checked(glyph, MAC_HIT_SOURCE);
+  Candidate(AttributedContext(layout.node), glyph, "B");
+}
+
+#include <limits>
+void testMacTextPresentationBudget()
+{
+  HitTestPool pool;
+  if (!MacTextLayerCompiledIn())
+  {
+    std::puts("[skip] this artifact/runtime has no L");
+    return;
+  }
+  LOKA_VERIFY(MacTestTextBudget(NSMakeSize(4096, 1), 1));
+  LOKA_VERIFY(MacTestTextBudget(NSMakeSize(1, 4096), 1));
+  LOKA_VERIFY(!MacTestTextBudget(NSMakeSize(4097, 1), 1));
+  LOKA_VERIFY(MacTestTextBudget(NSMakeSize(2048, 2048), 1));
+  LOKA_VERIFY(!MacTestTextBudget(NSMakeSize(2048, 2048.5), 1));
+  LOKA_VERIFY(!MacTestTextBudget(NSMakeSize(2048, 2049), 1));
+  const CGFloat invalid[] = {-1,
+                             0,
+                             std::numeric_limits<CGFloat>::infinity(),
+                             -std::numeric_limits<CGFloat>::infinity(),
+                             std::numeric_limits<CGFloat>::quiet_NaN()};
+  for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i)
+  {
+    LOKA_VERIFY(!MacTestTextBudget(NSMakeSize(invalid[i], 1), 1));
+    LOKA_VERIFY(!MacTestTextBudget(NSMakeSize(1, invalid[i]), 1));
+    LOKA_VERIFY(!MacTestTextBudget(NSMakeSize(1, 1), invalid[i]));
+  }
+  NSWindow *window = PresentationWindow();
+  if (!window)
+    return;
+  HitLayout layout(Styled("HHHH", Red));
+  NSView *view = layout.view;
+  const NSSize good = [view frame].size;
+  // One pixel beyond the width limit at native scale keeps the line visible and the ink capture small.
+  const NSSize oversized = NSMakeSize(4097 / [window backingScaleFactor], good.height);
+  NSView *parent = [view superview];
+  [parent setFrame:[[window contentView] bounds]];
+  [view setFrameSize:oversized];
+  [window setContentView:parent];
+  LOKA_VERIFY(![view wantsUpdateLayer]);
+  VerifyRedFallbackInk(layout);
+  [view setFrameSize:good];
+  DisplayText(view);
+  [view setFrameSize:oversized];
+  LOKA_VERIFY(![view wantsUpdateLayer]);
+  VerifyRedFallbackInk(layout);
+  [view setFrameSize:NSMakeSize(good.width, 4097 / [window backingScaleFactor])];
+  MacPresentedText fact;
+  LOKA_VERIFY(![view wantsUpdateLayer] && ![view queryPresentedFact:&fact]);
+  [view setFrameSize:NSZeroSize];
+  LOKA_VERIFY(![view wantsUpdateLayer] && ![view queryPresentedFact:&fact]);
+  [view setFrameSize:good];
+  DisplayText(view);
+}
+
+namespace
+{
+  // A test process installs each interposition only while the corresponding real interval is on stack.
+#if defined(LOKA_LIFECYCLE_AUDIT) && !defined(NDEBUG)
+  void NestedDisplay(id view, SEL, NSRect)
+  {
+    [view setNeedsDisplay:YES];
+    [view displayIfNeeded];
+  }
+  MacTextHitAnswer ChangeWidthDuringHit(id view, SEL, NSPoint, NSRange *)
+  {
+    [view applyContainerWidth:[view appliedWidth] + 1];
+    return MAC_HIT_REFUSED;
+  }
+#endif
+} // namespace
+
+void testMacTextPresentationIntervals()
+{
+#if defined(LOKA_LIFECYCLE_AUDIT) && !defined(NDEBUG)
+  HitTestPool pool;
+  NSWindow *window = PresentationWindow();
+  if (!window)
+    return;
+  const char *action = std::getenv(childActionKey);
+  if (action)
+  {
+    CheckedLayout layout(window, LinkText("interval", "A"));
+    if (std::strcmp(action, "nestedDisplay") == 0)
+    {
+      MacNativeRefusal nest(@selector(drawTextInRect:), (IMP)NestedDisplay, [layout.view class]);
+      [layout.view updateLayer];
+    }
+    else
+    {
+      MacNativeRefusal width(
+          sel_registerName("queryHitCharacters:range:"), (IMP)ChangeWidthDuringHit, [layout.view class]);
+      layout.checked(layout.point(), MAC_HIT_SOURCE);
+    }
+    _exit(1);
+  }
+  VerifyAttributedChildAssertion("nestedDisplay", "testMacTextPresentationIntervals", "occupied_");
+  VerifyAttributedChildAssertion("widthDuringHit", "testMacTextPresentationIntervals", "occupied_");
+#else
+  std::puts("[skip] interval death pins require LOKA_LIFECYCLE_AUDIT and enabled assertions");
+#endif
+}
+
+/** Synchronous drawRect control. The caller keeps the source alive through the capture. */
+@interface LokaTextRasterReference : NSView
+{
+@private
+  NSView *source_;
+}
+- (id)initWithSource:(NSView *)view;
+@end
+@implementation LokaTextRasterReference
+- (id)initWithSource:(NSView *)view
+{
+  self = [super initWithFrame:[view bounds]];
+  if (self)
+    source_ = view;
+  return self;
+}
+- (BOOL)isFlipped
+{
+  return YES;
+}
+- (BOOL)wantsUpdateLayer
+{
+  return NO;
+}
+- (void)drawRect:(NSRect)dirty
+{
+  [source_ drawRect:dirty];
+}
+@end
+
+namespace
+{
+  IMP textPainter;
+  CGAffineTransform paintTransform;
+  void RecordTextTransform(id view, SEL cmd, NSRect rect)
+  {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    paintTransform = CGContextGetCTM((CGContextRef)[[NSGraphicsContext currentContext] graphicsPort]);
+#pragma clang diagnostic pop
+    ((void (*)(id, SEL, NSRect))textPainter)(view, cmd, rect);
+  }
+
+  BOOL UseRectDrawing(id, SEL)
+  {
+    return NO;
+  }
+
+  // Borrow the immutable installed image after the production bitmap owner's destruction.
+  NSBitmapImageRep *RawTextImage(NSView *view)
+  {
+    MacPresentedText fact;
+    LOKA_VERIFY([view queryPresentedFact:&fact]);
+    CGImageRef image = (CGImageRef)[[view layer] contents];
+    LOKA_VERIFY(image && CFGetTypeID(image) == CGImageGetTypeID());
+    return [[[NSBitmapImageRep alloc] initWithCGImage:image] autorelease];
+  }
+
+  NSBitmapImageRep *DrawRectControl(NSView *view)
+  {
+    NSView *control = [[LokaTextRasterReference alloc] initWithSource:view];
+    [[view superview] addSubview:control];
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 1090
+    if ([control respondsToSelector:@selector(setAppearance:)] &&
+        [view respondsToSelector:@selector(effectiveAppearance)])
+      [control setAppearance:[view effectiveAppearance]];
+#endif
+    NSBitmapImageRep *image = CaptureParent(control);
+    [control removeFromSuperview];
+    [control release];
+    return image;
+  }
+
+  void ReportPixelDifferences(const char *label, NSBitmapImageRep *left, NSBitmapImageRep *right)
+  {
+    unsigned long count = 0;
+    const long leftWidth = [left pixelsWide], leftHeight = [left pixelsHigh];
+    const long rightWidth = [right pixelsWide], rightHeight = [right pixelsHigh];
+    const long width = std::min(leftWidth, rightWidth), height = std::min(leftHeight, rightHeight);
+    for (NSInteger y = 0; y < height; ++y)
+      for (NSInteger x = 0; x < width; ++x)
+      {
+        NSUInteger a[5] = {}, b[5] = {};
+        [left getPixel:a atX:x y:y];
+        [right getPixel:b atX:x y:y];
+        if (std::memcmp(a, b, sizeof(a)))
+          ++count;
+      }
+    std::printf("%s: images %ldx%ld vs %ldx%ld px, overlap %ldx%ld px (%lu differing), "
+                "unmatched pixels %ld left / %ld right\n",
+                label,
+                leftWidth,
+                leftHeight,
+                rightWidth,
+                rightHeight,
+                width,
+                height,
+                count,
+                leftWidth * leftHeight - width * height,
+                rightWidth * rightHeight - width * height);
+  }
+
+  // A fully covered stroke gives the resolved ink without weighting edge antialiasing.
+  CGFloat InkLightness(NSBitmapImageRep *image)
+  {
+    NSUInteger peak = 0;
+    CGFloat lightness = 0;
+    for (NSInteger y = 0; y < [image pixelsHigh]; ++y)
+      for (NSInteger x = 0; x < [image pixelsWide]; ++x)
+      {
+        NSUInteger rgba[5] = {};
+        [image getPixel:rgba atX:x y:y];
+        if (rgba[3] > peak)
+        {
+          peak = rgba[3];
+          lightness = (rgba[0] + rgba[1] + rgba[2]) / (3.0 * peak);
+        }
+      }
+    LOKA_VERIFY(peak);
+    return lightness;
+  }
+} // namespace
+
+void testMacTextPresentationPixels()
+{
+  HitTestPool pool;
+  NSWindow *window = PresentationWindow();
+  if (!window)
+    return;
+  CheckedLayout layout(window, Styled("|||   |||", FontSize<18>()));
+  NSView *view = layout.view;
+  const CGFloat scale = [window backingScaleFactor];
+  NSSize size = [view frame].size;
+  size.height += 5 + 0.5 / scale;
+  [view setFrameSize:size];
+  textPainter = class_getMethodImplementation([view class], @selector(drawTextInRect:));
+  {
+    MacNativeRefusal read(@selector(drawTextInRect:), (IMP)RecordTextTransform, [view class]);
+    DisplayText(view);
+  }
+  NSBitmapImageRep *raw = RawTextImage(view);
+  LOKA_VERIFY([raw pixelsHigh] == std::ceil(size.height * scale) && [raw pixelsWide] == std::ceil(size.width * scale));
+  LOKA_VERIFY(paintTransform.ty == [raw pixelsHigh] && paintTransform.a == scale && paintTransform.d == -scale);
+  CALayer *layer = [view layer];
+  const BOOL flipped = [layer contentsAreFlipped];
+  std::printf("artifact Darwin %d scale=%g flipped=%d; [skip] opposite native flip branch\n",
+              loka::dsl::testing::DarwinMajor(),
+              scale,
+              int(flipped));
+  std::puts(scale == 1 ? "[skip] scale 2 on this window" : "[skip] scale 1 on this window");
+  std::puts("[skip] physical display scale transition on this single-window fixture");
+  LOKA_VERIFY([[layer contentsGravity] isEqualToString:flipped ? kCAGravityBottomLeft : kCAGravityTopLeft]);
+  LOKA_VERIFY([view respondsToSelector:@selector(layerContentsPlacement)]);
+  LOKA_VERIFY(((NSInteger(*)(id, SEL))objc_msgSend)(view, @selector(layerContentsPlacement)) == 11);
+  std::vector<NSRect> boxes;
+  for (NSUInteger g = 0; g < [layout.manager numberOfGlyphs]; ++g)
+  {
+    NSRect box = [layout.manager boundingRectForGlyphRange:NSMakeRange(g, 1) inTextContainer:layout.container];
+    boxes.push_back(NSInsetRect(box, -1 / scale, -1 / scale));
+  }
+  unsigned ink = 0, outside = 0;
+  for (NSInteger y = 0; y < [raw pixelsHigh]; ++y)
+    for (NSInteger x = 0; x < [raw pixelsWide]; ++x)
+    {
+      bool covered = false;
+      const NSPoint p = NSMakePoint((x + 0.5) / scale, (y + 0.5) / scale);
+      for (size_t g = 0; g < boxes.size() && !covered; ++g)
+        covered = NSPointInRect(p, boxes[g]);
+      NSUInteger rgba[5] = {};
+      [raw getPixel:rgba atX:x y:y];
+      if (rgba[3])
+      {
+        LOKA_VERIFY(covered);
+        ++ink;
+      }
+      if (!covered)
+        ++outside;
+    }
+  LOKA_VERIFY(ink && outside);
+  NSBitmapImageRep *control = DrawRectControl(view);
+  [view setNeedsDisplay:YES];
+  NSView *parent = [view superview];
+  const NSRect region = [view convertRect:[view bounds] toView:parent];
+  NSBitmapImageRep *composed = [parent bitmapImageRepForCachingDisplayInRect:region];
+  LOKA_VERIFY(composed);
+  [parent cacheDisplayInRect:region toBitmapImageRep:composed];
+  MacPresentedText fact;
+  LOKA_VERIFY([view queryPresentedFact:&fact]);
+  std::printf("fractional height remainder=%g px\n", std::ceil(size.height * scale) - size.height * scale);
+  ReportPixelDifferences("drawRect vs raw", control, raw);
+  ReportPixelDifferences("drawRect vs composed", control, composed);
+}
+
+void testMacTextPresentationColour()
+{
+  HitTestPool pool;
+  NSWindow *window = PresentationWindow();
+  if (!window)
+    return;
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 1090
+  if (NSAppKitVersionNumber >= 1671)
+  {
+    CheckedLayout layout(window, Styled("Appearance |||", Bold));
+    NSView *view = layout.view;
+    NSAppearance *light = [NSAppearance appearanceNamed:@"NSAppearanceNameAqua"];
+    NSAppearance *dark = [NSAppearance appearanceNamed:@"NSAppearanceNameDarkAqua"];
+    LOKA_VERIFY(light && dark);
+    id appAppearance = [NSApp respondsToSelector:@selector(effectiveAppearance)]
+                           ? [NSApp performSelector:@selector(effectiveAppearance)]
+                           : nil;
+    NSString *match = [appAppearance
+        performSelector:NSSelectorFromString(@"bestMatchFromAppearancesWithNames:")
+             withObject:[NSArray arrayWithObjects:@"NSAppearanceNameDarkAqua", @"NSAppearanceNameAqua", nil]];
+    const bool appDark = [match isEqualToString:@"NSAppearanceNameDarkAqua"];
+    for (int generation = 0; generation < 4; ++generation)
+    {
+      const bool darkInkBackground = (generation % 2 == 0) != appDark;
+      id previous = [[[view layer] contents] retain];
+      [view setAppearance:darkInkBackground ? dark : light];
+      if (generation == 3)
+      {
+        [view setNeedsDisplay:YES];
+        CaptureParent(view);
+      }
+      else
+      {
+        [view displayIfNeeded];
+        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
+      }
+      NSBitmapImageRep *raw = RawTextImage(view);
+      LOKA_VERIFY([[view layer] contents] != previous);
+      [previous release];
+      CGFloat owned = InkLightness(raw), control = InkLightness(DrawRectControl(view));
+      std::printf("appearance %s route %s, own/control ink %g/%g\n",
+                  darkInkBackground ? "dark" : "light",
+                  generation == 3 ? "cache" : "ordinary",
+                  owned,
+                  control);
+      LOKA_VERIFY((owned > 0.5) == darkInkBackground && std::fabs(owned - control) < 0.12);
+    }
+    return;
+  }
+#endif
+  std::puts("[skip] no dark appearance");
+}
+
+namespace
+{
+  NSPoint FirstLinkPoint(AttributedTextNode &node)
+  {
+    NSView *view = AttributedAccess::view(AttributedContext(node));
+    NSLayoutManager *manager = AttributedAccess::manager(view);
+    NSUInteger count = 0;
+    NSRectArray rects = [manager rectArrayForCharacterRange:NSMakeRange(0, 1)
+                               withinSelectedCharacterRange:NSMakeRange(NSNotFound, 0)
+                                            inTextContainer:AttributedAccess::container(view)
+                                                  rectCount:&count];
+    LOKA_VERIFY(count);
+    NSRect rect = rects[0];
+    return HitCentre(NSIntersectionRect(rect, [manager lineFragmentUsedRectForGlyphAtIndex:0 effectiveRange:NULL]));
+  }
+  void FirstOrdinaryCandidate(NSWindow *window, AttributedTextNode &node, const char *host)
+  {
+    const NSPoint point = FirstLinkPoint(node);
+    std::fprintf(stderr, "Darwin %d %s first ordinary display\n", loka::dsl::testing::DarwinMajor(), host);
+    DisplayWindow(window);
+    Candidate(AttributedContext(node), point, "destination");
+  }
+} // namespace
+
+void testMacTextPresentationIntegration()
+{
+  HitTestPool pool;
+  NSWindow *window = PresentationWindow();
+  if (!window)
+    return;
+  NSView *root = [window contentView];
+  const AttributedTextProps link(LinkText("go", "destination"));
+  for (int host = 0; host < 3; ++host)
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    loka::testing::ScrollViewSeat viewport;
+    if (host == 1)
+    {
+      // Cell is a leaf. Exercise its production layered native view as the child controller's parent.
+      CellNode cell((CellProps()));
+      LayoutState state;
+      state.width = 200;
+      cell.layoutProjected(&controller, state);
+      NSView *native = [[root subviews] lastObject];
+      LOKA_VERIFY([native isKindOfClass:NSClassFromString(@"LokaCellView")]);
+      MacScenePlatformController inside(native, RailMetrics());
+      AttributedTextNode node(link);
+      node.layoutProjected(&inside, state);
+      FirstOrdinaryCandidate(window, node, "Cell native host");
+    }
+    else
+    {
+      NestableNode *parent = host == 0
+                                 ? static_cast<NestableNode *>(new ZStackNode((ZStackProps())))
+                                 : static_cast<NestableNode *>(new ScrollViewNode(ScrollViewProps(viewport.state())));
+      if (host == 0)
+        parent->addChild(new TextNode(TextProps("ground")));
+      AttributedTextNode *node = new AttributedTextNode(link);
+      parent->addChild(node);
+      controller.onChange(parent, NODE_DIRTY_NONE, false);
+      controller.relayout(320, 160);
+      FirstOrdinaryCandidate(window, *node, host == 0 ? "ZStack" : "ScrollView");
+      controller.onChange(0, NODE_DIRTY_NONE, false);
+      delete parent;
+    }
+  }
+}
+
+void testMacTextPresentationPredicate()
+{
+  HitTestPool pool;
+  const AttributedString value = LinkText("body", "A"), other = LinkText("body", "B");
+  const MacTextHit hit = {TextSegmentRange(0), 42};
+  MacPresentedText fact = {value, hit.containerWidth};
+  LOKA_VERIFY(MacTestEligibleRun(hit, fact, value, value));
+  fact.width += 1;
+  LOKA_VERIFY(!MacTestEligibleRun(hit, fact, value, value));
+  fact.width = hit.containerWidth;
+  fact.value = other;
+  LOKA_VERIFY(!MacTestEligibleRun(hit, fact, value, value));
 }

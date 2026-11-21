@@ -3,6 +3,12 @@
 
 #import <AvailabilityMacros.h>
 #import <AppKit/AppKit.h>
+#import <QuartzCore/QuartzCore.h>
+#if defined(CABASE_H)
+#define LOKA_MAC_HAS_CALAYER 1
+#else
+#define LOKA_MAC_HAS_CALAYER 0
+#endif
 #include <float.h>
 
 #if !defined(__OBJC2__) || !__OBJC2__
@@ -36,6 +42,21 @@ typedef float CGFloat;
 // macro. Do not let AppKit's native namespace leak into portable C++ headers.
 #ifdef verify
 #undef verify
+#endif
+
+#if LOKA_MAC_HAS_CALAYER
+#import <QuartzCore/CALayer.h>
+#import <QuartzCore/CATransaction.h>
+@interface NSView (LokaTextLayerCompat)
+- (BOOL)wantsUpdateLayer;
+- (void)updateLayer;
+- (void)viewDidChangeEffectiveAppearance;
+@end
+@interface CALayer (LokaTextContentsCompat)
+- (BOOL)contentsAreFlipped;
+- (CGFloat)contentsScale;
+- (void)setContentsScale:(CGFloat)scale;
+@end
 #endif
 
 // AppKit's modern constant names are enum values, not preprocessor macros.
