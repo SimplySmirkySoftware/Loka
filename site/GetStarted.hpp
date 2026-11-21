@@ -29,7 +29,7 @@ namespace loka_site
           Column() << doc::Heading(1, "Get started")
                    << doc::Paragraph(
                           "Loka builds with CMake. The commands below run the headless tests on Linux or WSL. "
-                          "You need Ninja and a compiler that accepts C++98.")
+                          "You need Ninja and a compiler that accepts C++98. The tests also use Python 3.")
                    << doc::CodeBlock("cmake --preset testing\ncmake --build --preset testing\nctest --preset testing")
                    << doc::Paragraph("A build that opens windows needs the toolchain of its target: macOS, Windows, or "
                                      "Retro68 for Classic Mac OS.")
