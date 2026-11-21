@@ -67,8 +67,7 @@ namespace
   {
     NullWindowPlatformContext()
         : createWindowCalls(0),
-          sawInitialScene(false),
-          sawRootDefinition(false)
+          sawRootedScene(false)
     {
     }
 
@@ -80,8 +79,11 @@ namespace
     virtual Window *createWindow(const WindowProps &props)
     {
       ++createWindowCalls;
-      sawInitialScene = props.peekInitialScene() != 0;
-      sawRootDefinition = props.hasRootDefinition();
+      const loka::app::scene::Scene *scene = props.peekInitialScene();
+      this->sawRootedScene = scene && scene->getRootDefinition();
+      WindowProps delivered(props);
+      loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> remaining(delivered.takeRootDefinition());
+      LOKA_VERIFY(!remaining.get() && !delivered.rootDefinitionRefused());
       return 0;
     }
 
@@ -104,9 +106,15 @@ namespace
     }
 
     int createWindowCalls;
-    bool sawInitialScene;
-    bool sawRootDefinition;
+    bool sawRootedScene;
   };
+
+  void verifyTransferableRoot(const WindowProps &props)
+  {
+    WindowProps copy(props);
+    loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> root(copy.takeRootDefinition());
+    LOKA_VERIFY(root.get());
+  }
 
   bool cloneMatchPredicate(const int &value, void *userData)
   {
@@ -487,8 +495,7 @@ void testWindowDefinitionCreateTransfersSingleRootClone()
   assert(window == 0);
   assert(g_limitedCloneCalls == 1);
   assert(context.createWindowCalls == 1);
-  assert(context.sawInitialScene);
-  assert(!context.sawRootDefinition);
+  LOKA_VERIFY(context.sawRootedScene);
 
   printf("==== [testWindowDefinitionCreateTransfersSingleRootClone] end ====\n");
 }
@@ -550,15 +557,15 @@ void testWindowContentMarginRetention()
   WindowProps source;
   source.contentMargin(29).scene(
       loka::scenario_tests::ObservedMainDefinition<MarginRoot::Props, MarginRoot>(MarginRoot::Props(), 0));
-  LOKA_VERIFY(source.hasRootDefinition());
+  verifyTransferableRoot(source);
   loka::scenario_tests::testing::failObservedMainDefinitionClones(1);
   stable = source;
   loka::scenario_tests::testing::allowObservedMainDefinitionClones();
   LOKA_VERIFY(stable.contentMarginValue == LayoutGap::of(17));
-  LOKA_VERIFY(!stable.hasRootDefinition() && stable.rootDefinitionRefused());
+  LOKA_VERIFY(stable.rootDefinitionRefused() && stable.takeRootDefinition() == 0);
   stable = source;
   LOKA_VERIFY(stable.contentMarginValue == LayoutGap::of(29));
-  LOKA_VERIFY(stable.hasRootDefinition());
+  verifyTransferableRoot(stable);
 }
 
 namespace
@@ -725,7 +732,7 @@ void testWindowSceneHandoffRefusal()
     target.scene(CloneProbeDefinition());
     loka::core::testing::failLokaAllocRaw("WindowProps", "InitialSceneHandoff", 1);
     target.scene(probeScene());
-    LOKA_VERIFY(target.hasRootDefinition());
+    verifyTransferableRoot(target);
 
     target.scene(static_cast<loka::app::scene::Scene *>(0));
     loka::core::testing::failLokaAllocRaw("WindowProps", "InitialSceneHandoff", 1);
@@ -778,10 +785,11 @@ void testWindowRootSuccessfulCopies()
       .onIdle(&observeIdle, &idleCalls)
       .onKeyPress(&observeKey, &lastKey);
   WindowProps assigned;
+  g_limitedCloneCalls = 0;
   g_limitedCloneBudget = 1;
   assigned = source;
   g_limitedCloneBudget = -1;
-  LOKA_VERIFY(assigned.hasRootDefinition());
+  LOKA_VERIFY(g_limitedCloneCalls == 1);
   WindowDefinition<WindowProps> definition(assigned);
   loka::core::OwnedDef<WindowDefinitionBase> copy(definition.clone());
   LOKA_VERIFY(copy.get());
@@ -789,7 +797,7 @@ void testWindowRootSuccessfulCopies()
   loka::testing::StandaloneMountTestPlatformContext context;
   g_limitedCloneCalls = 0;
   Window *window = copy->create(&context);
-  LOKA_VERIFY(window && window->scene() && g_limitedCloneCalls == 1);
+  LOKA_VERIFY(window && window->scene() && window->scene()->getRootDefinition() && g_limitedCloneCalls == 1);
   LOKA_VERIFY(window->frameState().get() == loka::core::Frame(11, 22, 333, 444));
   LOKA_VERIFY(window->titleState().get().equals(loka::core::String::Literal("Document")));
   LOKA_VERIFY(window->contentMargin() == loka::app::layout::LayoutGap::of(7));

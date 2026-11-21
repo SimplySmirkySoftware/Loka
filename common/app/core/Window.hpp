@@ -333,11 +333,6 @@ public:
     return this->root_.take();
   }
 
-  /** Whether this copy owns a root that can be transferred. */
-  bool hasRootDefinition() const
-  {
-    return this->root_.owned();
-  }
   /** A declared root failed capture or copy and prevents window creation. */
   bool rootDefinitionRefused() const
   {

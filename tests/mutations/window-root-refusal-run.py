@@ -12,9 +12,7 @@ WINDOW = "common/app/core/Window.cpp"
 DEFINITION = "common/app/core/WindowDefinition.hpp"
 VEHICLE = "tests/standalone/StandaloneScenarioSupport.cpp"
 BLOCKED = "definition.create(&context) == 0"
-VERDICT = """      const bool awaitingVerdict =
-          this->borrowedApp_ && !this->completed_ && this->completionMode_ != REARM_COMPLETED_SCENE;
-      return this->mountFailed_ || awaitingVerdict;"""
+VERDICT = "return this->mountFailed_ || (this->borrowedApp_ && !this->completed_);"
 
 MUTATIONS = [
     ("copy-drops-refused", WINDOW,
@@ -29,7 +27,7 @@ MUTATIONS = [
      "testWindowRootAssignmentRefusal", BLOCKED),
     ("assignment-reclones", WINDOW, "this->definition_.reset(candidate.take());",
      "this->definition_.reset(candidate.owned() ? candidate.definition_->clone() : 0);",
-     "testWindowRootSuccessfulCopies", "assigned.hasRootDefinition()"),
+     "testWindowRootSuccessfulCopies", "g_limitedCloneCalls == 1"),
     ("capture-keeps-empty", WINDOW, "if (!candidate.isSet())\n  {\n    this->refuseContentWrite();",
      "if (!candidate.isSet())\n  {", "testWindowRootCaptureRefusal", BLOCKED),
     ("accept-null-root-scene", WINDOW, "if (scene->getRootDefinition())", "if (scene)",
@@ -41,8 +39,11 @@ MUTATIONS = [
      "copy.isSet()", "testWindowRootCloneRefusal", "!copy.isSet()"),
     ("create-ignores-refusal", DEFINITION, "    if (resolved.rootDefinitionRefused())\n      return 0;\n",
      "", "testWindowRootResolutionRefusal", BLOCKED),
-    ("no-verdict-succeeds", VEHICLE, VERDICT, "      return this->mountFailed_;",
+    ("no-verdict-succeeds", VEHICLE, VERDICT, "return this->mountFailed_;",
      "testScrapbookStandaloneDeclarationRefusalIsWindowless", "config.exitCode() != 0"),
+    ("windowless-loop-succeeds", VEHICLE, "return this->mountFailed_ || (this->borrowedApp_ && !launched);",
+     "(void)launched;\n        return this->mountFailed_;",
+     "testStandaloneRunControlRearmsCompletedSceneWithoutQuittingApp", "windowless.failed()"),
 ]
 
 
@@ -83,8 +84,8 @@ def mutation(entry, build, test, logs):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--build", default="cmake --build --preset testing --target LokaContractTests -j8")
-    parser.add_argument("--test", default="build/Testing/LokaContractTests", help="command to which the pin name is appended")
+    parser.add_argument("--build", default="cmake --build --preset testing --target LokaContractTests LokaScenarioTests -j8")
+    parser.add_argument("--test", default="ctest --preset testing --output-on-failure --no-tests=error -R", help="command to which the pin name is appended")
     parser.add_argument("mutation", nargs="?", default="all", choices=["all"] + [m[0] for m in MUTATIONS])
     args = parser.parse_args()
 
