@@ -1,9 +1,21 @@
 #ifndef LOKA_MAC_ATTRIBUTED_TEXT_TEST_ACCESS_HPP
 #define LOKA_MAC_ATTRIBUTED_TEXT_TEST_ACCESS_HPP
+#include "MacObjCCompat.hpp"
+#ifndef LOKA_MAC_HAS_CALAYER
+#error "include MacObjCCompat.hpp first"
+#endif
 #include "support/TestVerify.hpp"
 #include <sys/utsname.h>
 #include <cstdlib>
 #include "context/MacAttributedTextContext.hpp"
+
+/** One production predicate comparison of the test-supplied values. */
+bool MacTestEligibleRun(const MacTextHit &hit,
+                        const MacPresentedText &fact,
+                        const loka::app::AttributedString &snapshot,
+                        const loka::app::AttributedString &current);
+/** One out-of-line budget check per test size. */
+bool MacTestTextBudget(NSSize size, CGFloat scale);
 
 // The implementation and ownership of these getters stay on the rail-private leaf.
 @interface NSView (LokaAttributedTextTestReads)
@@ -11,6 +23,22 @@
 - (NSLayoutManager *)lokaLayoutManager;
 - (NSTextContainer *)lokaTextContainer;
 - (CGFloat)appliedWidth;
+/** One production width application per invalidation pin. */
+- (void)applyContainerWidth:(CGFloat)width;
+/** One storage replacement and measurement of this leaf per nonempty install request. */
+- (BOOL)installValue:(NSAttributedString *)value
+            snapshot:(const loka::app::AttributedString *)snapshot
+              extent:(CGFloat *)extent;
+/** One current-layer tuple read per observation. */
+- (BOOL)queryPresentedFact:(MacPresentedText *)out;
+/** One draw of this view's glyphs in the requested band per display. */
+- (void)drawTextInRect:(NSRect)rect;
+/** One synthetic missing-layer tuple check per field-isolation pin. */
+- (BOOL)lokaFactWithAbsentLayer;
+/** One installed-tag read per owner observation. */
+- (BOOL)lokaHasInstalledText;
+/** One retained-pointer read per owner observation. */
+- (BOOL)lokaHasPresentationImage;
 @end
 
 namespace loka
@@ -123,9 +151,27 @@ namespace loka
           return context.projection_.queryProvenance(start, end, out);
         }
         /** One context preparation per test point; the forwarder walks no rows. */
-        static MacTextHitAnswer prepareTextHit(const MacAttributedTextContext &context, NSPoint point, MacTextHit &out)
+        static MacTextHitAnswer
+        prepareSourceHit(const MacAttributedTextContext &context, NSPoint point, MacTextHit &out)
         {
-          return context.prepareTextHit(point, out);
+          return context.prepareSourceHit(point, out);
+        }
+        /** One checked preparation per fixture point, forwarding without walking rows. */
+        static MacTextHitAnswer
+        prepareTextHit(const MacAttributedTextContext &context, NSPoint p, MacTextHit &hit, MacPresentedText &fact)
+        {
+          return context.prepareTextHit(p, hit, fact);
+        }
+        /** One production candidate query per test point. */
+        static bool
+        queryPressCandidate(const MacAttributedTextContext &context, NSPoint p, app::AttributedString::LinkRun &out)
+        {
+          return context.queryPressCandidate(p, out);
+        }
+        /** One borrowed snapshot per projection lifetime pin. */
+        static const app::AttributedString &snapshot(const MacAttributedTextContext &context)
+        {
+          return context.projection_.snapshot();
         }
         static bool complete(const MacAttributedTextContext &context)
         {

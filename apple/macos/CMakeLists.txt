@@ -31,6 +31,7 @@ target_link_libraries(LokaAppleMacOSAppKit INTERFACE
   LokaAppleCommonCocoa
   "-framework ApplicationServices"
   "-framework AppKit"
+  "-framework QuartzCore"
   "-framework Foundation"
   "-framework CoreFoundation"
 )
@@ -217,6 +218,7 @@ if(NOT LOKA_MAC_OS_10_4)
   target_link_libraries(LokaTestsMacOS PRIVATE
     "-framework ApplicationServices"
     "-framework AppKit"
+    "-framework QuartzCore"
     "-framework Foundation"
     "-framework CoreFoundation"
   )

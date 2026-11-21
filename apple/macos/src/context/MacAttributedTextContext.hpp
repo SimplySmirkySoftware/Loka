@@ -27,6 +27,17 @@ struct MacTextHit
   loka::app::TextSegmentRange source;
   CGFloat containerWidth;
 };
+/** Text and container width certified by the current layer image. */
+struct MacPresentedText
+{
+  loka::app::AttributedString value;
+  CGFloat width;
+};
+
+/** One constant-time test of the leaf's resolved QuartzCore headers. */
+bool MacTextLayerCompiledIn();
+/** One NSView capability query at each layer entry, no row walk. */
+bool MacTextLayerCapable();
 enum MacTextHitAnswer
 {
   MAC_HIT_SOURCE,
@@ -104,6 +115,11 @@ private:
       CGFloat constraint;
       return this->measurement_.queryConstraint(constraint) ? this->measurement_.extent() : 0;
     }
+    /** Borrow once per install or candidate. O(1), even for a multi-segment value. */
+    const loka::app::AttributedString &snapshot() const
+    {
+      return this->snapshot_;
+    }
     void *value() const
     {
       return this->value_;
@@ -123,6 +139,8 @@ private:
     MacTextSourceTable sources_;
     // No backing-scale invalidation until a measurement effect is demonstrated (#970).
     loka::app::MeasurementResult<CGFloat, int> measurement_;
+    // Deliberate twin of the Toolbox table snapshot_, reset and published with its table.
+    loka::app::AttributedString snapshot_;
     void *value_;
     Projection(const Projection &);
     Projection &operator=(const Projection &);
@@ -130,7 +148,11 @@ private:
   /** Publishes out only on SOURCE. Tests only here; at most twice per future press,
       never for an UP without a candidate. One view query and one provenance query at most;
       the projection searches its own covered slots in O(covered slots x log(segments + 1)). */
-  MacTextHitAnswer prepareTextHit(NSPoint viewPoint, MacTextHit &out) const;
+  MacTextHitAnswer prepareSourceHit(NSPoint viewPoint, MacTextHit &out) const;
+  /** Once per candidate, one current-layer tuple read followed by one source preparation. */
+  MacTextHitAnswer prepareTextHit(NSPoint viewPoint, MacTextHit &out, MacPresentedText &fact) const;
+  /** At most twice per press. One preparation, up to two segment comparisons and one maximal run in this text. */
+  bool queryPressCandidate(NSPoint viewPoint, loka::app::AttributedString::LinkRun &out) const;
   bool rebuildProjection(const loka::macos::MacLength &constraint);
   void clearProjection();
   loka::app::AttributedTextNode *node_;
