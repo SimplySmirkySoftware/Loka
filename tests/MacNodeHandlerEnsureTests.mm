@@ -6199,7 +6199,10 @@ void testMacTextWindowPassRepaint()
   {
     ObservedPass trace(window);
     controller.onChange(clip, NODE_DIRTY_LAYOUT, true);
-    LOKA_VERIFY(trace.entries + 1 == MacTestRepaintEntries() && trace.sends == "FMD");
+    // AppKit 10.9 restores the field editor with several responder sends; all of them precede the repaint.
+    const std::string::size_type tail = trace.sends.size() - 2;
+    LOKA_VERIFY(trace.entries + 1 == MacTestRepaintEntries() && trace.sends.size() >= 3
+                && trace.sends.compare(tail, 2, "MD") == 0 && trace.sends.find_first_not_of('F') == tail);
   }
   controller.onChange(0, NODE_DIRTY_NONE, false);
   delete clip;

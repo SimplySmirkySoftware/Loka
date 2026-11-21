@@ -129,7 +129,7 @@ L_ORACLE = {
     "commit-installed": 'false && "unexpected layer read"',
     "commit-layer": 'false && "unexpected geometry read"',
     "commit-window": 'false && "unexpected geometry read"',
-    "translated-origin-layer-display": "![view wantsUpdateLayer]",
+    "translated-origin-layer-display": ("![view wantsUpdateLayer]", "submitted.foregrounds && submitted.foreground.length"),
     "commit-origin": "![view lokaHasPresentationImage]",
     "read-window": 'false && "unexpected layer read"',
     "check-layer": "![view lokaFactWithAbsentLayer]",
@@ -262,6 +262,9 @@ def check_completion(test, data, tahoe, no_audit):
 
 
 def killed(oracle, data):
+    if isinstance(oracle, tuple):
+        # Hosts stop at different assertions of the same pin; each alternative is that pin's own text.
+        return any(killed(alternative, data) for alternative in oracle)
     if oracle.startswith("death:"):
         action = oracle[5:]
         if not all(line in data.splitlines() for line in ("[returned] " + action, "[parent failure] " + action + " returned")):
