@@ -189,7 +189,10 @@ namespace loka
 #if LOKA_STANDALONE_PERFORMANCE_RUNS > 0
       return this->mountFailed_ || this->scenarioVerdict_.refusesCompletedPass();
 #else
-      return this->mountFailed_;
+      // An interactive loop may be closed by its operator between cells.
+      const bool awaitingVerdict =
+          this->borrowedApp_ && !this->completed_ && this->completionMode_ != REARM_COMPLETED_SCENE;
+      return this->mountFailed_ || awaitingVerdict;
 #endif
     }
 

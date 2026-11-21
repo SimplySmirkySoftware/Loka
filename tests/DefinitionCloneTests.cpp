@@ -1,4 +1,8 @@
 #include "DefinitionCloneTests.hpp"
+#include "WindowRootRefusalTests.hpp"
+#include "app/core/AppComposition.hpp"
+#include "support/LokaAllocFailure.hpp"
+#include "support/StandaloneMountTestSupport.hpp"
 #include "support/TestVerify.hpp"
 #include <cassert>
 #include <cstdio>
@@ -63,8 +67,7 @@ namespace
   {
     NullWindowPlatformContext()
         : createWindowCalls(0),
-          sawInitialScene(false),
-          sawRootDefinition(false)
+          sawRootedScene(false)
     {
     }
 
@@ -76,8 +79,11 @@ namespace
     virtual Window *createWindow(const WindowProps &props)
     {
       ++createWindowCalls;
-      sawInitialScene = props.peekInitialScene() != 0;
-      sawRootDefinition = props.rootDefinition != 0;
+      const loka::app::scene::Scene *scene = props.peekInitialScene();
+      this->sawRootedScene = scene && scene->getRootDefinition();
+      WindowProps delivered(props);
+      loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> remaining(delivered.takeRootDefinition());
+      LOKA_VERIFY(!remaining.get() && !delivered.rootDefinitionRefused());
       return 0;
     }
 
@@ -100,9 +106,15 @@ namespace
     }
 
     int createWindowCalls;
-    bool sawInitialScene;
-    bool sawRootDefinition;
+    bool sawRootedScene;
   };
+
+  void verifyTransferableRoot(const WindowProps &props)
+  {
+    WindowProps copy(props);
+    loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> root(copy.takeRootDefinition());
+    LOKA_VERIFY(root.get());
+  }
 
   bool cloneMatchPredicate(const int &value, void *userData)
   {
@@ -122,13 +134,13 @@ void testOwnedDefOwnership()
   int baseline = g_probePropsAlive;
   {
     loka::core::OwnedDef<CloneProbeDefinition> owned(new CloneProbeDefinition());
-    assert(owned.isSet());
+    LOKA_VERIFY(owned.isSet());
     assert(owned.get() != 0);
     (void)baseline;
     assert(g_probePropsAlive == baseline + 1);
 
     CloneProbeDefinition *taken = owned.take();
-    assert(!owned.isSet());
+    LOKA_VERIFY(!owned.isSet());
     assert(owned.get() == 0);
     delete taken;
     assert(g_probePropsAlive == baseline);
@@ -138,7 +150,7 @@ void testOwnedDefOwnership()
     owned.reset(same);
     assert(g_probePropsAlive == baseline + 1);
     owned.reset();
-    assert(!owned.isSet());
+    LOKA_VERIFY(!owned.isSet());
     assert(g_probePropsAlive == baseline);
   }
   {
@@ -149,7 +161,7 @@ void testOwnedDefOwnership()
   {
     OomCloneProbeDefinition failedClone;
     loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> empty(failedClone.clone());
-    assert(!empty.isSet());
+    LOKA_VERIFY(!empty.isSet());
     assert(empty.get() == 0);
   }
   assert(g_probePropsAlive == baseline);
@@ -427,20 +439,22 @@ void testWindowPropsAssignmentPreservesOwnedSceneOnOomClone()
   printf("\n==== [testWindowPropsAssignmentPreservesOwnedSceneOnOomClone] start ====\n");
 
   WindowProps stableTarget;
-  stableTarget.rootDefinition = new CloneProbeDefinition();
+  stableTarget.scene(CloneProbeDefinition());
   stableTarget.contentMargin(17);
 
   WindowProps sourceWithBadRoot;
-  sourceWithBadRoot.rootDefinition = new OomCloneProbeDefinition();
+  sourceWithBadRoot.scene(LimitedCloneProbeDefinition());
   sourceWithBadRoot.contentMargin(loka::app::StandardWindowMargin());
 
+  g_limitedCloneBudget = 0;
   stableTarget = sourceWithBadRoot;
   LOKA_VERIFY(stableTarget.contentMarginValue == loka::app::layout::LayoutGap::of(17));
-
-  assert(stableTarget.rootDefinition != 0);
-  loka::app::scene::NodeDefinitionBase *childClone = stableTarget.rootDefinition->clone();
-  assert(childClone != 0);
-  delete childClone;
+  loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> retained(stableTarget.takeRootDefinition());
+  LOKA_VERIFY(retained.get());
+  // Only the original target still allows a clone while the source budget is exhausted.
+  loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> childClone(retained->clone());
+  LOKA_VERIFY(childClone.get());
+  g_limitedCloneBudget = -1;
 
   printf("==== [testWindowPropsAssignmentPreservesOwnedSceneOnOomClone] end ====\n");
 }
@@ -450,11 +464,13 @@ void testWindowDefinitionCreateReturnsNullOnOomRootClone()
   printf("\n==== [testWindowDefinitionCreateReturnsNullOnOomRootClone] start ====\n");
 
   WindowDefinition<WindowProps> def;
-  def.props.rootDefinition = new OomCloneProbeDefinition();
+  def.props.scene(LimitedCloneProbeDefinition());
+  g_limitedCloneBudget = 0;
 
   NullWindowPlatformContext context;
   Window *window = def.create(&context);
 
+  g_limitedCloneBudget = -1;
   (void)window;
   assert(window == 0);
   assert(context.createWindowCalls == 0);
@@ -467,7 +483,7 @@ void testWindowDefinitionCreateTransfersSingleRootClone()
   printf("\n==== [testWindowDefinitionCreateTransfersSingleRootClone] start ====\n");
 
   WindowDefinition<WindowProps> def;
-  def.props.rootDefinition = new LimitedCloneProbeDefinition();
+  def.props.scene(LimitedCloneProbeDefinition());
 
   NullWindowPlatformContext context;
   g_limitedCloneBudget = 1;
@@ -479,8 +495,7 @@ void testWindowDefinitionCreateTransfersSingleRootClone()
   assert(window == 0);
   assert(g_limitedCloneCalls == 1);
   assert(context.createWindowCalls == 1);
-  assert(context.sawInitialScene);
-  assert(!context.sawRootDefinition);
+  LOKA_VERIFY(context.sawRootedScene);
 
   printf("==== [testWindowDefinitionCreateTransfersSingleRootClone] end ====\n");
 }
@@ -542,13 +557,251 @@ void testWindowContentMarginRetention()
   WindowProps source;
   source.contentMargin(29).scene(
       loka::scenario_tests::ObservedMainDefinition<MarginRoot::Props, MarginRoot>(MarginRoot::Props(), 0));
-  LOKA_VERIFY(source.rootDefinition);
+  verifyTransferableRoot(source);
   loka::scenario_tests::testing::failObservedMainDefinitionClones(1);
   stable = source;
   loka::scenario_tests::testing::allowObservedMainDefinitionClones();
   LOKA_VERIFY(stable.contentMarginValue == LayoutGap::of(17));
-  LOKA_VERIFY(stable.rootDefinition == 0);
+  LOKA_VERIFY(stable.rootDefinitionRefused() && stable.takeRootDefinition() == 0);
   stable = source;
   LOKA_VERIFY(stable.contentMarginValue == LayoutGap::of(29));
-  LOKA_VERIFY(stable.rootDefinition);
+  verifyTransferableRoot(stable);
+}
+
+namespace
+{
+  void verifyRefusedWindow(const WindowDefinition<WindowProps> &definition)
+  {
+    WindowRootRefusalTestSupport::CountingContext context;
+    LOKA_VERIFY(definition.create(&context) == 0);
+    LOKA_VERIFY(context.creates == 0);
+  }
+
+  loka::app::scene::Scene *probeScene()
+  {
+    return new loka::app::scene::Scene(new CloneProbeDefinition());
+  }
+
+  loka::app::scene::Scene *refusedScene()
+  {
+    typedef loka::scenario_tests::ObservedMainDefinition<MarginRoot::Props, MarginRoot> Definition;
+    loka::scenario_tests::testing::failObservedMainDefinitionClones(1);
+    return new loka::app::scene::Scene(Definition(MarginRoot::Props(), 0));
+  }
+} // namespace
+
+void testWindowRootCaptureRefusal()
+{
+  WindowProps props;
+  g_limitedCloneBudget = 0;
+  props.scene(LimitedCloneProbeDefinition());
+  g_limitedCloneBudget = -1;
+  verifyRefusedWindow(WindowDef(props));
+}
+
+void testWindowRootCopyRefusal()
+{
+  WindowProps source;
+  source.scene(LimitedCloneProbeDefinition());
+  g_limitedCloneBudget = 0;
+  WindowProps copy(source);
+  g_limitedCloneBudget = -1;
+  verifyRefusedWindow(WindowDef(copy));
+}
+
+void testWindowRootAssignmentRefusal()
+{
+  WindowProps source;
+  source.scene(LimitedCloneProbeDefinition());
+  WindowProps target;
+  g_limitedCloneBudget = 0;
+  target = source;
+  g_limitedCloneBudget = -1;
+  verifyRefusedWindow(WindowDef(target));
+}
+
+void testWindowRootConstructionRefusal()
+{
+  WindowProps source;
+  source.scene(LimitedCloneProbeDefinition());
+  g_limitedCloneBudget = 0;
+  WindowDefinition<WindowProps> definition(source);
+  g_limitedCloneBudget = -1;
+  verifyRefusedWindow(definition);
+}
+
+void testWindowRootCloneRefusal()
+{
+  WindowDefinition<WindowProps> definition;
+  definition.props.scene(LimitedCloneProbeDefinition());
+  g_limitedCloneBudget = 0;
+  loka::core::OwnedDef<WindowDefinitionBase> copy(definition.clone());
+  g_limitedCloneBudget = -1;
+  LOKA_VERIFY(!copy.isSet());
+}
+
+void testWindowRootResolutionRefusal()
+{
+  WindowDefinition<WindowProps> definition;
+  definition.props.scene(LimitedCloneProbeDefinition());
+  g_limitedCloneBudget = 0;
+  verifyRefusedWindow(definition);
+  g_limitedCloneBudget = -1;
+}
+
+void testWindowRootRefusalRecovery()
+{
+  WindowProps source;
+  source.scene(OomCloneProbeDefinition())
+      .title("Refused")
+      .frame(1, 2, 3, 4)
+      .contentMargin(23)
+      .visible(false)
+      .idlePolicy(loka::app::IdlePolicy::none())
+      .onIdle(0, 0)
+      .onKeyPress(0, 0);
+  LOKA_VERIFY(source.takeRootDefinition() == 0);
+  WindowProps copy(source);
+  WindowProps target;
+  target.scene(probeScene());
+  target = copy;
+  LOKA_VERIFY(!target.peekInitialScene() && target.width == 3 && !target.initialVisibility);
+  verifyRefusedWindow(WindowDef(target));
+  target.scene(CloneProbeDefinition()).scene(OomCloneProbeDefinition());
+  loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> root(target.takeRootDefinition());
+  LOKA_VERIFY(root.isSet() && !target.rootDefinitionRefused());
+  target = source;
+  target.scene(static_cast<loka::app::scene::Scene *>(0));
+  NullPlatformContext context;
+  Window *empty = WindowDef(target).create(&context);
+  LOKA_VERIFY(empty && !empty->scene());
+  delete empty;
+
+  target = source;
+  loka::app::scene::Scene *pending = probeScene();
+  target.scene(pending).scene(pending).scene(OomCloneProbeDefinition());
+  WindowProps limited;
+  limited.scene(LimitedCloneProbeDefinition());
+  g_limitedCloneBudget = 0;
+  target = limited;
+  g_limitedCloneBudget = -1;
+  LOKA_VERIFY(target.peekInitialScene() == pending);
+  WindowProps sibling(target);
+  delete sibling.takeInitialScene();
+  g_limitedCloneBudget = 0;
+  sibling = limited;
+  g_limitedCloneBudget = -1;
+  verifyRefusedWindow(WindowDef(sibling));
+  target.scene(OomCloneProbeDefinition());
+  verifyRefusedWindow(WindowDef(target));
+}
+
+void testWindowSceneHandoffRefusal()
+{
+  WindowProps props;
+  props.scene(refusedScene());
+  LOKA_VERIFY(!props.peekInitialScene());
+  verifyRefusedWindow(WindowDef(props));
+  props.scene(CloneProbeDefinition()).scene(refusedScene());
+  loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> root(props.takeRootDefinition());
+  LOKA_VERIFY(root.isSet());
+
+  loka::app::scene::Scene *pending = probeScene();
+  props.scene(pending).scene(refusedScene());
+  LOKA_VERIFY(props.peekInitialScene() == pending);
+  WindowProps sibling(props);
+  delete sibling.takeInitialScene();
+  props.scene(refusedScene());
+  verifyRefusedWindow(WindowDef(props));
+
+  // Balance the allocator around all values that can allocate through the gate.
+  loka::core::testing::failLokaAllocRaw("WindowProps", "InitialSceneHandoff", 2);
+  {
+    WindowProps target;
+    pending = probeScene();
+    target.scene(pending);
+    WindowProps sharing(target);
+    target.scene(pending);
+    const int liveBeforeReplacement = g_probePropsAlive;
+    target.scene(probeScene());
+    LOKA_VERIFY(target.peekInitialScene() == pending);
+    LOKA_VERIFY(g_probePropsAlive == liveBeforeReplacement);
+    LOKA_VERIFY(sharing.takeInitialScene() == pending && !target.peekInitialScene());
+    delete pending;
+
+    target.scene(CloneProbeDefinition());
+    loka::core::testing::failLokaAllocRaw("WindowProps", "InitialSceneHandoff", 1);
+    target.scene(probeScene());
+    verifyTransferableRoot(target);
+
+    target.scene(static_cast<loka::app::scene::Scene *>(0));
+    loka::core::testing::failLokaAllocRaw("WindowProps", "InitialSceneHandoff", 1);
+    target.scene(probeScene());
+    LOKA_VERIFY(target.rootDefinitionRefused());
+    target.scene(refusedScene());
+    LOKA_VERIFY(target.rootDefinitionRefused());
+    target.scene(probeScene());
+    LOKA_VERIFY(target.peekInitialScene() && !target.rootDefinitionRefused());
+  }
+  loka::core::testing::allowLokaAllocRaw();
+}
+
+void testWindowMixedRootDeclarations()
+{
+  NullPlatformContext context;
+  AppComposition composition(&context);
+  composition << WindowDef(WindowProps().scene(CloneProbeDefinition()).title("Good"));
+  composition << WindowDef(WindowProps().scene(OomCloneProbeDefinition()));
+  std::vector<AppComponent *> components = composition.build();
+  LOKA_VERIFY(components.size() == 1);
+  Window *window = components[0]->asWindow();
+  LOKA_VERIFY(window && window->scene() && window->titleState().get().equals(loka::core::String::Literal("Good")));
+  delete window;
+}
+
+namespace
+{
+  void observeIdle(Window *, double, void *data)
+  {
+    ++*static_cast<int *>(data);
+  }
+  bool observeKey(Window *, char key, void *data)
+  {
+    *static_cast<char *>(data) = key;
+    return true;
+  }
+} // namespace
+
+void testWindowRootSuccessfulCopies()
+{
+  int idleCalls = 0;
+  char lastKey = 0;
+  WindowProps source;
+  source.scene(LimitedCloneProbeDefinition())
+      .frame(11, 22, 333, 444)
+      .title("Document")
+      .contentMargin(7)
+      .idlePolicy(loka::app::IdlePolicy::interval(0.1))
+      .onIdle(&observeIdle, &idleCalls)
+      .onKeyPress(&observeKey, &lastKey);
+  WindowProps assigned;
+  g_limitedCloneCalls = 0;
+  g_limitedCloneBudget = 1;
+  assigned = source;
+  g_limitedCloneBudget = -1;
+  LOKA_VERIFY(g_limitedCloneCalls == 1);
+  WindowDefinition<WindowProps> definition(assigned);
+  loka::core::OwnedDef<WindowDefinitionBase> copy(definition.clone());
+  LOKA_VERIFY(copy.get());
+  // Count declaration resolution before a renderer mounts and clones its own nodes.
+  loka::testing::StandaloneMountTestPlatformContext context;
+  g_limitedCloneCalls = 0;
+  Window *window = copy->create(&context);
+  LOKA_VERIFY(window && window->scene() && window->scene()->getRootDefinition() && g_limitedCloneCalls == 1);
+  LOKA_VERIFY(window->frameState().get() == loka::core::Frame(11, 22, 333, 444));
+  LOKA_VERIFY(window->titleState().get().equals(loka::core::String::Literal("Document")));
+  LOKA_VERIFY(window->contentMargin() == loka::app::layout::LayoutGap::of(7));
+  LOKA_VERIFY(window->handleIdle(0.1) && idleCalls == 1);
+  LOKA_VERIFY(window->handleKeyPress('a') && lastKey == 'a');
+  delete window;
 }
