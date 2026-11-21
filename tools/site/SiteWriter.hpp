@@ -4,6 +4,9 @@
 #include "app/doc/Render.hpp"
 #include <cstdio>
 #include <cstdlib>
+#include <list>
+#include <new>
+#include <utility>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
@@ -112,23 +115,93 @@ namespace document_site
     }
   };
 
-  /** Cost: main calls once, holding two rendered pages and the supplied stylesheet until publication. */
-  template <class First, class Second>
-  bool writeSite(const std::string &directory,
-                 const char *stylesheet,
-                 const char *firstTitle,
-                 const First &first,
-                 const char *secondTitle,
-                 const Second &second)
+  /** Owns every pending file through staging and publication. */
+  class StagedFiles
   {
-    std::string index, trail, css;
-    if (directory.empty() || !renderPage(loka::core::String(firstTitle), first, index))
+    std::vector<SiteFile *> files_;
+    StagedFiles(const StagedFiles &);
+    StagedFiles &operator=(const StagedFiles &);
+
+  public:
+    /** Cost: writeSite reserves one pointer per planned file once per site. */
+    explicit StagedFiles(size_t count)
+    {
+      this->files_.reserve(count);
+    }
+
+    /** Cost: writeSite scope exit destroys each owned file once. */
+    ~StagedFiles()
+    {
+      for (size_t i = 0; i < this->files_.size(); ++i)
+        delete this->files_[i];
+    }
+
+    /** Cost: writeSite calls once per output, acquiring one file and staging its bytes. */
+    bool stage(const std::string &directory, const char *name, const std::string &bytes)
+    {
+      SiteFile *file = new (std::nothrow) SiteFile(directory, name);
+      if (!file)
+        return false;
+      this->files_.push_back(file);
+      return file->stage(bytes);
+    }
+
+    /** Cost: writeSite calls once after staging, visiting this holder's files in order until a rename fails. */
+    bool publish()
+    {
+      for (size_t i = 0; i < this->files_.size(); ++i)
+        if (!this->files_[i]->publish())
+          return false;
+      return true;
+    }
+  };
+
+  /** Ordered rendered pages awaiting publication. */
+  class SiteOutputs
+  {
+    typedef std::list<std::pair<std::string, std::string> > Pages;
+    Pages pages_;
+    /** Cost: writeSite calls once per site, staging this collection's pages in insertion order. */
+    bool stage(StagedFiles &files, const std::string &directory) const
+    {
+      for (Pages::const_iterator page = this->pages_.begin(); page != this->pages_.end(); ++page)
+        if (!files.stage(directory, page->first.c_str(), page->second))
+          return false;
+      return true;
+    }
+
+    friend bool writeSite(const std::string &, const char *, const SiteOutputs &);
+
+  public:
+    /** Cost: addPage calls once per rendered page, scanning this site's names and copying the admitted bytes. */
+    bool add(const std::string &name, const std::string &bytes)
+    {
+      if (name.empty() || name.find('/') != std::string::npos || name.find('\0') != std::string::npos
+          || name == "site.css")
+        return false;
+      for (Pages::const_iterator page = this->pages_.begin(); page != this->pages_.end(); ++page)
+        if (page->first == name)
+          return false;
+      this->pages_.push_back(std::make_pair(name, bytes));
+      return true;
+    }
+  };
+
+  /** Cost: main calls once per page, rendering its own boundary and offering the completed bytes once. */
+  template <class Page> bool addPage(SiteOutputs &outputs, const char *fileName, const char *title, const Page &page)
+  {
+    std::string bytes;
+    return renderPage(loka::core::String(title), page, bytes) && outputs.add(fileName, bytes);
+  }
+
+  /** Cost: main calls once per site, walking its admitted pages once, then publishing them and the stylesheet. */
+  inline bool writeSite(const std::string &directory, const char *stylesheetPath, const SiteOutputs &outputs)
+  {
+    std::string css;
+    if (directory.empty() || outputs.pages_.empty() || !readStylesheet(stylesheetPath, css))
       return false;
-    if (!renderPage(loka::core::String(secondTitle), second, trail) || !readStylesheet(stylesheet, css))
-      return false;
-    SiteFile home(directory, "index.html"), notes(directory, "trail.html"), style(directory, "site.css");
-    return home.stage(index) && notes.stage(trail) && style.stage(css) && home.publish() && notes.publish()
-           && style.publish();
+    StagedFiles files(outputs.pages_.size() + 1);
+    return outputs.stage(files, directory) && files.stage(directory, "site.css", css) && files.publish();
   }
 } // namespace document_site
 #endif

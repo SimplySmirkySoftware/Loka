@@ -2446,6 +2446,8 @@ already mounted subtree on the main thread, include `app/doc/Html.hpp` or
 To make a standalone HTML page, wrap the fragment in a document with a title
 and place it inside `main`. The two-page example links its pages with relative
 `doc::Link` destinations and shares one stylesheet. [DocumentSite](../example/DocumentSite/main.cpp)
+The repository’s own pages use the same document vocabulary. Their source lives in
+[`site/`](../site/) and the `LokaSite` target builds them.
 
 Both exits preserve the meaning of attached document blocks in declaration order.
 Ordinary controls, underline, color, and font size are omitted. Empty headings

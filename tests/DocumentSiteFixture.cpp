@@ -1,4 +1,4 @@
-#include "../example/DocumentSite/SiteWriter.hpp"
+#include "../tools/site/SiteWriter.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "support/TestVerify.hpp"
 #include <cstring>
@@ -64,7 +64,7 @@ namespace
   }
 } // namespace
 
-/** Cost: one render-pin sequence or one two-page site per fixture invocation. */
+/** Cost: one render-pin sequence or one site per fixture invocation. */
 int main(int argc, char **argv)
 {
   if (argc == 1)
@@ -74,10 +74,30 @@ int main(int argc, char **argv)
   }
   if (argc != 4)
     return 2;
-  const StdCompositionBoundaryDefinition first;
-  if (std::strcmp(argv[1], "valid") == 0)
-    return document_site::writeSite(argv[2], argv[3], "First", first, "Second", first) ? 0 : 1;
+  document_site::SiteOutputs outputs;
+  if (std::strcmp(argv[1], "empty") == 0)
+    return document_site::writeSite(argv[2], argv[3], outputs) ? 0 : 1;
+  const StdCompositionBoundaryDefinition page;
+  if (!document_site::addPage(outputs, "index.html", "First", page))
+    return 1;
+  LOKA_VERIFY(!outputs.add("index.html", "duplicate"));
+  LOKA_VERIFY(!outputs.add("", "empty"));
+  LOKA_VERIFY(!outputs.add("nested/page", "slash"));
+  LOKA_VERIFY(!outputs.add("site.css", "reserved"));
+  LOKA_VERIFY(!document_site::addPage(outputs, "unrendered.html", " ", page));
+  LOKA_VERIFY(!outputs.add(std::string("index.html\0alias", 16), "truncated"));
   if (std::strcmp(argv[1], "refuse") == 0)
-    return document_site::writeSite(argv[2], argv[3], "First", first, "Second", Boundary<LooseItem>()) ? 0 : 1;
-  return 2;
+    return document_site::addPage(outputs, "trail.html", "Second", Boundary<LooseItem>())
+                   && document_site::writeSite(argv[2], argv[3], outputs)
+               ? 0
+               : 1;
+  if (!document_site::addPage(outputs, "trail.html", "Second", page))
+    return 1;
+  const bool valid = std::strcmp(argv[1], "valid") == 0;
+  if (!valid && std::strcmp(argv[1], "blank") != 0)
+    return 2;
+  return document_site::addPage(outputs, "third.html", valid ? "Third landmark" : " ", page)
+                 && document_site::writeSite(argv[2], argv[3], outputs)
+             ? 0
+             : 1;
 }

@@ -10,6 +10,14 @@
       "problemMatcher": "$gcc"
     },
     {
+      "label": "Build: Linux LokaSite",
+      "type": "shell",
+      "command": "cmake --preset testing && cmake --build build/Testing --target LokaSite && cmake -E make_directory build/site",
+      "options": {"cwd": "${workspaceFolder}"},
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
       "label": "Build: Loka Preview Extension",
       "type": "shell",
       "command": "npm run build",
