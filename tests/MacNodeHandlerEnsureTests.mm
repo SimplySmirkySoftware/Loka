@@ -6455,6 +6455,8 @@ void testMacTextWindowFocusExposure()
       ObserveFocusExposure("document replacement", clip, before, *link, ink);
       LOKA_VERIFY(editing->store() && editing->store()->view() != old &&
                   [editing->scroll() documentView] == editing->store()->view());
+      // The store ignores a refused transfer; the observation counts only when the new editor took focus.
+      LOKA_VERIFY([native firstResponder] == editing->store()->view());
     }
   }
   Completed(__func__);
