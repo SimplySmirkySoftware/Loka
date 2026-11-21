@@ -7,7 +7,7 @@ import signal
 from document_mutations import run
 
 
-HEADER = Path("example/DocumentSite/SiteWriter.hpp")
+HEADER = Path("tools/site/SiteWriter.hpp")
 MUTATIONS = [
     ("title-escape", "Render", [
         ("doc::detail::AppendHtmlByte(staged, bytes[i], false);", "staged += bytes[i];")]),
@@ -16,17 +16,22 @@ MUTATIONS = [
         ('std::string staged = "<!doctype', 'std::string &staged = out;\n    staged += "<!doctype'),
         ("out += staged;", "")]),
     ("early-first-page", "Refusal", [
-        ("if (!renderPage(loka::core::String(secondTitle)", '''SiteFile early(directory, "index.html");
-    if (!early.stage(index) || !early.publish())
-      return false;
-    if (!renderPage(loka::core::String(secondTitle)''')]),
+        ('  LOKA_VERIFY(!outputs.add("index.html", "duplicate"));',
+         '  if (!document_site::writeSite(argv[2], argv[3], outputs))\n    return 1;\n'
+         '  LOKA_VERIFY(!outputs.add("index.html", "duplicate"));')]),
+    ("duplicate-name", "Refusal", [("if (page->first == name)", "if (false && page->first == name)")]),
+    ("publish-as-staged", "Files", [
+        ("return file->stage(bytes);", "return file->stage(bytes) && file->publish();"),
+        ('files.stage(directory, "site.css", css) && files.publish()', 'files.stage(directory, "site.css", css)')]),
+    ("any-name", "Refusal", [("if (!isPageName(name))", "if (name.empty())")]),
+    ("any-suffix", "Refusal", [("name.compare(name.size() - suffix, suffix, Suffix) != 0", "false")]),
     ("ignore-stylesheet", "Output", [
-        ('std::fopen(path, "rb")', '(static_cast<void>(path), std::fopen("../../example/DocumentSite/site.css", "rb"))')]),
+        ('std::fopen(path, "rb")', '(static_cast<void>(path), std::fopen("../../tools/site/site.css", "rb"))')]),
 ]
 
 
 def mutation(root, name, suffix, edits):
-    path = root / HEADER
+    path = root / ("tests/DocumentSiteFixture.cpp" if name == "early-first-page" else HEADER)
     original = path.read_bytes()
     source = original.decode()
     for old, new in edits:

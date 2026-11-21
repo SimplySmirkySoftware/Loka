@@ -273,7 +273,8 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
 
     add_executable(DocumentSite example/DocumentSite/main.cpp)
     add_executable(DocumentSiteFixture tests/DocumentSiteFixture.cpp)
-    foreach(target DocumentSite DocumentSiteFixture)
+    add_executable(LokaSite site/main.cpp)
+    foreach(target DocumentSite DocumentSiteFixture LokaSite)
       target_link_libraries(${target} PRIVATE LokaCommonShippingCompileTest)
       set_target_properties(${target} PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
       loka_enable_warnings(${target})
@@ -281,9 +282,14 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     add_test(NAME testDocumentSiteRender COMMAND DocumentSiteFixture)
     foreach(case Output Refusal Files Parse)
       add_test(NAME testDocumentSite${case} COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/DocumentSite.py
-        ${case} $<TARGET_FILE:DocumentSite> $<TARGET_FILE:DocumentSiteFixture> ${PROJECT_SOURCE_DIR}/example/DocumentSite)
+        ${case} $<TARGET_FILE:DocumentSite> $<TARGET_FILE:DocumentSiteFixture> ${PROJECT_SOURCE_DIR}/example/DocumentSite
+        ${PROJECT_SOURCE_DIR}/tools/site/site.css)
     endforeach()
-    set_tests_properties(testDocumentSiteParse PROPERTIES SKIP_RETURN_CODE 77)
+    foreach(case Files Pages Links Parse)
+      add_test(NAME testLokaSite${case} COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/LokaSite.py
+        ${case} $<TARGET_FILE:LokaSite> ${PROJECT_SOURCE_DIR}/tools/site/site.css)
+    endforeach()
+    set_tests_properties(testDocumentSiteParse testLokaSiteParse PROPERTIES SKIP_RETURN_CODE 77)
   endif()
 
   add_library(LokaCommonTesting STATIC

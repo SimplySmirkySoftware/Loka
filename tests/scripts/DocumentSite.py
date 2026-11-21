@@ -33,7 +33,7 @@ def entries(directory):
     return {p.name for p in directory.iterdir()}
 
 
-def output(tool, directory, sheet, example):
+def output(tool, directory, sheet, example, stylesheet):
     subprocess.run([tool, directory, sheet], check=True)
     assert entries(directory) == NAMES
     assert (directory / "site.css").read_bytes() == SHEET
@@ -49,8 +49,8 @@ def output(tool, directory, sheet, example):
 
     modes = lambda: {(directory / name).stat().st_mode & 0o777 for name in NAMES}
     assert modes() == {0o644}, "new files are readable by a server running as another user"
-    subprocess.run([tool, directory, example / "site.css"], check=True)
-    assert (directory / "site.css").read_bytes() == (example / "site.css").read_bytes()
+    subprocess.run([tool, directory, stylesheet], check=True)
+    assert (directory / "site.css").read_bytes() == (stylesheet).read_bytes()
     assert modes() == {0o644}, "replaced files keep that mode"
 
 
@@ -58,13 +58,18 @@ def refusal(fixture, directory, sheet):
     good = directory.parent / "control"
     good.mkdir()
     subprocess.run([fixture, "valid", good, sheet], check=True)
-    assert entries(good) == NAMES
+    names = NAMES | {"third.html"}
+    assert entries(good) == names
+    for name, title in (("index.html", "First"), ("trail.html", "Second"), ("third.html", "Third landmark")):
+        assert f"<title>{title}</title>" in (good / name).read_text()
+    assert (good / "site.css").read_bytes() == SHEET
     for seeded in (False, True):
-        before = {name: name.encode() for name in NAMES} if seeded else {}
+        before = {name: name.encode() for name in names} if seeded else {}
         for name, data in before.items():
             (directory / name).write_bytes(data)
-        assert subprocess.run([fixture, "refuse", directory, sheet]).returncode == 1
-        assert {p.name: p.read_bytes() for p in directory.iterdir()} == before
+        for mode in ("refuse", "blank", "empty"):
+            assert subprocess.run([fixture, mode, directory, sheet]).returncode == 1
+            assert {p.name: p.read_bytes() for p in directory.iterdir()} == before
 
 
 def files(tool, directory, sheet):
@@ -127,7 +132,7 @@ def parse(tool, directory, sheet, example):
 def main():
     if not __debug__:  # -O removes every assert here, including the runs inside them
         sys.exit("DocumentSite.py checks with assert; run it without Python optimization")
-    case, tool, fixture, example_path = sys.argv[1:]
+    case, tool, fixture, example_path, stylesheet = sys.argv[1:]
     example = Path(example_path)
     with tempfile.TemporaryDirectory() as temp:
         directory = Path(temp) / "out"
@@ -135,7 +140,7 @@ def main():
         sheet = Path(temp) / "fixture.css"
         sheet.write_bytes(SHEET)
         if case == "Output":
-            output(tool, directory, sheet, example)
+            output(tool, directory, sheet, example, Path(stylesheet))
         elif case == "Refusal":
             refusal(fixture, directory, sheet)
         elif case == "Files":
