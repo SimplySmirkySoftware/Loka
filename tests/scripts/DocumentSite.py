@@ -75,7 +75,7 @@ def output(tool, directory, sheet, image, example, stylesheet):
         links.close()
         assert links.anchors == [peer] and links.sheets == [("stylesheet", "site.css")]
         for src, _ in links.images:
-            assert src in entries(directory) and (directory / src).is_file()
+            assert src.endswith((".png", ".jpg", ".gif")) and (directory / src).is_file()
         if name == "trail.html":
             assert links.images == [("map.png", "The ridge path above the tidal flats")]
         assert page == (example / "expected" / name).read_bytes(), name

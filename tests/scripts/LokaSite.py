@@ -75,6 +75,8 @@ def images_are_local(root, emitted):
         src = image.get("src")
         if not src or "/" in src or urlsplit(src).scheme or src not in emitted:
             return False
+        if not src.endswith((".png", ".jpg", ".gif")):  # The writer's image suffixes; a page or stylesheet is no image.
+            return False
     return True
 
 
@@ -83,6 +85,7 @@ def links(directory):
     control = page_tree('<p><img src="map.png"></p>')
     assert images_are_local(control, {"map.png"})
     assert not images_are_local(control, set())
+    assert not images_are_local(page_tree('<p><img src="site.css"></p>'), {"site.css"})
     for name, (_, _, expected) in PAGES.items():
         root = page_tree((directory / name).read_text(encoding="utf-8"))
         assert images_are_local(root, emitted), name
