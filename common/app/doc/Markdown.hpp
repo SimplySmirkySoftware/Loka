@@ -339,7 +339,8 @@ namespace loka
             std::string body = "![";
             for (size_t i = 0; i < alt.size(); ++i)
             {
-              if (MarkdownTextPunctuation(static_cast<unsigned char>(alt[i])))
+              // A label never starts a line, so '#' stays literal there.
+              if (alt[i] != '#' && MarkdownTextPunctuation(static_cast<unsigned char>(alt[i])))
                 body += '\\';
               body += alt[i];
             }

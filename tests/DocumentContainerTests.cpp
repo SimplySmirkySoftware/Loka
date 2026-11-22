@@ -98,6 +98,7 @@ namespace
              "![\\[\\]\\\\\\*\\`\\_\\<\\&\"](<map (1)\\<\\&\\>\\\\\">)\n",
              "<p><img src=\"map (1)&lt;&amp;&gt;\\&quot;\" alt=\"[]\\*`_&lt;&amp;&quot;\"></p>\n");
     e.golden(doc::Image("rule", ""), "![](<rule>)\n", "<p><img src=\"rule\" alt=\"\"></p>\n");
+    e.golden(doc::Image("map", "Trail #2"), "![Trail #2](<map>)\n", "<p><img src=\"map\" alt=\"Trail #2\"></p>\n");
     e.golden(doc::Quote() << doc::Image("map", "Route"),
              "> ![Route](<map>)\n",
              "<blockquote>\n<p><img src=\"map\" alt=\"Route\"></p>\n</blockquote>\n");
