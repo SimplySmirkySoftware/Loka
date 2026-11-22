@@ -2,6 +2,10 @@
 using namespace loka::app::doc;
 struct Reader : BlockReader
 {
+  bool read(const ImageProps &)
+  {
+    return true;
+  }
   bool read(const ItemProps &)
   {
     return true;

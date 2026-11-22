@@ -1,5 +1,7 @@
 #ifndef LOKA_APP_DOC_DETAIL_CONTAINER_WRITER_HPP
 #define LOKA_APP_DOC_DETAIL_CONTAINER_WRITER_HPP
+#include "app/doc/Image.hpp"
+#include "app/doc/detail/Projection.hpp"
 #include "app/doc/List.hpp"
 #include "app/doc/Quote.hpp"
 
@@ -62,6 +64,18 @@ namespace loka
               if (!leaf)
                 writer.open(child);
             }
+          }
+
+          using BlockReader::read;
+          /** Cost: once per image, check its parent and collect its two fields before emitting it. */
+          virtual bool read(const ImageProps &p)
+          {
+            std::string source, alt;
+            if (!this->accepts(false) || !CollectDocumentLine(p.source, source) || source.empty()
+                || !CollectDocumentLine(p.alt, alt))
+              return false;
+            static_cast<Writer &>(*this).image(source, alt);
+            return true;
           }
 
         private:
