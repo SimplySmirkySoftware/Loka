@@ -2440,7 +2440,7 @@ exhaustion follow the normal process behavior.
 | Window and app services | During composition, `c.componentContext()->window()` and the node's `attachedContext()` return null. The node's strict `window()`, `scene()` and `boundary()` accessors and the composition's `c.window()` are unsupported here. App and PlatformContext services are unavailable. |
 | Idle and input | Idle callbacks, timers and native input never run. Animations and Flows waiting on them keep their initial state. |
 | Focus, editors and menus | Focus stays none, text documents await their store, and menu commands are never dispatched. Editor bodies do not become document blocks. |
-| Images | Images contribute no document blocks. The producer of a native image remains responsible for draining its resources. |
+| Images | A native `ImageView` contributes no document blocks; `doc::Image` is a document block and is exported. The producer of a native image remains responsible for draining its resources. |
 | Composition | Only attached document blocks contribute bytes. A page containing only ordinary controls can succeed with empty output. A fixed Component can locally discard children, including unsupported branch seats, without reporting a refusal. |
 
 The sample tool writes Markdown by default and HTML with `--html`. To append
