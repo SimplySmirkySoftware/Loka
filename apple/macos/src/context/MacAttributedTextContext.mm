@@ -1,5 +1,5 @@
 #include "MacAttributedTextContext.hpp"
-#include "../MacScenePlatformController.hpp"
+#include "../MacInputDoor.hpp"
 #include "../MacObjCCompat.hpp"
 #ifndef LOKA_MAC_HAS_CALAYER
 #error "include MacObjCCompat.hpp first"
@@ -22,6 +22,7 @@
 
 #ifdef TEST_BUILD
 #include "../testing/MacPresentedOwnerTestAccess.hpp"
+#include "../testing/MacLinkPressHooks.hpp"
 namespace loka
 {
   namespace testing
@@ -38,7 +39,8 @@ namespace
   const CGFloat kMacTextContainerHeight = 1.0e7;
   const NSPoint kMacTextOrigin = {0, 0};
 
-  /** One constant-time half-open test per bounds, used line, or selection rect examined. */
+  /** One constant-time half-open test per visible rect, bounds, used line or selection rect. Both axes exclude the
+   * maximum. */
   bool ContainsHitPoint(NSRect rect, NSPoint p)
   {
     return p.x >= NSMinX(rect) && p.x < NSMaxX(rect) && p.y >= NSMinY(rect) && p.y < NSMaxY(rect);
@@ -507,6 +509,7 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
 @interface LokaAttributedTextView : NSView
 {
 @private
+  MacAttributedTextContext *context_;
   NSTextStorage *storage_;
   NSLayoutManager *manager_;
   NSTextContainer *container_;
@@ -523,6 +526,10 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
 @end
 
 @interface LokaAttributedTextView (Private)
+/** Borrow once per primary DOWN or UP; O(1). */
+- (MacAttributedTextContext *)context;
+/** Assign once on creation and revoke before RETIRED native work; O(1). */
+- (void)setContext:(MacAttributedTextContext *)context;
 - (NSTextStorage *)lokaTextStorage;
 - (NSLayoutManager *)lokaLayoutManager;
 - (NSTextContainer *)lokaTextContainer;
@@ -593,6 +600,33 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
 {
   return YES;
 }
+- (MacAttributedTextContext *)context
+{
+  return context_;
+}
+- (void)setContext:(MacAttributedTextContext *)context
+{
+  context_ = context;
+}
+/** AppKit primary DOWN, one collection turn for a live context; no row walk here. */
+- (void)mouseDown:(NSEvent *)event
+{
+  MacAttributedTextContext *context = [self context];
+  if (context)
+    MacInputDoor::linkDown(*context, event);
+}
+/** AppKit primary DRAG, consumed once with constant work. */
+- (void)mouseDragged:(NSEvent *)event
+{
+  (void)event;
+}
+/** AppKit primary UP, one collection turn for a live context; no receiver use after return. */
+- (void)mouseUp:(NSEvent *)event
+{
+  MacAttributedTextContext *context = [self context];
+  if (context)
+    MacInputDoor::linkUp(*context, event);
+}
 - (void)addSubview:(NSView *)view
 {
   assert(false && "AttributedText cannot host children");
@@ -660,6 +694,9 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
 #endif
 - (void)dropWindowPresentation
 {
+#ifdef TEST_BUILD
+  loka::testing::visitMacLinkPress(loka::testing::MAC_LINK_DROP_WINDOW);
+#endif
   if (presentation_)
   {
     presentation_->assertIdle();
@@ -805,6 +842,9 @@ bool MacTestTextBudget(NSSize size, CGFloat scale)
             snapshot:(const loka::app::AttributedString *)snapshot
               extent:(CGFloat *)extent
 {
+#ifdef TEST_BUILD
+  loka::testing::visitMacLinkPress(value ? loka::testing::MAC_LINK_INSTALL : loka::testing::MAC_LINK_CLEAR);
+#endif
   presentation_->assertIdle();
   presentation_->dropInstalled();
   NSTextStorage *storage = [self lokaTextStorage];
@@ -1218,6 +1258,7 @@ MacAttributedTextContext::MacAttributedTextContext(MacScenePlatformController *c
   assert(controller && controller->textShaping() == loka::app::WHOLE_LINE);
   LokaAttributedTextView *view = [[LokaAttributedTextView alloc] initWithFrame:NSZeroRect];
   this->view_ = view;
+  [view setContext:this];
   if (parentView && view)
     [(NSView *)parentView addSubview:view];
 }
@@ -1225,23 +1266,23 @@ MacAttributedTextContext::MacAttributedTextContext(MacScenePlatformController *c
 MacAttributedTextContext::~MacAttributedTextContext()
 {
   assert(!this->view_ && "retirement must queue the native view before reclaim");
-  assert(!this->projection_.value() && "retirement must drop derived text before reclaim");
+  assert(!this->links_.table().value() && "retirement must drop derived text before reclaim");
 }
 
 MacTextHitAnswer MacAttributedTextContext::prepareSourceHit(NSPoint viewPoint, MacTextHit &out) const
 {
   LokaAttributedTextView *view = (LokaAttributedTextView *)this->view_;
-  if (!view || !this->projection_.value())
+  if (!view || !this->links_.table().value())
     return MAC_HIT_REFUSED;
 #ifdef LOKA_LIFECYCLE_AUDIT
-  assert([[view lokaTextStorage] length] == [(NSAttributedString *)this->projection_.value() length]);
+  assert([[view lokaTextStorage] length] == [(NSAttributedString *)this->links_.table().value() length]);
 #endif
   NSRange chars;
   const MacTextHitAnswer answer = [view queryHitCharacters:viewPoint range:&chars];
   if (answer != MAC_HIT_SOURCE)
     return answer;
   loka::app::TextSegmentRange source(0);
-  if (!this->projection_.queryProvenance(chars.location, NSMaxRange(chars), source))
+  if (!this->links_.table().queryProvenance(chars.location, NSMaxRange(chars), source))
     return MAC_HIT_REFUSED;
   const MacTextHit hit = {source, [view appliedWidth]};
   out = hit;
@@ -1254,6 +1295,9 @@ MacTextHitAnswer MacAttributedTextContext::prepareTextHit(NSPoint point, MacText
   if (!view)
     return MAC_HIT_REFUSED;
   MacTextPresentation::Interval interval(*[view presentation]);
+#ifdef TEST_BUILD
+  loka::testing::visitMacLinkPress(loka::testing::MAC_LINK_PREPARE);
+#endif
   MacPresentedText current;
   if (![view queryPresentedFact:&current])
     return MAC_HIT_REFUSED;
@@ -1298,28 +1342,98 @@ bool MacTestEligibleRun(const MacTextHit &hit,
 bool MacAttributedTextContext::queryPressCandidate(NSPoint point, loka::app::AttributedString::LinkRun &out) const
 {
   if (!loka::app::scene::IsAttachedCurrentContext(this) || !this->node_ || !this->node_->props.text_
-      || !this->projection_.value())
+      || !this->links_.table().value())
     return false;
   MacTextHit hit = {loka::app::TextSegmentRange(0), 0};
   MacPresentedText fact;
   loka::app::AttributedString::LinkRun run;
   if (this->prepareTextHit(point, hit, fact) != MAC_HIT_SOURCE
-      || !EligibleRun(hit, fact, this->projection_.snapshot(), this->node_->props.text_->get(), run))
+      || !EligibleRun(hit, fact, this->links_.table().snapshot(), this->node_->props.text_->get(), run))
     return false;
   out = run;
   return true;
 }
 
-void MacAttributedTextContext::clearProjection()
+namespace
 {
-  [(LokaAttributedTextView *)this->view_ installValue:nil snapshot:0 extent:0];
+  /** Once per eligible primary event. Read its current window, convert once and clip to the leaf; no row walk. */
+  bool PressPoint(NSView *view, NSEvent *event, NSPoint &point)
+  {
+    NSWindow *window = [view window];
+    if (!window || [event window] != window || ![window isVisible])
+      return false;
+    point = [view convertPoint:[event locationInWindow] fromView:nil];
+    return ContainsHitPoint([view visibleRect], point);
+  }
+  typedef loka::app::internal::LinkPressProcedure<MacPressedLink> MacPressProcedure;
+} // namespace
+
+// Deliberate twins of Win32AttributedTextContext::handleLinkButton. AppKit has no SetCapture re-check.
+void MacAttributedTextContext::handleLinkDown(void *nativeEvent)
+{
+#ifdef TEST_BUILD
+  loka::testing::visitMacLinkPress(loka::testing::MAC_LINK_DOWN_ENTRY);
+#endif
+  MacPressProcedure p(this->links_.session());
+  if (!p.admitted())
+  {
+    this->links_.invalidatePress();
+    return;
+  }
+  MacPressedLink previous;
+  p.takeCandidate(previous);
+  NSEvent *event = (NSEvent *)nativeEvent;
+  if ([event modifierFlags] & LOKA_MAC_CONTROL_MODIFIER)
+    return;
+  NSPoint point;
+  if (!PressPoint((NSView *)this->view_, event, point))
+    return;
+  const NSInteger number = [event eventNumber];
+  loka::app::AttributedString::LinkRun run;
+  if (!this->queryPressCandidate(point, run) || p.invalidated())
+    return;
+  const MacPressedLink candidate = {loka::app::internal::PressedRun(run), number};
+  p.placeCandidate(candidate);
+}
+
+void MacAttributedTextContext::handleLinkUp(void *nativeEvent)
+{
+#ifdef TEST_BUILD
+  loka::testing::visitMacLinkPress(loka::testing::MAC_LINK_UP_ENTRY);
+#endif
+  MacPressProcedure p(this->links_.session());
+  if (!p.admitted())
+  {
+    this->links_.invalidatePress();
+    return;
+  }
+  MacPressedLink candidate;
+  if (!p.takeCandidate(candidate))
+    return;
+  NSEvent *event = (NSEvent *)nativeEvent;
+  NSPoint point;
+  if (!PressPoint((NSView *)this->view_, event, point))
+    return;
+  const NSInteger number = [event eventNumber];
+  loka::app::AttributedString::LinkRun now;
+  if (!this->queryPressCandidate(point, now) || p.invalidated()
+      || !(loka::app::internal::PressedRun(now) == candidate.run) || number != candidate.number)
+    return;
+  p.close();
+  this->node_->writeActivatedLink(candidate.run.first());
+}
+
+void MacAttributedTextContext::MacLinkPressTable::clear(void *view)
+{
+  this->invalidatePress();
+  [(LokaAttributedTextView *)view installValue:nil snapshot:0 extent:0];
   this->projection_.clear();
 }
 
 void MacAttributedTextContext::onPropsApplied()
 {
   // The #965 props mark also forces a rebuild, including baked paragraph alignment.
-  this->clearProjection();
+  this->links_.clear(this->view_);
   this->controller()->requestRelayout();
 }
 
@@ -1335,23 +1449,30 @@ void MacAttributedTextContext::onFactChanged(loka::app::scene::NodeLifecycleFact
                                              loka::app::scene::NodeLifecycleFact next)
 {
   if (next != loka::app::scene::NODE_FACT_ATTACHED)
+  {
+    this->links_.invalidatePress();
+    if (next == loka::app::scene::NODE_FACT_RETIRED)
+      [(LokaAttributedTextView *)this->view_ setContext:0];
     [(LokaAttributedTextView *)this->view_ dropWindowPresentation];
+  }
   [(NSView *)this->view_ setHidden:next != loka::app::scene::NODE_FACT_ATTACHED];
   if (next == loka::app::scene::NODE_FACT_RETIRED)
   {
-    this->clearProjection();
+    this->links_.clear(this->view_);
     [(NSView *)this->view_ removeFromSuperview];
     this->retireNativeObject(this->view_);
     this->node_ = 0;
   }
 }
 
-bool MacAttributedTextContext::rebuildProjection(const loka::macos::MacLength &constraint)
+bool MacAttributedTextContext::MacLinkPressTable::rebuild(const MacAttributedTextContext &context,
+                                                          const loka::macos::MacLength &constraint)
 {
-  this->clearProjection();
-  LokaAttributedTextView *view = (LokaAttributedTextView *)this->view_;
-  if (!view || !this->node_ || !this->node_->props.text_
-      || !this->projection_.build(this->node_->props.text_->get(), this->node_->props.blockStyle_, *this->controller()))
+  this->clear(context.view_);
+  LokaAttributedTextView *view = (LokaAttributedTextView *)context.view_;
+  if (!view || !context.node_ || !context.node_->props.text_
+      || !this->projection_.build(
+          context.node_->props.text_->get(), context.node_->props.blockStyle_, *context.controller()))
     return false;
   [view applyContainerWidth:constraint.pt];
   CGFloat extent;
@@ -1359,7 +1480,7 @@ bool MacAttributedTextContext::rebuildProjection(const loka::macos::MacLength &c
                  snapshot:&this->projection_.snapshot()
                    extent:&extent])
     return false;
-  this->projection_.commitMeasurement(constraint, this->controller()->projection().measurementToLu(extent));
+  this->projection_.commitMeasurement(constraint, context.controller()->projection().measurementToLu(extent));
   return true;
 }
 
@@ -1369,19 +1490,19 @@ short MacAttributedTextContext::layout(loka::app::scene::IPlatformController *, 
   const loka::macos::MacLength constraint = projection.projectLength(state.x, state.x + state.width);
   LokaAttributedTextView *view = (LokaAttributedTextView *)this->view_;
   // Per visited leaf: O(1) hit, no run walk or native measurement; always place.
-  if (state.inputs != loka::app::scene::NODE_DIRTY_NONE || !this->projection_.reusable(constraint))
+  if (state.inputs != loka::app::scene::NODE_DIRTY_NONE || !this->links_.table().reusable(constraint))
   {
-    if (!this->rebuildProjection(constraint))
+    if (!this->links_.rebuild(*this, constraint))
     {
       this->controller()->refuseTextMeasurement(this->node_, state);
-      this->clearProjection();
+      this->links_.clear(this->view_);
     }
   }
 #ifdef LOKA_LIFECYCLE_AUDIT
   else
     assert([view appliedWidth] == constraint.pt);
 #endif
-  state.height = Coordinate(this->projection_.height());
+  state.height = Coordinate(this->links_.table().height());
   // Deliberate twin of Win32AttributedTextContext::relayout, even at an identical frame.
   [view dropWindowPresentation];
   loka::macos::SetMacFrame(
