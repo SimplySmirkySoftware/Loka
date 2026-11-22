@@ -137,6 +137,9 @@ def files(tool, directory, sheet, image):
     large.write_bytes(SHEET * 512)
     assert subprocess.run([tool, directory, large, image], preexec_fn=limit_file_size).returncode == 1
     assert {p.name: p.read_bytes() for p in directory.iterdir()} == {n: n.encode() for n in NAMES}
+    # An admitted image that cannot be staged: the third temporary hits the limit and nothing is published.
+    assert subprocess.run([tool, directory, sheet, large], preexec_fn=limit_file_size).returncode == 1
+    assert {p.name: p.read_bytes() for p in directory.iterdir()} == {n: n.encode() for n in NAMES}
 
     subprocess.run([tool, directory, oversized, image], check=True)
     assert (directory / "site.css").read_bytes() == oversized.read_bytes()

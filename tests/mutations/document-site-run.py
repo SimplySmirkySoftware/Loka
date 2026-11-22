@@ -33,6 +33,9 @@ MUTATIONS = [
     ("unlimited-image", "Files", [("readFile(sourcePath, 8 * 1024 * 1024, bytes)", "readFile(sourcePath, 0, bytes)")]),
     ("duplicate-image", "Refusal", [("if (contains(this->images_, name))", "if (false && contains(this->images_, name))")]),
     ("unstaged-images", "Output", [(" && outputs.stage(outputs.images_, files, directory)", "")]),
+    ("ignore-image-stage", "Files", [
+        ("&& outputs.stage(outputs.images_, files, directory)",
+         "&& (outputs.stage(outputs.images_, files, directory) || true)")]),
 ]
 
 

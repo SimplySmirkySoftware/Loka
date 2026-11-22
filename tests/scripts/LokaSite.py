@@ -80,6 +80,22 @@ def images_are_local(root, emitted):
     return True
 
 
+def check_page(html, directory, emitted, expected):
+    root = page_tree(html)
+    assert images_are_local(root, emitted)
+    assert [a.get("href") for a in root.iter("a")] == expected
+    assert [a.get("href") for a in root.findall(".//ul/li/a")] == expected
+    for node in root.iter():
+        if "href" in node.attrib:
+            href = node.attrib["href"]
+            url = urlsplit(href)
+            if url.scheme or url.netloc:
+                assert href.startswith(REPO)
+            else:
+                target = (directory / url.path).resolve()
+                assert target.parent == directory.resolve() and target.is_file()
+
+
 def links(directory):
     emitted = {p.name for p in directory.iterdir() if p.is_file()}
     control = page_tree('<p><img src="map.png"></p>')
@@ -87,19 +103,16 @@ def links(directory):
     assert not images_are_local(control, set())
     assert not images_are_local(page_tree('<p><img src="site.css"></p>'), {"site.css"})
     for name, (_, _, expected) in PAGES.items():
-        root = page_tree((directory / name).read_text(encoding="utf-8"))
-        assert images_are_local(root, emitted), name
-        assert [a.get("href") for a in root.iter("a")] == expected
-        assert [a.get("href") for a in root.findall(".//ul/li/a")] == expected
-        for node in root.iter():
-            if "href" in node.attrib:
-                href = node.attrib["href"]
-                url = urlsplit(href)
-                if url.scheme or url.netloc:
-                    assert href.startswith(REPO)
-                else:
-                    target = (directory / url.path).resolve()
-                    assert target.parent == directory.resolve() and target.is_file()
+        html = (directory / name).read_text(encoding="utf-8")
+        check_page(html, directory, emitted, expected)
+        # No published page has an image yet, so prove the page check itself refuses a missing one.
+        broken = html.replace("</main>", '<p><img src="missing.png" alt=""></p></main>')
+        assert broken != html
+        try:
+            check_page(broken, directory, emitted, expected)
+        except AssertionError:
+            continue
+        raise AssertionError(name + ": a missing image passed the page check")
 
 
 def parse(directory):
