@@ -8,6 +8,7 @@ void testTutorialToolbarListCapacityAndVisibility();
 void testTutorialIncrementSummaryToggleHoldsFinalSceneAndMatchesAudit();
 void testTutorialStandaloneMenuUsesExampleDeclaration();
 void testTutorialStandaloneFlowWritesExpectedAudit();
+void testTutorialStandaloneDeclarationRefusalIsWindowless();
 void testTutorialStandaloneMountRefusalFailsClosed();
 
 #endif // LOKA_TESTS_TUTORIAL_SCENARIO_TESTS_HPP

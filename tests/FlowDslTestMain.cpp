@@ -143,6 +143,7 @@
 #include "WindowFrameStateTests.hpp"
 #include "WindowIdleTests.hpp"
 #include "DefinitionCloneTests.hpp"
+#include "WindowRootRefusalTests.hpp"
 #include "FlowDslTests.hpp"
 #include "OwnershipDumpTests.hpp"
 #include "AttrDslTests.hpp"

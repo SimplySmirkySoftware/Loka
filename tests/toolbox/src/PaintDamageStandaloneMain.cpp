@@ -1672,7 +1672,7 @@ namespace
         : WindowDefinition<WindowProps>(props), result_(result) {}
     virtual WindowDefinitionBase *clone() const
     {
-      return new (std::nothrow) ObservedWindowDefinition(*this);
+      return cloneWindowDefinition(*this);
     }
     virtual Window *create(PlatformContext *context) const
     {

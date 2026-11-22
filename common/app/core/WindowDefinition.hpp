@@ -47,19 +47,19 @@ template <class PropsT> struct WindowDefinition : public WindowDefinitionBase
   }
   virtual WindowDefinitionBase *clone() const
   {
-    return new WindowDefinition(*this);
+    return cloneWindowDefinition(*this);
   }
   virtual Window *create(PlatformContext *context) const
   {
     assert(context && "WindowDefinition::create requires PlatformContext");
-    WindowProps resolved = props;
-    if (props.rootDefinition && !resolved.rootDefinition)
-    {
+    if (this->props.rootDefinitionRefused())
       return 0;
-    }
-    if (!resolved.peekInitialScene() && resolved.rootDefinition)
+    WindowProps resolved(this->props);
+    if (resolved.rootDefinitionRefused())
+      return 0;
+    loka::app::scene::NodeDefinitionBase *def = resolved.takeRootDefinition();
+    if (def)
     {
-      loka::app::scene::NodeDefinitionBase *def = resolved.takeRootDefinition();
       loka::app::scene::Scene *createdScene = new (std::nothrow) loka::app::scene::Scene(def);
       if (!createdScene)
       {
@@ -71,9 +71,16 @@ template <class PropsT> struct WindowDefinition : public WindowDefinitionBase
       {
         return 0;
       }
-      return context->createWindow(resolved);
     }
     return context->createWindow(resolved);
+  }
+
+protected:
+  /** Preserves the concrete definition type and rejects a refused content copy. */
+  template <class T> static WindowDefinitionBase *cloneWindowDefinition(const T &source)
+  {
+    loka::core::OwnedDef<T> copy(new (std::nothrow) T(source));
+    return copy.isSet() && !copy->props.rootDefinitionRefused() ? copy.take() : 0;
   }
 };
 

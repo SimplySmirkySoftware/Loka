@@ -5,6 +5,7 @@ void testDocumentWindowFactoryReceivesTheDocumentId();
 void testDocumentWindowOpenAddsKeyedRow();
 void testDocumentWindowExistingRootDoesNotRecompose();
 void testDocumentWindowCreateRefusalDropsDocument();
+void testDocumentWindowRootRefusalDropsDocument();
 void testDocumentWindowAdoptionRefusalDetachesThenReclaimsNextTail();
 void testDocumentWindowNativeCloseDoesNotResurrect();
 void testDocumentWindowContentUpdateCreatesNothing();

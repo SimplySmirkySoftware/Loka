@@ -75,9 +75,49 @@ struct WindowProps
   void *onIdleUserData;
   OnKeyPressFn onKeyPressFn;
   void *onKeyPressUserData;
-  loka::app::scene::NodeDefinitionBase *rootDefinition;
 
 private:
+  /** Owns an independently cloned declaration and remembers refused captures. */
+  class RootDefinition
+  {
+  public:
+    RootDefinition()
+        : refused_(false)
+    {
+    }
+    RootDefinition(const RootDefinition &source);
+    bool tryAssign(const RootDefinition &source);
+
+    bool owned() const
+    {
+      return this->definition_.isSet();
+    }
+    bool refused() const
+    {
+      return this->refused_;
+    }
+    void adopt(loka::app::scene::NodeDefinitionBase *definition)
+    {
+      this->definition_.reset(definition);
+      this->refused_ = false;
+    }
+    void refuseIfEmpty()
+    {
+      if (!this->owned())
+        this->refused_ = true;
+    }
+    loka::app::scene::NodeDefinitionBase *take()
+    {
+      return this->definition_.take();
+    }
+
+  private:
+    loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> definition_;
+    bool refused_;
+    RootDefinition &operator=(const RootDefinition &);
+  };
+  RootDefinition root_;
+
   struct InitialSceneHandoff
   {
     explicit InitialSceneHandoff(loka::app::scene::Scene *value)
@@ -100,34 +140,12 @@ private:
     }
   }
 
-  void releaseInitialSceneHandoff()
-  {
-    if (!this->initialSceneHandoff_)
-    {
-      return;
-    }
-    --this->initialSceneHandoff_->references;
-    if (this->initialSceneHandoff_->references == 0)
-    {
-      delete this->initialSceneHandoff_->scene;
-      delete this->initialSceneHandoff_;
-    }
-    this->initialSceneHandoff_ = 0;
-  }
+  void releaseInitialSceneHandoff();
 
-  static bool tryCloneOwnedDefinitions(const WindowProps &rhs,
-                                       loka::app::scene::NodeDefinitionBase *&outRootDefinition)
+  void refuseContentWrite()
   {
-    outRootDefinition = 0;
-    if (rhs.rootDefinition)
-    {
-      outRootDefinition = rhs.rootDefinition->clone();
-      if (!outRootDefinition)
-      {
-        return false;
-      }
-    }
-    return true;
+    if (!this->peekInitialScene())
+      this->root_.refuseIfEmpty();
   }
 
 public:
@@ -150,7 +168,6 @@ public:
         onIdleUserData(0),
         onKeyPressFn(0),
         onKeyPressUserData(0),
-        rootDefinition(0),
         initialSceneHandoff_(0)
   {
   }
@@ -174,71 +191,18 @@ public:
         onIdleUserData(rhs.onIdleUserData),
         onKeyPressFn(rhs.onKeyPressFn),
         onKeyPressUserData(rhs.onKeyPressUserData),
-        rootDefinition(0),
+        root_(rhs.root_),
         initialSceneHandoff_(rhs.initialSceneHandoff_)
   {
     this->retainInitialSceneHandoff();
-    loka::app::scene::NodeDefinitionBase *nextRootDefinition = 0;
-    if (tryCloneOwnedDefinitions(rhs, nextRootDefinition))
-    {
-      rootDefinition = nextRootDefinition;
-    }
   }
 
   ~WindowProps()
   {
     this->releaseInitialSceneHandoff();
-    if (rootDefinition)
-    {
-      delete rootDefinition;
-      rootDefinition = 0;
-    }
   }
 
-  WindowProps &operator=(const WindowProps &rhs)
-  {
-    if (this == &rhs)
-    {
-      return *this;
-    }
-    loka::app::scene::NodeDefinitionBase *nextRootDefinition = 0;
-    if (!tryCloneOwnedDefinitions(rhs, nextRootDefinition))
-    {
-      return *this;
-    }
-    titleStatePtr = rhs.titleStatePtr;
-    displayTitleStatePtr = rhs.displayTitleStatePtr;
-    visibilityStatePtr = rhs.visibilityStatePtr;
-    frameStatePtr = rhs.frameStatePtr;
-    initialTitle = rhs.initialTitle;
-    initialVisibility = rhs.initialVisibility;
-    hasInitialTitle = rhs.hasInitialTitle;
-    hasInitialVisibility = rhs.hasInitialVisibility;
-    positionX = rhs.positionX;
-    positionY = rhs.positionY;
-    width = rhs.width;
-    height = rhs.height;
-    this->contentMarginValue = rhs.contentMarginValue;
-    idlePolicyValue = rhs.idlePolicyValue;
-    onIdleFn = rhs.onIdleFn;
-    onIdleUserData = rhs.onIdleUserData;
-    onKeyPressFn = rhs.onKeyPressFn;
-    onKeyPressUserData = rhs.onKeyPressUserData;
-    InitialSceneHandoff *nextInitialSceneHandoff = rhs.initialSceneHandoff_;
-    if (nextInitialSceneHandoff)
-    {
-      ++nextInitialSceneHandoff->references;
-    }
-    this->releaseInitialSceneHandoff();
-    this->initialSceneHandoff_ = nextInitialSceneHandoff;
-    if (rootDefinition)
-    {
-      delete rootDefinition;
-      rootDefinition = 0;
-    }
-    rootDefinition = nextRootDefinition;
-    return *this;
-  }
+  WindowProps &operator=(const WindowProps &rhs);
 
   WindowProps &title(const loka::core::String &t)
   {
@@ -341,27 +305,7 @@ public:
     return *this;
   }
 
-  WindowProps &scene(loka::app::scene::Scene *scene)
-  {
-    if (this->peekInitialScene() != scene)
-    {
-      this->releaseInitialSceneHandoff();
-      if (scene)
-      {
-        this->initialSceneHandoff_ = new (std::nothrow) InitialSceneHandoff(scene);
-        if (!this->initialSceneHandoff_)
-        {
-          delete scene;
-        }
-      }
-    }
-    if (rootDefinition)
-    {
-      delete rootDefinition;
-      rootDefinition = 0;
-    }
-    return *this;
-  }
+  WindowProps &scene(loka::app::scene::Scene *scene);
 
   /** Returns the Scene awaiting ownership transfer without consuming it. */
   loka::app::scene::Scene *peekInitialScene() const
@@ -386,27 +330,16 @@ public:
   /** Transfers ownership of the cloned root definition to the caller. */
   loka::app::scene::NodeDefinitionBase *takeRootDefinition()
   {
-    loka::app::scene::NodeDefinitionBase *result = rootDefinition;
-    rootDefinition = 0;
-    return result;
+    return this->root_.take();
   }
 
-  WindowProps &scene(const loka::app::scene::NodeDefinitionBase &def)
+  /** A declared root failed capture or copy and prevents window creation. */
+  bool rootDefinitionRefused() const
   {
-    loka::app::scene::NodeDefinitionBase *nextRootDefinition = def.clone();
-    if (!nextRootDefinition)
-    {
-      return *this;
-    }
-    if (rootDefinition)
-    {
-      delete rootDefinition;
-      rootDefinition = 0;
-    }
-    rootDefinition = nextRootDefinition;
-    this->releaseInitialSceneHandoff();
-    return *this;
+    return this->root_.refused();
   }
+
+  WindowProps &scene(const loka::app::scene::NodeDefinitionBase &def);
 };
 
 class Window : public AppComponent LOKA_AUDITED_AS(Window)
