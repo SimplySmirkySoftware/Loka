@@ -1,4 +1,4 @@
-#include "SiteWriter.hpp"
+#include "../../tools/site/SiteWriter.hpp"
 #include "app/doc/Inline.hpp"
 #include "app/doc/List.hpp"
 #include "app/doc/Quote.hpp"
@@ -63,7 +63,10 @@ int main(int argc, char **argv)
     std::fputs("Usage: DocumentSite <out-dir> <stylesheet-file>\n", stderr);
     return 2;
   }
-  return document_site::writeSite(argv[1], argv[2], MapRoomTitle, Boundary<MapRoom>(), TrailTitle, Boundary<Trail>())
+  document_site::SiteOutputs outputs;
+  return document_site::addPage(outputs, "index.html", MapRoomTitle, Boundary<MapRoom>())
+                 && document_site::addPage(outputs, "trail.html", TrailTitle, Boundary<Trail>())
+                 && document_site::writeSite(argv[1], argv[2], outputs)
              ? 0
              : 1;
 }

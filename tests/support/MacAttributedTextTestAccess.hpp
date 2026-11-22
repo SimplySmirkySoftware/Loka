@@ -17,6 +17,22 @@ bool MacTestEligibleRun(const MacTextHit &hit,
 /** One out-of-line budget check per test size. */
 bool MacTestTextBudget(NSSize size, CGFloat scale);
 
+#include "testing/MacPresentedOwnerTestAccess.hpp"
+namespace loka
+{
+  namespace testing
+  {
+    /** Arm or disarm one borrowed buffer around the synthetic same-image replacement. */
+    void traceMacPresentedImage(char *buffer);
+  } // namespace testing
+} // namespace loka
+/** Pass trace reads, once per receiver hook in the test binary. */
+unsigned MacTestRepaintEntries();
+/** One lexical interval read per forwarded native send. */
+bool MacTestInsideRepaint();
+/** One production coverage calculation on the supplied damage rects per test. */
+bool MacTestRectsCover(const NSRect *rects, NSInteger count, NSRect target);
+
 // The implementation and ownership of these getters stay on the rail-private leaf.
 @interface NSView (LokaAttributedTextTestReads)
 - (NSTextStorage *)lokaTextStorage;
@@ -29,7 +45,7 @@ bool MacTestTextBudget(NSSize size, CGFloat scale);
 - (BOOL)installValue:(NSAttributedString *)value
             snapshot:(const loka::app::AttributedString *)snapshot
               extent:(CGFloat *)extent;
-/** One current-layer tuple read per observation. */
+/** One routed native tuple read per observation. */
 - (BOOL)queryPresentedFact:(MacPresentedText *)out;
 /** One draw of this view's glyphs in the requested band per display. */
 - (void)drawTextInRect:(NSRect)rect;
@@ -39,6 +55,10 @@ bool MacTestTextBudget(NSSize size, CGFloat scale);
 - (BOOL)lokaHasInstalledText;
 /** One retained-pointer read per owner observation. */
 - (BOOL)lokaHasPresentationImage;
+/** One presentation path read per fixture observation. */
+- (int)lokaPresentedPath;
+/** One production placement invalidation per interval pin. */
+- (void)dropWindowPresentation;
 @end
 
 namespace loka
@@ -98,6 +118,22 @@ namespace loka
       class MacAttributedTextTestAccess
       {
       public:
+        enum PresentedPath
+        {
+          NONE,
+          LAYER,
+          WINDOW
+        };
+        /** One out-of-line tag read per observation, independent of SDK. */
+        static int presentedPath(NSView *view)
+        {
+          return [view lokaPresentedPath];
+        }
+        /** One invalidation of the supplied leaf per fixture reset. */
+        static void dropWindowPresentation(NSView *view)
+        {
+          [view dropWindowPresentation];
+        }
         static NSView *view(const MacAttributedTextContext &context)
         {
           return (NSView *)context.view_;
