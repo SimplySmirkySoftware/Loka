@@ -3,6 +3,7 @@
 void testDocumentImageMarkdown();
 void testDocumentImageHtml();
 void testDocumentImageRender();
+void testDocumentImageRetainedSize();
 void testDocumentMarkdownContainers();
 void testDocumentHtmlContainers();
 void testDocumentContainerNative();
