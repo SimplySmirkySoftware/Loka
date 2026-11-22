@@ -43,16 +43,18 @@ namespace loka
 
     void TutorialStandaloneFlowAppConfig::compose(AppComposition &composition)
     {
-      composition << scenario_tests::MakeScenarioWindow<tutorial::Step4Node::PropsType, tutorial::Step4Node>(
-          tutorial::Step4Node::PropsType(),
-          &this->borrowedMainNode_,
-          360,
-          280,
-          kTutorialStandaloneTitle,
-          app::IdlePolicy::interval(0.1),
-          &TutorialStandaloneFlowAppConfig::OnWindowIdle,
-          this,
-          this->runControl_.displayTitleState(kTutorialStandaloneTitle));
+      composition << StandaloneWindowDefinition(
+          scenario_tests::MakeScenarioWindowProps<tutorial::Step4Node::PropsType, tutorial::Step4Node>(
+              tutorial::Step4Node::PropsType(),
+              &this->borrowedMainNode_,
+              360,
+              280,
+              kTutorialStandaloneTitle,
+              app::IdlePolicy::interval(0.1),
+              &TutorialStandaloneFlowAppConfig::OnWindowIdle,
+              this,
+              this->runControl_.displayTitleState(kTutorialStandaloneTitle)),
+          this->runControl_);
     }
 
     void TutorialStandaloneFlowAppConfig::composeDefaultMenu(app::MenuComposition &composition)

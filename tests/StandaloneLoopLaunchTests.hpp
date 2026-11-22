@@ -1,0 +1,8 @@
+#ifndef LOKA_TESTS_STANDALONE_LOOP_LAUNCH_TESTS_HPP
+#define LOKA_TESTS_STANDALONE_LOOP_LAUNCH_TESTS_HPP
+
+void testStandaloneLoopDeclarationRefusalIsWindowless();
+void testStandaloneLoopFactoryRefusalIsWindowless();
+void testStandaloneLoopCloseBeforeFirstIdleSucceeds();
+
+#endif

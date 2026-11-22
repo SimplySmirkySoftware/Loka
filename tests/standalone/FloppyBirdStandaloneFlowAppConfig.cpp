@@ -44,16 +44,18 @@ namespace loka
 
     void FloppyBirdStandaloneFlowAppConfig::compose(AppComposition &composition)
     {
-      composition << scenario_tests::MakeScenarioWindow<floppybird::MainProps, floppybird::MainNode>(
-          floppybird::MainProps(&this->game_),
-          &this->borrowedMainNode_,
-          380,
-          340,
-          kFloppyBirdStandaloneTitle,
-          app::IdlePolicy::everyTick(),
-          &FloppyBirdStandaloneFlowAppConfig::OnWindowIdle,
-          this,
-          this->runControl_.displayTitleState(kFloppyBirdStandaloneTitle));
+      composition << StandaloneWindowDefinition(
+          scenario_tests::MakeScenarioWindowProps<floppybird::MainProps, floppybird::MainNode>(
+              floppybird::MainProps(&this->game_),
+              &this->borrowedMainNode_,
+              380,
+              340,
+              kFloppyBirdStandaloneTitle,
+              app::IdlePolicy::everyTick(),
+              &FloppyBirdStandaloneFlowAppConfig::OnWindowIdle,
+              this,
+              this->runControl_.displayTitleState(kFloppyBirdStandaloneTitle)),
+          this->runControl_);
     }
 
     void FloppyBirdStandaloneFlowAppConfig::OnWindowIdle(Window *window,

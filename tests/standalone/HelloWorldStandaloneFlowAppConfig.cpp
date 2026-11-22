@@ -42,14 +42,15 @@ namespace loka
 
     void HelloWorldStandaloneFlowAppConfig::compose(AppComposition &composition)
     {
-      composition << WindowDef(
+      composition << StandaloneWindowDefinition(
           this->productionWindowProps(
                   scenario_tests::ObservedMainDefinition<helloworld::MainProps, helloworld::MainNode>(
                       this->productionMainProps(), &this->borrowedMainNode_))
               .title(kHelloWorldStandaloneTitle)
               .idlePolicy(app::IdlePolicy::interval(0.1))
               .onIdle(&HelloWorldStandaloneFlowAppConfig::OnWindowIdle, this)
-              .displayTitleState(this->runControl_.displayTitleState(kHelloWorldStandaloneTitle)));
+              .displayTitleState(this->runControl_.displayTitleState(kHelloWorldStandaloneTitle)),
+          this->runControl_);
     }
 
     void HelloWorldStandaloneFlowAppConfig::OnWindowIdle(Window *window, double elapsedSeconds, void *userData)

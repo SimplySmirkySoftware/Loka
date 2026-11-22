@@ -59,16 +59,18 @@ namespace loka
 
     void MineSweeperStandaloneFlowAppConfig::compose(AppComposition &composition)
     {
-      composition << scenario_tests::MakeScenarioWindow<minesweeper::MainProps, minesweeper::MainNode>(
-          minesweeper::MainProps(scenario_tests::MineSweeperScenarioSeed()),
-          &this->borrowedMainNode_,
-          220,
-          240,
-          kMineSweeperStandaloneTitle,
-          app::IdlePolicy::interval(0.1),
-          &MineSweeperStandaloneFlowAppConfig::OnWindowIdle,
-          this,
-          this->runControl_.displayTitleState(kMineSweeperStandaloneTitle));
+      composition << StandaloneWindowDefinition(
+          scenario_tests::MakeScenarioWindowProps<minesweeper::MainProps, minesweeper::MainNode>(
+              minesweeper::MainProps(scenario_tests::MineSweeperScenarioSeed()),
+              &this->borrowedMainNode_,
+              220,
+              240,
+              kMineSweeperStandaloneTitle,
+              app::IdlePolicy::interval(0.1),
+              &MineSweeperStandaloneFlowAppConfig::OnWindowIdle,
+              this,
+              this->runControl_.displayTitleState(kMineSweeperStandaloneTitle)),
+          this->runControl_);
     }
 
     void MineSweeperStandaloneFlowAppConfig::OnWindowIdle(Window *window,

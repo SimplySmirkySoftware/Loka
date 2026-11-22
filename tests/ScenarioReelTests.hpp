@@ -12,6 +12,8 @@ void testSceneRearmRefusalPreservesNewerDetachRequest();
 void testScenarioWindowDisplayTitlePreservesLogicalTitleAndDropsNativeObserver();
 void testScenarioReelDriverAllocationRefusalRetiresInsteadOfWedging();
 void testScenarioReelReplacementPreservesDriverAndStopsBeforeDetach();
+void testStandaloneLoopCreatedBeforeMountSucceeds();
+void testLateWindowCreationPreservesDeadlineFailure();
 void testStandaloneRunControlRearmsCompletedSceneWithoutQuittingApp();
 void testStandaloneScenarioRailReplacementIsFailureAtomic();
 void testStandaloneSceneRearmAllocationRefusalDoesNotCommitNextPass();
