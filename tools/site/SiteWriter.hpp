@@ -47,17 +47,31 @@ namespace document_site
     return true;
   }
 
-  /** Cost: writeSite reads the supplied stylesheet once, before opening a destination. */
-  inline bool readStylesheet(const char *path, std::string &bytes)
+  /** Cost: addImage and writeSite each read one source into an empty buffer. A zero limit admits any size. */
+  inline bool readFile(const char *path, size_t limit, std::string &bytes)
   {
-    FILE *file = std::fopen(path, "rb");
+    FILE *file = path ? std::fopen(path, "rb") : 0;
     if (!file)
       return false;
     char chunk[8192];
-    size_t count;
-    while ((count = std::fread(chunk, 1, sizeof(chunk), file)) != 0)
+    bool read;
+    for (;;)
+    {
+      const size_t remaining = limit ? limit - bytes.size() : 0;
+      const size_t request = limit && remaining < sizeof(chunk) ? remaining + 1 : sizeof(chunk);
+      const size_t count = std::fread(chunk, 1, request, file);
+      if (limit && count > remaining)
+      {
+        read = false;
+        break;
+      }
       bytes.append(chunk, count);
-    const bool read = !std::ferror(file);
+      if (count < request)
+      {
+        read = !std::ferror(file);
+        break;
+      }
+    }
     return std::fclose(file) == 0 && read;
   }
 
@@ -156,16 +170,17 @@ namespace document_site
     }
   };
 
-  /** Ordered rendered pages awaiting publication. */
+  /** Rendered pages and captured images awaiting publication. */
   class SiteOutputs
   {
-    typedef std::list<std::pair<std::string, std::string> > Pages;
-    Pages pages_;
-    /** Cost: writeSite calls once per site, staging this collection's pages in insertion order. */
-    bool stage(StagedFiles &files, const std::string &directory) const
+    typedef std::list<std::pair<std::string, std::string> > Outputs;
+    Outputs pages_;
+    Outputs images_;
+    /** Cost: writeSite calls once per collection, staging its files in insertion order. */
+    static bool stage(const Outputs &outputs, StagedFiles &files, const std::string &directory)
     {
-      for (Pages::const_iterator page = this->pages_.begin(); page != this->pages_.end(); ++page)
-        if (!files.stage(directory, page->first.c_str(), page->second))
+      for (Outputs::const_iterator entry = outputs.begin(); entry != outputs.end(); ++entry)
+        if (!files.stage(directory, entry->first.c_str(), entry->second))
           return false;
       return true;
     }
@@ -173,16 +188,16 @@ namespace document_site
     friend bool writeSite(const std::string &, const char *, const SiteOutputs &);
 
     /**
-     * A page name is a stem of lowercase ASCII letters, digits and '-', starting with a letter or digit, followed
-     * by ".html". No two such names can denote one file: there is no path separator, no "." or "..", no case to
-     * fold, no trailing dot to drop, and the stylesheet's name is not of this shape.
-     * Cost: add calls once per offered name, walking that name's bytes.
+     * A name is a stem of lowercase ASCII letters, digits and '-', starting with a letter or digit, followed by
+     * the given suffix. No two such names can denote one file: there is no path separator, no "." or "..", no
+     * case to fold, no trailing dot to drop, and the stylesheet's name is not of this shape. Page and image
+     * names cannot collide with each other because their suffixes differ.
+     * Cost: each admission checks a fixed number of suffixes and walks the matching stem once.
      */
-    static bool isPageName(const std::string &name)
+    template <size_t N> static bool hasStemAndSuffix(const std::string &name, const char (&ending)[N])
     {
-      static const char Suffix[] = ".html";
-      const size_t suffix = sizeof(Suffix) - 1;
-      if (name.size() <= suffix || name.compare(name.size() - suffix, suffix, Suffix) != 0)
+      const size_t suffix = N - 1;
+      if (name.size() <= suffix || name.compare(name.size() - suffix, suffix, ending) != 0)
         return false;
       for (size_t i = 0; i < name.size() - suffix; ++i)
       {
@@ -194,16 +209,37 @@ namespace document_site
       return true;
     }
 
+    /** Cost: one lookup per admissible name, scanning only the collection that can contain it. */
+    static bool contains(const Outputs &outputs, const std::string &name)
+    {
+      for (Outputs::const_iterator entry = outputs.begin(); entry != outputs.end(); ++entry)
+        if (entry->first == name)
+          return true;
+      return false;
+    }
+
   public:
-    /** Cost: addPage calls once per rendered page, scanning this site's names and copying the admitted bytes. */
+    /** Cost: addPage calls once per rendered page, scanning this site's page names and copying the admitted bytes. */
     bool add(const std::string &name, const std::string &bytes)
     {
-      if (!isPageName(name))
+      if (!hasStemAndSuffix(name, ".html") || contains(this->pages_, name))
         return false;
-      for (Pages::const_iterator page = this->pages_.begin(); page != this->pages_.end(); ++page)
-        if (page->first == name)
-          return false;
       this->pages_.push_back(std::make_pair(name, bytes));
+      return true;
+    }
+
+    /** Cost: once per offered image, check its name and capture up to 8 MiB of trusted source bytes. */
+    bool addImage(const std::string &name, const char *sourcePath)
+    {
+      if (!(hasStemAndSuffix(name, ".png") || hasStemAndSuffix(name, ".jpg") || hasStemAndSuffix(name, ".gif")))
+        return false;
+      if (contains(this->images_, name))
+        return false;
+      std::string bytes;
+      if (!readFile(sourcePath, 8 * 1024 * 1024, bytes))
+        return false;
+      this->images_.push_back(std::make_pair(name, std::string()));
+      this->images_.back().second.swap(bytes);
       return true;
     }
   };
@@ -215,14 +251,16 @@ namespace document_site
     return renderPage(loka::core::String(title), page, bytes) && outputs.add(fileName, bytes);
   }
 
-  /** Cost: main calls once per site, walking its admitted pages once, then publishing them and the stylesheet. */
+  /** Cost: main calls once per site, staging pages, images and stylesheet in order, then publishing all staged files.
+   */
   inline bool writeSite(const std::string &directory, const char *stylesheetPath, const SiteOutputs &outputs)
   {
     std::string css;
-    if (directory.empty() || outputs.pages_.empty() || !readStylesheet(stylesheetPath, css))
+    if (directory.empty() || outputs.pages_.empty() || !readFile(stylesheetPath, 0, css))
       return false;
-    StagedFiles files(outputs.pages_.size() + 1);
-    return outputs.stage(files, directory) && files.stage(directory, "site.css", css) && files.publish();
+    StagedFiles files(outputs.pages_.size() + outputs.images_.size() + 1);
+    return outputs.stage(outputs.pages_, files, directory) && outputs.stage(outputs.images_, files, directory)
+           && files.stage(directory, "site.css", css) && files.publish();
   }
 } // namespace document_site
 #endif
