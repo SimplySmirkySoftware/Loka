@@ -133,6 +133,7 @@
 #include "WindowFrameStateTests.hpp"
 #include "WindowIdleTests.hpp"
 #include "DefinitionCloneTests.hpp"
+#include "WindowRootRefusalTests.hpp"
 #include "NodeMatchTests.hpp"
 #include "AttrDslTests.hpp"
 #include "MenuCheckedTests.hpp"

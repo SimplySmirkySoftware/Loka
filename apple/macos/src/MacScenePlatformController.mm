@@ -1,5 +1,6 @@
 #include "app/nodes/nestable/ScrollViewSettlement.hpp"
 #include "MacScenePlatformController.hpp"
+#include "context/MacAttributedTextContext.hpp"
 #include "text/MacTextStore.hpp"
 #include "context/MacTextDocumentViewContext.hpp"
 #include "platform/MacPushButton.hpp"
@@ -319,6 +320,9 @@ MacScenePlatformController::MacScenePlatformController(void *rootView,
       textFonts_(this->projection_.railMetrics().fontScale),
       platformContext_(platformContext),
       rootView_(rootView),
+#ifdef LOKA_LIFECYCLE_AUDIT
+      passRepainting_(false),
+#endif
       projectionParentScopes_(rootView),
       rootNode_(0),
       rectSurfaceExtentLedger_(),
@@ -587,6 +591,9 @@ void MacScenePlatformController::handlePendingRelayout()
 
 void MacScenePlatformController::performLayout(int clientWidth, int clientHeight, bool rebuildContexts)
 {
+#ifdef LOKA_LIFECYCLE_AUDIT
+  assert(!this->passRepainting_ && "MacPassRepaint");
+#endif
   if (rebuildContexts)
   {
     captureFocusedEditField();
@@ -612,15 +619,88 @@ void MacScenePlatformController::performLayout(int clientWidth, int clientHeight
   {
     return;
   }
-  PROFILE_SECTION("layout");
-  this->layoutNode(this->rootNode_, state);
-  assert(this->projectionParentScopes_.activeDepth() == 0 &&
-         "a macOS projection pass must restore the root scope");
-  this->rectSurfaceExtentLedger_.flush();
-  if (rebuildContexts)
   {
-    restoreFocusedEditField();
+    PROFILE_SECTION("layout");
+    this->layoutNode(this->rootNode_, state);
+    assert(this->projectionParentScopes_.activeDepth() == 0 && "a macOS projection pass must restore the root scope");
+    this->rectSurfaceExtentLedger_.flush();
+    if (rebuildContexts)
+    {
+      restoreFocusedEditField();
+    }
   }
+  this->repaintAfterPlacement();
+}
+
+#ifdef LOKA_LIFECYCLE_AUDIT
+namespace
+{
+  /** One lexical mark per synchronous pass-end display, no view traversal. */
+  class MacPassRepaint
+  {
+  public:
+    explicit MacPassRepaint(bool &active)
+        : active_(active)
+    {
+      active_ = true;
+    }
+    ~MacPassRepaint()
+    {
+      active_ = false;
+    }
+
+  private:
+    bool &active_;
+    MacPassRepaint(const MacPassRepaint &);
+    MacPassRepaint &operator=(const MacPassRepaint &);
+  };
+} // namespace
+#endif
+
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace testing
+  {
+    void enterMacPlacementRepaint();
+    void leaveMacPlacementRepaint();
+  } // namespace testing
+} // namespace loka
+namespace
+{
+  /** Bracket each placement door once for the test receiver hooks, no row walk. */
+  struct MacTestRepaintInterval
+  {
+    MacTestRepaintInterval()
+    {
+      loka::testing::enterMacPlacementRepaint();
+    }
+    ~MacTestRepaintInterval()
+    {
+      loka::testing::leaveMacPlacementRepaint();
+    }
+  };
+} // namespace
+#endif
+
+void MacScenePlatformController::repaintAfterPlacement()
+{
+#ifdef TEST_BUILD
+  MacTestRepaintInterval observed;
+#endif
+  // Deliberate twin of Win32NativeLayoutPass's destructor. The root owns this hierarchy.
+  if (MacTextLayerCapable())
+    return;
+  NSView *root = (NSView *)this->rootView_;
+  NSWindow *window = [root window];
+  if (!window)
+    return;
+  PROFILE_SECTION("placement repaint");
+#ifdef LOKA_LIFECYCLE_AUDIT
+  MacPassRepaint repaint(this->passRepainting_);
+#endif
+  [root setNeedsDisplay:YES];
+  [window displayIfNeeded];
 }
 
 namespace

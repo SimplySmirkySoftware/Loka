@@ -1,6 +1,7 @@
 #include "MacZStackContext.hpp"
 #include "MacScrollViewContext.hpp"
 #include "../MacGround.hpp"
+#include "../MacObjCCompat.hpp"
 #include "../platform/MacNativeGeometry.hpp"
 #include <cassert>
 #include <new>
@@ -45,15 +46,12 @@ namespace loka
 }
 @end
 
-@class CALayer;
-
 // Runtime declarations keep pre-10.10 SDKs independent of the effect type.
 @interface NSView (LokaStackVisualEffect)
 - (void)setBlendingMode:(NSInteger)mode;
 - (void)setMaterial:(NSInteger)material;
 - (void)setState:(NSInteger)state;
 - (void)setWantsLayer:(BOOL)value;
-- (CALayer *)layer;
 - (NSRect)convertRectToBacking:(NSRect)rect;
 - (void)viewDidChangeBackingProperties;
 @end
@@ -431,7 +429,7 @@ namespace
   }
   MacPhotoLifetime &lifetime = [self lokaPhotoLifetime];
   lifetime.reconcile(true, geometry);
-  const bool layer = [self respondsToSelector:@selector(layer)] && [self layer] != nil;
+  const bool layer = MacLateBoundLayer(self) != nil;
   if (CoversPhoto(self, geometry.local) && !layer && MenuBarTransparency()
       && lifetime.admitsCapture([self lokaCapturesWhenReady] != NO))
   {

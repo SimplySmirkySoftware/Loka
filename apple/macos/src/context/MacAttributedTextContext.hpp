@@ -27,7 +27,7 @@ struct MacTextHit
   loka::app::TextSegmentRange source;
   CGFloat containerWidth;
 };
-/** Text and container width certified by the current layer image. */
+/** Text and container width certified by the current native presentation. */
 struct MacPresentedText
 {
   loka::app::AttributedString value;
@@ -149,7 +149,7 @@ private:
       never for an UP without a candidate. One view query and one provenance query at most;
       the projection searches its own covered slots in O(covered slots x log(segments + 1)). */
   MacTextHitAnswer prepareSourceHit(NSPoint viewPoint, MacTextHit &out) const;
-  /** Once per candidate, one current-layer tuple read followed by one source preparation. */
+  /** Once per candidate, one native presentation read followed by one source preparation. */
   MacTextHitAnswer prepareTextHit(NSPoint viewPoint, MacTextHit &out, MacPresentedText &fact) const;
   /** At most twice per press. One preparation, up to two segment comparisons and one maximal run in this text. */
   bool queryPressCandidate(NSPoint viewPoint, loka::app::AttributedString::LinkRun &out) const;

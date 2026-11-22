@@ -15,7 +15,7 @@
 #include "platform/null/NullScenePlatformController.hpp"
 #include "scenarios/MineSweeperScenarios.hpp"
 #include "standalone/MineSweeperStandaloneFlowAppConfig.hpp"
-#include "support/StandaloneMountTestSupport.hpp"
+#include "WindowRootRefusalTests.hpp"
 #include "platform/null/NullApp.hpp"
 #include "platform/null/NullPlatformContext.hpp"
 #include "platform/null/NullWindow.hpp"
@@ -377,6 +377,12 @@ void testMineSweeperStandaloneFlowWritesExpectedAudit()
   std::printf("testMineSweeperStandaloneFlowWritesExpectedAudit passed\n");
 }
 
+void testMineSweeperStandaloneDeclarationRefusalIsWindowless()
+{
+  WindowRootRefusalTestSupport::verifyDeclarationRefusal<loka::standalone_tests::MineSweeperStandaloneFlowAppConfig>(
+      "_loka_minesweeper_declaration_refusal.audit");
+}
+
 void testMineSweeperStandaloneMountRefusalFailsClosed()
 {
   const char *auditPath = "_loka_minesweeper_standalone_mount_refusal.audit";
@@ -387,21 +393,12 @@ void testMineSweeperStandaloneMountRefusalFailsClosed()
   {
     loka::platform::file::FileHandle auditFile;
     auditFile.displayPath = loka::core::String::Literal(auditPath);
-    loka::testing::StandaloneMountTestPlatformContext context;
+    NullPlatformContext context;
     loka::standalone_tests::MineSweeperStandaloneFlowAppConfig config(&context, &auditFile, diagnostics);
     NullApp app(&config);
     config.setApp(&app);
 
-    loka::scenario_tests::testing::failObservedMainDefinitionClones(1);
-    AppComposition composition(&context);
-    config.compose(composition);
-    std::vector<AppComponent *> components = composition.build();
-    loka::scenario_tests::testing::allowObservedMainDefinitionClones();
-
-    LOKA_VERIFY(components.size() == 1);
-    Window *window = components[0] ? components[0]->asWindow() : 0;
-    LOKA_VERIFY(window != 0);
-    LOKA_VERIFY(window->scene() == 0);
+    Window *window = WindowRootRefusalTestSupport::launchWithRefusedMount(app);
     for (int tick = 0; tick < 8; ++tick)
     {
       LOKA_VERIFY(window->handleIdle(0.1));
@@ -417,11 +414,6 @@ void testMineSweeperStandaloneMountRefusalFailsClosed()
     LOKA_VERIFY(output
                 == "Loka MineSweeper standalone startup failed: "
                    "MainNode was not mounted after 5 idle ticks.\n");
-
-    for (std::size_t i = 0; i < components.size(); ++i)
-    {
-      delete components[i];
-    }
   }
 
   LOKA_VERIFY(std::fclose(diagnostics) == 0);

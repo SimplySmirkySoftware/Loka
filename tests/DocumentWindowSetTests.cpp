@@ -1,4 +1,5 @@
 #include "DocumentWindowSetTests.hpp"
+#include "support/LimitedCloneProbe.hpp"
 #include "app/core/AppComposition.hpp"
 #include "app/core/WindowSeat.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
@@ -1594,4 +1595,37 @@ void testQuitAtCompletionDeclineBeforeDeliveryDoesNotCancel()
   app.tail();
   LOKA_VERIFY(config.roster.closeAsked().get() == CloseAsk(id, before.seq + 1));
   LOKA_VERIFY(!app.quitRequested());
+}
+
+void testDocumentWindowRootRefusalDropsDocument()
+{
+  class RefusedRootConfig : public Config
+  {
+  public:
+    explicit RefusedRootConfig(PlatformContext &context)
+        : Config(context)
+    {
+    }
+    virtual void compose(AppComposition &c)
+    {
+      c << DocumentWindows(this->roster, &refusedRoot, this);
+    }
+    static WindowProps refusedRoot(ItemId, const Document &, void *data)
+    {
+      ++static_cast<RefusedRootConfig *>(data)->factories;
+      return WindowProps().scene(DefinitionCloneTestSupport::LimitedCloneProbeDefinition());
+    }
+  };
+  TrackingContext context;
+  RefusedRootConfig config(context);
+  TestApp app(config);
+  app.run();
+  const ItemId id = config.roster.open(Document(0));
+  DefinitionCloneTestSupport::g_limitedCloneBudget = 0;
+  app.tail();
+  DefinitionCloneTestSupport::g_limitedCloneBudget = -1;
+  LOKA_VERIFY(context.creates == 0 && !config.roster.find(id));
+  LOKA_VERIFY(app.group().getComponents().size() == 0);
+  app.tail();
+  LOKA_VERIFY(config.factories == 1);
 }
