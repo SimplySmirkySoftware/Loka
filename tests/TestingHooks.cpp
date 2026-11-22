@@ -890,6 +890,21 @@ namespace loka
 #endif
 
 #ifdef TEST_BUILD
+namespace
+{
+  unsigned repaintEntries, repaintDepth;
+  char *imageOperationTrace;
+} // namespace
+/** One serial read per ordered receiver observation. */
+unsigned MacTestRepaintEntries()
+{
+  return repaintEntries;
+}
+/** One depth read per forwarded receiver send. */
+bool MacTestInsideRepaint()
+{
+  return repaintDepth != 0;
+}
 namespace loka
 {
   namespace testing
@@ -897,6 +912,32 @@ namespace loka
     namespace
     {
       unsigned refusedAttributedDraws = 0;
+    }
+    /** Each placement door records one entry and opens one receiver interval. */
+    void enterMacPlacementRepaint()
+    {
+      ++repaintEntries;
+      ++repaintDepth;
+    }
+    /** Close one interval per placement door, including early returns. */
+    void leaveMacPlacementRepaint()
+    {
+      --repaintDepth;
+    }
+    /** Borrow or return the fixture's buffer once on either side of a same-image replacement. */
+    void traceMacPresentedImage(char *buffer)
+    {
+      imageOperationTrace = buffer;
+    }
+    /** Record at most two ordered events and an overflow indication in the active fixture buffer. */
+    void noteMacPresentedImage(char event)
+    {
+      if (!imageOperationTrace)
+        return;
+      if (!imageOperationTrace[0])
+        imageOperationTrace[0] = event;
+      else
+        imageOperationTrace[1] = imageOperationTrace[1] ? '!' : event;
     }
     static unsigned macTextKitAllocationCountdown = 0;
     static unsigned macTextPresentationCountdown = 0;

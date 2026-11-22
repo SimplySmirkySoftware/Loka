@@ -139,6 +139,18 @@ typedef float CGFloat;
 @end
 #endif
 
+#if !LOKA_MAC_HAS_CALAYER
+@interface NSView (LokaLateLayerCompat)
+- (id)layer;
+@end
+#endif
+
+/** Once per text path or stack capture decision, one guarded read of this view. */
+inline id MacLateBoundLayer(NSView *view)
+{
+  return [view respondsToSelector:@selector(layer)] ? [view layer] : nil;
+}
+
 // Late selectors are declared for type checking. Callers test runtime availability.
 @interface NSView (LokaSubviewsCompat)
 - (void)setSubviews:(NSArray *)views;
