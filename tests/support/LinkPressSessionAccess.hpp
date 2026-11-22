@@ -17,9 +17,9 @@ namespace loka
       {
         Payload payload;
         LOKA_VERIFY(!session.candidate_.take(payload));
-        LOKA_VERIFY((session.active_ != 0) == active);
+        LOKA_VERIFY((session.occupancy_.active_ != 0) == active);
         if (active)
-          LOKA_VERIFY(session.active_->invalidated());
+          LOKA_VERIFY(session.occupancy_.active_->invalidated());
       }
     };
   } // namespace testing

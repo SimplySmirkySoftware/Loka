@@ -80,6 +80,49 @@ namespace loka
         bool present_;
       };
 
+      class LinkPressRegistration;
+
+      /** Admits at most one registration at a time. Only markActive() marks that registration. */
+      class LinkPressOccupancy
+      {
+      public:
+        LinkPressOccupancy();
+        void markActive();
+
+      private:
+        friend class LinkPressRegistration;
+        friend class loka::testing::LinkPressSessionAccess;
+        bool enter(LinkPressRegistration &registration);
+        void leave(LinkPressRegistration &registration);
+        LinkPressRegistration *active_;
+        LinkPressOccupancy(const LinkPressOccupancy &);
+        LinkPressOccupancy &operator=(const LinkPressOccupancy &);
+      };
+
+      /** Stack registration marked only while active. Close is idempotent and destruction closes it. */
+      class LinkPressRegistration
+      {
+      public:
+        explicit LinkPressRegistration(LinkPressOccupancy &occupancy);
+        ~LinkPressRegistration();
+        void close();
+        bool admitted() const
+        {
+          return this->occupancy_ != 0;
+        }
+        bool invalidated() const
+        {
+          return this->invalidated_;
+        }
+
+      private:
+        friend class LinkPressOccupancy;
+        LinkPressOccupancy *occupancy_;
+        bool invalidated_;
+        LinkPressRegistration(const LinkPressRegistration &);
+        LinkPressRegistration &operator=(const LinkPressRegistration &);
+      };
+
       template <class Payload> class LinkPressProcedure;
 
       /** Owns one pending candidate and admits at most one active procedure.
@@ -87,15 +130,11 @@ namespace loka
       template <class Payload> class LinkPressSession
       {
       public:
-        LinkPressSession()
-            : active_(0)
-        {
-        }
+        LinkPressSession() {}
         void invalidate()
         {
           this->candidate_.drop();
-          if (this->active_)
-            this->active_->invalidated_ = true;
+          this->occupancy_.markActive();
         }
         void lose()
         {
@@ -105,21 +144,8 @@ namespace loka
       private:
         friend class LinkPressProcedure<Payload>;
         friend class loka::testing::LinkPressSessionAccess;
-        bool enter(LinkPressProcedure<Payload> &procedure)
-        {
-          if (this->active_)
-            return false;
-          this->active_ = &procedure;
-          return true;
-        }
-        void leave(LinkPressProcedure<Payload> &procedure)
-        {
-          assert(this->active_ == &procedure);
-          (void)procedure;
-          this->active_ = 0;
-        }
         PressCandidate<Payload> candidate_;
-        LinkPressProcedure<Payload> *active_;
+        LinkPressOccupancy occupancy_;
         LinkPressSession(const LinkPressSession &);
         LinkPressSession &operator=(const LinkPressSession &);
       };
@@ -130,50 +156,41 @@ namespace loka
       {
       public:
         explicit LinkPressProcedure(LinkPressSession<Payload> &session)
-            : session_(session.enter(*this) ? &session : 0),
-              invalidated_(false)
+            : registration_(session.occupancy_),
+              session_(session)
         {
-        }
-        ~LinkPressProcedure()
-        {
-          this->close();
         }
         void close()
         {
-          if (this->session_)
-          {
-            this->session_->leave(*this);
-            this->session_ = 0;
-          }
+          this->registration_.close();
         }
         bool admitted() const
         {
-          return this->session_ != 0;
+          return this->registration_.admitted();
         }
         bool invalidated() const
         {
-          return this->invalidated_;
+          return this->registration_.invalidated();
         }
         bool takeCandidate(Payload &out)
         {
-          assert(this->session_);
-          return this->session_->candidate_.take(out);
+          assert(this->admitted());
+          return this->session_.candidate_.take(out);
         }
         void placeCandidate(const Payload &payload)
         {
-          assert(this->session_);
-          this->session_->candidate_.place(payload);
+          assert(this->admitted());
+          this->session_.candidate_.place(payload);
         }
         bool candidateHolds(const Payload &payload) const
         {
-          assert(this->session_);
-          return this->session_->candidate_.holds(payload);
+          assert(this->admitted());
+          return this->session_.candidate_.holds(payload);
         }
 
       private:
-        friend class LinkPressSession<Payload>;
-        LinkPressSession<Payload> *session_;
-        bool invalidated_;
+        LinkPressRegistration registration_;
+        LinkPressSession<Payload> &session_;
         LinkPressProcedure(const LinkPressProcedure &);
         LinkPressProcedure &operator=(const LinkPressProcedure &);
       };
