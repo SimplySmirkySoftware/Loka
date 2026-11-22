@@ -1108,7 +1108,11 @@ void testMacLinkPressOverlays()
                 receivers.downs,
                 receivers.ups,
                 int(!result.get().isNone()));
-    if (condition != 1)
+    // Only a live control is an oracle. AppKit forwards a DOWN that a disabled control or a ground unit does not
+    // handle to the view beneath it (measured on Tahoe 26.7.1 and Mavericks 10.9.5: AppKit forwardMethod reaches the
+    // leaf's mouseDown:). A link under an opaque unit is outside the ZStack contract ("place units only over
+    // non-reactive regions"; macOS has no unit shield), so those two conditions are observations.
+    if (condition == 0)
       LOKA_VERIFY(buttonDowns && !receivers.downs && result.get().isNone());
     controller.onChange(0, NODE_DIRTY_NONE, false);
     [window orderOut:nil];
