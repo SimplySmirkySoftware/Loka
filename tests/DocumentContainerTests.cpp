@@ -6,7 +6,8 @@
 #include "app/doc/Html.hpp"
 #include "app/nodes/nestable/For.hpp"
 #include "app/nodes/nestable/Show.hpp"
-#include "support/DocumentFixture.hpp"
+#include "support/DocumentExportCases.hpp"
+#include "app/doc/Render.hpp"
 #include "platform/null/context/NullAttributedTextContext.hpp"
 
 namespace
@@ -72,6 +73,10 @@ namespace
     {
       return this->event('c');
     }
+    virtual bool read(const doc::ImageProps &)
+    {
+      return this->event('I');
+    }
     virtual bool read(const doc::ItemProps &)
     {
       return this->event('i');
@@ -85,6 +90,31 @@ namespace
       return this->event('q');
     }
   };
+
+  void images(const Exit &e)
+  {
+    e.golden(doc::Image("map.png", "Route"), "![Route](<map.png>)\n", "<p><img src=\"map.png\" alt=\"Route\"></p>\n");
+    e.golden(doc::Image("map (1)<&>\\\"", "[]\\*`_<&\""),
+             "![\\[\\]\\\\\\*\\`\\_\\<\\&\"](<map (1)\\<\\&\\>\\\\\">)\n",
+             "<p><img src=\"map (1)&lt;&amp;&gt;\\&quot;\" alt=\"[]\\*`_&lt;&amp;&quot;\"></p>\n");
+    e.golden(doc::Image("rule", ""), "![](<rule>)\n", "<p><img src=\"rule\" alt=\"\"></p>\n");
+    e.golden(doc::Image("map", "Trail #2"), "![Trail #2](<map>)\n", "<p><img src=\"map\" alt=\"Trail #2\"></p>\n");
+    e.golden(doc::Quote() << doc::Image("map", "Route"),
+             "> ![Route](<map>)\n",
+             "<blockquote>\n<p><img src=\"map\" alt=\"Route\"></p>\n</blockquote>\n");
+    e.golden(Column() << doc::Paragraph("before") << doc::Image("map", "Route") << doc::Paragraph("after"),
+             "before\n\n![Route](<map>)\n\nafter\n",
+             "<p>before</p>\n<p><img src=\"map\" alt=\"Route\"></p>\n<p>after</p>\n");
+    e.golden(Column() << doc::Paragraph("before") << doc::Image("", "Route"), 0, 0);
+    e.golden(Column() << doc::Paragraph("before") << (doc::List() << doc::Image("map", "")), 0, 0);
+    const std::string invalid[] = {"a\rb", "a\nb", std::string("a\0b", 3), "a\xff"};
+    for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i)
+    {
+      const String bad = DocumentExportCases::raw(invalid[i]);
+      e.golden(Column() << doc::Paragraph("before") << doc::Image(bad, String("Route")), 0, 0);
+      e.golden(Column() << doc::Paragraph("before") << doc::Image(String("map"), bad), 0, 0);
+    }
+  }
 
   void containers(const Exit &e)
   {
@@ -155,12 +185,37 @@ namespace
     e.check(branch, "", "");
   }
 } // namespace
+void testDocumentImageMarkdown()
+{
+  const Exit e = {false};
+  images(e);
+}
+
+void testDocumentImageHtml()
+{
+  const Exit e = {true};
+  images(e);
+}
+
+void testDocumentImageRender()
+{
+  ColumnDefinition page;
+  page << doc::Paragraph("before") << doc::Image("map (1)", "Route");
+  typedef Props<ColumnDefinition> P;
+  std::string markdown, html;
+  LOKA_VERIFY(doc::RenderMarkdown(Boundary<P::NodeType>(P(&page)), markdown));
+  LOKA_VERIFY(doc::RenderHtml(Boundary<P::NodeType>(P(&page)), html));
+  LOKA_VERIFY(markdown == "before\n\n![Route](<map (1)>)\n");
+  LOKA_VERIFY(html == "<p>before</p>\n<p><img src=\"map (1)\" alt=\"Route\"></p>\n");
+}
+
 void testDocumentMarkdownContainers()
 {
   const Exit e = {false};
   containers(e);
-  Fixture<doc::Quote> f(doc::Quote() << (doc::List() << doc::Item("first") << doc::Item("second")));
-  const std::string complete = "QLiilq";
+  Fixture<doc::Quote> f(doc::Quote() << doc::Image("map", "")
+                                     << (doc::List() << doc::Item("first") << doc::Item("second")));
+  const std::string complete = "QILiilq";
   for (size_t stop = 1; stop <= complete.size() + 1; ++stop)
   {
     RefusingReader reader(stop);

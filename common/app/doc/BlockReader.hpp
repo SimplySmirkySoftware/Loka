@@ -14,6 +14,7 @@ namespace loka
       struct QuoteProps;
       struct HeadingProps;
       struct ParagraphProps;
+      struct ImageProps;
       struct CodeBlockProps;
 
       /** A synchronous exit borrows the authored props. Ordinary nodes allow descent.
@@ -29,6 +30,9 @@ namespace loka
         virtual bool read(const ParagraphProps &) = 0;
         /** Cost: one call per visited CodeBlock block, borrowing its props only. */
         virtual bool read(const CodeBlockProps &) = 0;
+
+        /** Cost: one call per visited image, borrowing its props only. */
+        virtual bool read(const ImageProps &) = 0;
 
         /** Cost: one borrowed input per visited item. */
         virtual bool read(const ItemProps &) = 0;

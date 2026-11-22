@@ -1,5 +1,8 @@
 #ifndef LOKA_DOCUMENT_CONTAINER_TESTS_HPP
 #define LOKA_DOCUMENT_CONTAINER_TESTS_HPP
+void testDocumentImageMarkdown();
+void testDocumentImageHtml();
+void testDocumentImageRender();
 void testDocumentMarkdownContainers();
 void testDocumentHtmlContainers();
 void testDocumentContainerNative();

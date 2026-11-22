@@ -2381,6 +2381,12 @@ Column()
   << doc::CodeBlock("Column() << Text(\"hello\")");
 ```
 
+Include `app/doc/Image.hpp` to write an image block. For example,
+`doc::Image("map.png", "Trail map")` writes `![Trail map](<map.png>)` in
+Markdown and `<p><img src="map.png" alt="Trail map"></p>` in HTML. On screen
+it currently shows the alternative text in italics. The alternative text is
+required. Pass `""` for a decorative image. An image cannot be a list item.
+
 Include `app/doc/List.hpp` and `app/doc/Quote.hpp` to group document blocks.
 
 ```cpp
@@ -2396,7 +2402,7 @@ quoted blocks in `blockquote`. An empty item shows a bullet on screen. Both
 exports omit empty items and containers with no emitted content.
 
 Items accept inline content and belong inside a list. Lists accept only items.
-A quote accepts paragraphs, headings, code blocks, lists and other quotes.
+A quote accepts paragraphs, headings, images, code blocks, lists and other quotes.
 Ordinary layout wrappers can surround these blocks. Numbered and nested lists
 are unavailable. A mis-nested tree can display on screen, but exporting it
 returns false and preserves the destination. These rules apply from the root
@@ -2434,7 +2440,7 @@ exhaustion follow the normal process behavior.
 | Window and app services | During composition, `c.componentContext()->window()` and the node's `attachedContext()` return null. The node's strict `window()`, `scene()` and `boundary()` accessors and the composition's `c.window()` are unsupported here. App and PlatformContext services are unavailable. |
 | Idle and input | Idle callbacks, timers and native input never run. Animations and Flows waiting on them keep their initial state. |
 | Focus, editors and menus | Focus stays none, text documents await their store, and menu commands are never dispatched. Editor bodies do not become document blocks. |
-| Images | Images contribute no document blocks. The producer of a native image remains responsible for draining its resources. |
+| Images | A native `ImageView` contributes no document blocks; `doc::Image` is a document block and is exported. The producer of a native image remains responsible for draining its resources. |
 | Composition | Only attached document blocks contribute bytes. A page containing only ordinary controls can succeed with empty output. A fixed Component can locally discard children, including unsupported branch seats, without reporting a refusal. |
 
 The sample tool writes Markdown by default and HTML with `--html`. To append

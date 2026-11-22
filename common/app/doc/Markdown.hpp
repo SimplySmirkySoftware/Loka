@@ -95,6 +95,12 @@ namespace loka
           }
         };
 
+        /** Cost: one fixed punctuation lookup per plain ASCII scalar or image label byte. */
+        inline bool MarkdownTextPunctuation(unsigned c)
+        {
+          return c < 128 && std::strchr("\\`*_[]<&#~", c);
+        }
+
         /** A block-local projection whose byte ranges are rewritten to their Markdown spellings. */
         struct MarkdownInline : InlineProjection
         {
@@ -143,7 +149,7 @@ namespace loka
                     bool beforeLink = i == run.end && r + 1 < this->runs.size() && this->runs[r + 1].style.link
                                       && !run.style.link && !run.style.marks;
                     if (v < 128
-                        && (std::strchr("\\`*_[]<&#~", v) || (lineStart && std::strchr(">+-=", v))
+                        && (MarkdownTextPunctuation(v) || (lineStart && std::strchr(">+-=", v))
                             || (digits && (v == '.' || v == ')')) || (v == '!' && beforeLink)))
                       spelled += '\\';
                     spelled.append(this->bytes, pos, i - pos);
@@ -175,7 +181,7 @@ namespace loka
                  && !AsciiAlphanumeric(outside);
         }
 
-        /** Cost: once per maximal link, escaping only its own destination bytes. */
+        /** Cost: once per link or image, escaping only its own destination bytes. */
         inline void CloseMarkdownLink(std::string &out, const char *target)
         {
           out += "](<";
@@ -260,6 +266,7 @@ namespace loka
         class MarkdownReader : public ContainerWriter<MarkdownReader>
         {
         public:
+          using ContainerWriter<MarkdownReader>::read;
           std::string fragment;
           /** Cost: once per physical line, append one prefix per enclosing quote. */
           void prefix(unsigned quotes, bool blank)
@@ -325,6 +332,20 @@ namespace loka
             if (!body.empty())
               this->block(body);
             return true;
+          }
+          /** Cost: once per image, escape its label and destination and emit one block. */
+          void image(const std::string &source, const std::string &alt)
+          {
+            std::string body = "![";
+            for (size_t i = 0; i < alt.size(); ++i)
+            {
+              // A label never starts a line, so '#' stays literal there.
+              if (alt[i] != '#' && MarkdownTextPunctuation(static_cast<unsigned char>(alt[i])))
+                body += '\\';
+              body += alt[i];
+            }
+            CloseMarkdownLink(body, source.c_str());
+            this->block(body);
           }
           /** Cost: each visited paragraph forwards one input. */
           virtual bool read(const ParagraphProps &p)

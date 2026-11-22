@@ -108,6 +108,7 @@ namespace loka
           }
 
         public:
+          using ContainerWriter<HtmlReader>::read;
           std::string fragment;
           /** Cost: HTML needs no separator between complete elements. */
           void separator(unsigned) {}
@@ -120,6 +121,18 @@ namespace loka
           void close(Kind kind)
           {
             this->fragment += kind == LIST ? "</ul>\n" : "</blockquote>\n";
+          }
+          /** Cost: once per image, emit one block and escape both of its attribute values. */
+          void image(const std::string &source, const std::string &alt)
+          {
+            this->beginLeaf();
+            this->fragment += "<p><img src=\"";
+            for (size_t i = 0; i < source.size(); ++i)
+              AppendHtmlByte(this->fragment, source[i], true);
+            this->fragment += "\" alt=\"";
+            for (size_t i = 0; i < alt.size(); ++i)
+              AppendHtmlByte(this->fragment, alt[i], true);
+            this->fragment += "\"></p>\n";
           }
           /** Cost: each visited item checks one parent and projects its own runs once. */
           virtual bool read(const ItemProps &p)

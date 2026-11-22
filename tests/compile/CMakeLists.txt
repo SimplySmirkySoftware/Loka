@@ -1014,6 +1014,10 @@ loka_compile_pin(document-block-reader
   REFUSES pins/refuses_document_block_reader.cpp
   ACCEPTS pins/accepts_document_block_reader.cpp)
 
+loka_compile_pin(document-image-reader
+  REFUSES pins/refuses_document_image_reader.cpp
+  ACCEPTS pins/accepts_document_block_reader.cpp)
+
 # This link probe shares the headless contract binary's configured common library.
 # The native test binaries include the header in the SDK-order and contract-test TUs.
 if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
