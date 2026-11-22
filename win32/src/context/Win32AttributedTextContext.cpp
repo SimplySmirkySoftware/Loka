@@ -6,6 +6,8 @@
 #include "app/layout/FallbackControlMetrics.hpp"
 #include <climits>
 
+using loka::app::internal::PressedRun;
+
 namespace
 {
   const wchar_t kAttributedTextClassName[] = L"LOKA_ATTRIBUTED_TEXT";
@@ -305,7 +307,7 @@ HitAnswer Win32AttributedTextContext::prepareLinkHit(POINT client, LinkHit &out)
   return answer;
 }
 
-bool Win32AttributedTextContext::queryEligibleRun(const LinkHit &hit, Win32PressedRun &out) const
+bool Win32AttributedTextContext::queryEligibleRun(const LinkHit &hit, PressedRun &out) const
 {
   if (!loka::app::scene::IsAttachedCurrentContext(this) || !this->node_ || !this->node_->props.text_
       || !this->links_.table().valid() || !this->presented_.isKnown())
@@ -321,7 +323,7 @@ bool Win32AttributedTextContext::queryEligibleRun(const LinkHit &hit, Win32Press
   // implies both bounds.
   if (!current.queryLinkRun(hit.firstSegment, run) || run.last < hit.lastSegment)
     return false;
-  out = Win32PressedRun(run);
+  out = PressedRun(run);
   return true;
 }
 
@@ -342,11 +344,11 @@ namespace
 } // namespace
 void Win32AttributedTextContext::handleLinkButton(UINT message, LPARAM lParam)
 {
-  Win32LinkPressProcedure p(this->links_);
+  loka::app::internal::LinkPressProcedure<PressedRun> p(this->links_.session());
   if (!p.admitted())
     return;
   const POINT point = {static_cast<short>(lParam & 0xffff), static_cast<short>((lParam >> 16) & 0xffff)};
-  Win32PressedRun run;
+  PressedRun run;
   LinkHit hit = LinkHit();
   if (message == WM_LBUTTONDOWN)
   {
@@ -363,7 +365,7 @@ void Win32AttributedTextContext::handleLinkButton(UINT message, LPARAM lParam)
     }
     p.placeCandidate(run);
     SetCapture(this->hwnd());
-    Win32PressedRun again;
+    PressedRun again;
     if (!p.invalidated() && p.candidateHolds(run) && GetCapture() == this->hwnd() && this->queryEligibleRun(hit, again)
         && again == run)
       return;
@@ -385,7 +387,7 @@ void Win32AttributedTextContext::handleLinkButton(UINT message, LPARAM lParam)
   case CAPTURE_RELEASED:
     break;
   }
-  Win32PressedRun now;
+  PressedRun now;
   const bool deliver = !p.invalidated() && answer == HIT_LINK && this->queryEligibleRun(hit, now) && now == run;
   p.close();
   if (deliver)
