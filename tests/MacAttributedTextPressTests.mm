@@ -125,13 +125,13 @@ namespace
     return false;
   }
 
-  AttributedString Link(const char *s)
+  AttributedString PressLink(const char *s)
   {
     return Linked(s, TextStyle(), LinkTarget(String("target")));
   }
   AttributedString Original()
   {
-    return Link("HHHH") + Styled("  ", TextStyle()) + Link("MMMM");
+    return PressLink("HHHH") + Styled("  ", TextStyle()) + PressLink("MMMM");
   }
 
   /** Always derive even the refusal points from the installed manager and container. */
@@ -356,18 +356,18 @@ void testMacLinkPressRun()
   f.up(1, 6); // Same target, distinct maximal run.
   LOKA_VERIFY(f.writes == 0);
   f.down();
-  f.content.set(Link("different"));
+  f.content.set(PressLink("different"));
   f.content.set(Original());
   f.up();
   LOKA_VERIFY(f.writes == 1);
   f.down();
-  f.content.set(Link("different"));
+  f.content.set(PressLink("different"));
   f.up();
   LOKA_VERIFY(f.writes == 1);
   f.content.set(Original());
   f.down();
-  f.content.set(Link("different"));
-  f.content.set(Link("HH") + Link("HH") + Styled("  ", TextStyle()) + Link("MMMM"));
+  f.content.set(PressLink("different"));
+  f.content.set(PressLink("HH") + PressLink("HH") + Styled("  ", TextStyle()) + PressLink("MMMM"));
   f.up();
   LOKA_VERIFY(f.writes == 1);
   Completed(__func__);
@@ -377,7 +377,7 @@ void testMacLinkPressFalseQuery()
 {
   Press f;
   f.down();
-  f.content.set(Link("different"));
+  f.content.set(PressLink("different"));
   f.up(); // First run starts at zero on both values; only fresh evidence can authorize a write.
   LOKA_VERIFY(f.writes == 0);
   Completed(__func__);
