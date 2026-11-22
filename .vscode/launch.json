@@ -6,7 +6,7 @@
       "type": "lldb-dap",
       "request": "launch",
       "program": "${workspaceFolder}/build/Testing/DocumentSite",
-      "args": ["${workspaceFolder}/build/document-site", "${workspaceFolder}/tools/site/site.css"],
+      "args": ["${workspaceFolder}/build/document-site", "${workspaceFolder}/tools/site/site.css", "${workspaceFolder}/build/map.png"],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Build: Linux DocumentSite"
     },

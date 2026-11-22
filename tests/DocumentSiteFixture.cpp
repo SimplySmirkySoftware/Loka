@@ -77,6 +77,26 @@ int main(int argc, char **argv)
   document_site::SiteOutputs outputs;
   if (std::strcmp(argv[1], "empty") == 0)
     return document_site::writeSite(argv[2], argv[3], outputs) ? 0 : 1;
+  // The stylesheet doubles as an opaque image source in this fixture.
+  LOKA_VERIFY(!outputs.addImage("map.png", argv[2])); // A failed read leaves the name available.
+  LOKA_VERIFY(outputs.addImage("map.png", argv[3]));
+  if (std::strcmp(argv[1], "image-only") == 0)
+    return document_site::writeSite(argv[2], argv[3], outputs) ? 0 : 1;
+  const std::string refused[] = {"a.svg",
+                                 "a.jpeg",
+                                 "A.png",
+                                 "a.PNG",
+                                 "a/b.png",
+                                 ".png",
+                                 "index.html",
+                                 "-a.png",
+                                 "map.png",
+                                 std::string("a\0b.png", 7)};
+  for (size_t i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i)
+    LOKA_VERIFY(!outputs.addImage(refused[i], argv[3]));
+  document_site::SiteOutputs otherFormats;
+  LOKA_VERIFY(otherFormats.addImage("1-a.jpg", argv[3]));
+  LOKA_VERIFY(otherFormats.addImage("2-b.gif", argv[3]));
   const StdCompositionBoundaryDefinition page;
   if (!document_site::addPage(outputs, "index.html", "First", page))
     return 1;
