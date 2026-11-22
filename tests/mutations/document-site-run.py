@@ -19,14 +19,20 @@ MUTATIONS = [
         ('  LOKA_VERIFY(!outputs.add("index.html", "duplicate"));',
          '  if (!document_site::writeSite(argv[2], argv[3], outputs))\n    return 1;\n'
          '  LOKA_VERIFY(!outputs.add("index.html", "duplicate"));')]),
-    ("duplicate-name", "Refusal", [("if (page->first == name)", "if (false && page->first == name)")]),
+    ("duplicate-name", "Refusal", [("contains(this->pages_, name)", "(false && contains(this->pages_, name))")]),
     ("publish-as-staged", "Files", [
         ("return file->stage(bytes);", "return file->stage(bytes) && file->publish();"),
         ('files.stage(directory, "site.css", css) && files.publish()', 'files.stage(directory, "site.css", css)')]),
-    ("any-name", "Refusal", [("if (!isPageName(name))", "if (name.empty())")]),
-    ("any-suffix", "Refusal", [("name.compare(name.size() - suffix, suffix, Suffix) != 0", "false")]),
+    ("any-name", "Refusal", [('!hasStemAndSuffix(name, ".html")', "name.empty()")]),
+    ("any-suffix", "Refusal", [("name.compare(name.size() - suffix, suffix, ending) != 0",
+                                '(std::string(ending) != ".html" && name.compare(name.size() - suffix, suffix, ending) != 0)')]),
     ("ignore-stylesheet", "Output", [
-        ('std::fopen(path, "rb")', '(static_cast<void>(path), std::fopen("../../tools/site/site.css", "rb"))')]),
+        ('readFile(stylesheetPath, 0, css)', 'readFile((static_cast<void>(stylesheetPath), "../../tools/site/site.css"), 0, css)')]),
+    ("image-suffix", "Refusal", [
+        ('if (!(hasStemAndSuffix(name, ".png")', 'if (false && !(hasStemAndSuffix(name, ".png")')]),
+    ("unlimited-image", "Files", [("readFile(sourcePath, 8 * 1024 * 1024, bytes)", "readFile(sourcePath, 0, bytes)")]),
+    ("duplicate-image", "Refusal", [("if (contains(this->images_, name))", "if (false && contains(this->images_, name))")]),
+    ("unstaged-images", "Output", [(" && outputs.stage(outputs.images_, files, directory)", "")]),
 ]
 
 
