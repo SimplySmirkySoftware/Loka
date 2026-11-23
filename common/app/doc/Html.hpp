@@ -3,6 +3,7 @@
 
 #include "app/doc/detail/Projection.hpp"
 #include "app/doc/detail/ContainerWriter.hpp"
+#include "app/doc/detail/HtmlImage.hpp"
 
 namespace loka
 {
@@ -12,31 +13,6 @@ namespace loka
     {
       namespace detail
       {
-        /** Cost: the inline and block writers escape one original byte per call. */
-        inline void AppendHtmlByte(std::string &out, char c, bool attribute)
-        {
-          switch (c)
-          {
-          case '&':
-            out += "&amp;";
-            break;
-          case '<':
-            out += "&lt;";
-            break;
-          case '>':
-            out += "&gt;";
-            break;
-          case '"':
-            if (attribute)
-              out += "&quot;";
-            else
-              out += c;
-            break;
-          default:
-            out += c;
-          }
-        }
-
         /** Four ordered tag slots. Zero means absent. The anchor slot holds the destination offset. */
         struct HtmlTags
         {
@@ -123,16 +99,14 @@ namespace loka
             this->fragment += kind == LIST ? "</ul>\n" : "</blockquote>\n";
           }
           /** Cost: once per image, emit one block and escape both of its attribute values. */
-          void image(const std::string &source, const std::string &alt)
+          bool image(const std::string &source, const std::string &alt, const ImageSize *size)
           {
             this->beginLeaf();
-            this->fragment += "<p><img src=\"";
-            for (size_t i = 0; i < source.size(); ++i)
-              AppendHtmlByte(this->fragment, source[i], true);
-            this->fragment += "\" alt=\"";
-            for (size_t i = 0; i < alt.size(); ++i)
-              AppendHtmlByte(this->fragment, alt[i], true);
-            this->fragment += "\"></p>\n";
+            this->fragment += "<p>";
+            if (!AppendHtmlImage(this->fragment, source, alt, size))
+              return false;
+            this->fragment += "</p>\n";
+            return true;
           }
           /** Cost: each visited item checks one parent and projects its own runs once. */
           virtual bool read(const ItemProps &p)

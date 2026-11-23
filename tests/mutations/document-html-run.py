@@ -6,6 +6,7 @@ from document_mutations import main
 ROOT = Path(__file__).resolve().parents[2]
 HTML = ROOT / "common/app/doc/Html.hpp"
 PROJECTION = HTML.parent / "detail/Projection.hpp"
+ESCAPE = HTML.parent / "detail/HtmlImage.hpp"
 FRAMES = HTML.parent / "detail/ContainerWriter.hpp"
 MUTATIONS = [
     ("empty-container", FRAMES, "if (frame.previous)",
@@ -19,10 +20,10 @@ MUTATIONS = [
     # Enlarge the mutant's backing array so accepting depth 17 tests grammar without corrupting memory.
     ("drop-depth-bound", FRAMES, " || this->depth == MaxDepth", "", "Containers",
      ("Frame frames[MaxDepth + 1]", "Frame frames[MaxDepth + 2]")),
-    ("ampersand", HTML, 'out += "&amp;";', "out += c;", "Inline"),
-    ("less-than", HTML, 'out += "&lt;";', "out += c;", "Inline"),
-    ("greater-than", HTML, 'out += "&gt;";', "out += c;", "Inline"),
-    ("attribute-quote", HTML, 'out += "&quot;";', "out += c;", "Inline"),
+    ("ampersand", ESCAPE, 'out += "&amp;";', "out += c;", "Inline"),
+    ("less-than", ESCAPE, 'out += "&lt;";', "out += c;", "Inline"),
+    ("greater-than", ESCAPE, 'out += "&gt;";', "out += c;", "Inline"),
+    ("attribute-quote", ESCAPE, 'out += "&quot;";', "out += c;", "Inline"),
     ("heading-level", HTML, "'0' + p.level()", "'1'", "Blocks"),
     ("split-anchor", HTML, "this->slots[keep] == next.slots[keep]",
      "this->slots[keep] == next.slots[keep] && (keep || !next.slots[0])", "Inline"),

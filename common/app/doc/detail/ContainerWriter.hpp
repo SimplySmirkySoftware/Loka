@@ -74,8 +74,7 @@ namespace loka
             if (!this->accepts(false) || !CollectDocumentLine(p.source, source) || source.empty()
                 || !CollectDocumentLine(p.alt, alt))
               return false;
-            static_cast<Writer &>(*this).image(source, alt);
-            return true;
+            return static_cast<Writer &>(*this).image(source, alt, p.size.get());
           }
 
         private:

@@ -13,6 +13,64 @@ namespace loka
     {
       class ImageNode;
 
+      /** A pair of authored dimensions in CSS pixels. */
+      class ImageSize
+      {
+        unsigned width_;
+        unsigned height_;
+
+      public:
+        ImageSize(unsigned width, unsigned height)
+            : width_(width),
+              height_(height)
+        {
+        }
+        unsigned width() const
+        {
+          return this->width_;
+        }
+        unsigned height() const
+        {
+          return this->height_;
+        }
+        bool operator<(const ImageSize &other) const
+        {
+          return this->width_ == other.width_ ? this->height_ < other.height_ : this->width_ < other.width_;
+        }
+      };
+
+      namespace detail
+      {
+        /** Owns the optional pair, including authored dimensions an export may refuse. */
+        class AuthoredImageSize
+        {
+          ImageSize size_;
+          bool present_;
+
+        public:
+          AuthoredImageSize()
+              : size_(0, 0),
+                present_(false)
+          {
+          }
+          explicit AuthoredImageSize(const ImageSize &size)
+              : size_(size),
+                present_(true)
+          {
+          }
+          const ImageSize *get() const
+          {
+            return this->present_ ? &this->size_ : 0;
+          }
+          bool operator<(const AuthoredImageSize &other) const
+          {
+            if (this->present_ != other.present_)
+              return !this->present_;
+            return this->present_ && this->size_ < other.size_;
+          }
+        };
+      } // namespace detail
+
       /** An authored image source and its alternative text. */
       struct ImageProps : scene::NodePropsBase<ImageProps>
       {
@@ -22,6 +80,7 @@ namespace loka
         };
         core::String source;
         core::String alt;
+        detail::AuthoredImageSize size;
 
         ImageProps() {}
         ImageProps(const core::String &source, const core::String &alt)
@@ -29,15 +88,23 @@ namespace loka
               alt(alt)
         {
         }
-        /** Cost: retained reconciliation compares the sources, then the labels on a tie. */
+        ImageProps(const core::String &source, const core::String &alt, const ImageSize &size)
+            : source(source),
+              alt(alt),
+              size(size)
+        {
+        }
+        /** Cost: retained reconciliation compares source, label and dimensions until a difference. */
         bool operator<(const scene::PropsBase &rhs) const
         {
           if (rhs.propsTypeId() != this->propsTypeId())
             return false;
           const ImageProps &other = static_cast<const ImageProps &>(rhs);
           const int order = style_internal::CompareLinkTargets(LinkTarget(this->source), LinkTarget(other.source));
-          return order ? order < 0
-                       : style_internal::CompareLinkTargets(LinkTarget(this->alt), LinkTarget(other.alt)) < 0;
+          if (order)
+            return order < 0;
+          const int label = style_internal::CompareLinkTargets(LinkTarget(this->alt), LinkTarget(other.alt));
+          return label ? label < 0 : this->size < other.size;
         }
       };
 
@@ -91,6 +158,15 @@ namespace loka
       inline ImageDefinition Image(const char *source, const char *alt)
       {
         return Image(core::String(source), core::String(alt));
+      }
+      /** Authors a block image with both export dimensions. */
+      inline ImageDefinition Image(const core::String &source, const core::String &alt, const ImageSize &size)
+      {
+        return scene::Component(ImageProps(source, alt, size));
+      }
+      inline ImageDefinition Image(const char *source, const char *alt, const ImageSize &size)
+      {
+        return Image(core::String(source), core::String(alt), size);
       }
     } // namespace doc
   } // namespace app
