@@ -21,6 +21,7 @@
 #include "scenarios/FloppyBirdScenarios.hpp"
 #include "scenarios/ObservedMainDefinition.hpp"
 #include "standalone/FloppyBirdStandaloneFlowAppConfig.hpp"
+#include "StandaloneLoopLaunchTests.hpp"
 #include "WindowRootRefusalTests.hpp"
 #include "testing/scene/ScenarioAudit.hpp"
 
@@ -384,6 +385,12 @@ void testFloppyBirdStandaloneFlowWritesExpectedAudit()
   LOKA_VERIFY(actual == expected);
   std::remove(actualPath);
   std::printf("testFloppyBirdStandaloneFlowWritesExpectedAudit passed\n");
+}
+
+void testFloppyBirdStandaloneLoopCloseBeforeFirstIdleSucceeds()
+{
+  StandaloneLoopLaunchTestSupport::verifyCloseBeforeFirstIdle<
+      loka::standalone_tests::FloppyBirdStandaloneFlowAppConfig>("_loka_floppybird_loop_close.audit");
 }
 
 void testFloppyBirdStandaloneDeclarationRefusalIsWindowless()

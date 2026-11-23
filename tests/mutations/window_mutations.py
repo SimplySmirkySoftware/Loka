@@ -15,12 +15,14 @@ def run(command, log):
 
 
 def mutation(entry, build, test, logs):
-    name, filename, old, new, pin, expected = entry
+    name, filename, old, new, pin, expected, *other_edits = entry
     path = ROOT / filename
     original = path.read_bytes()
     source = original.decode()
-    if source.count(old) != 1:
-        raise ValueError("anchor mismatch: " + name)
+    for old, new in [(old, new), *other_edits]:
+        if source.count(old) != 1:
+            raise ValueError("anchor mismatch: " + name)
+        source = source.replace(old, new)
 
     def check(phase):
         build_log = logs / f"{name}-{phase}-build.log"
@@ -36,7 +38,7 @@ def mutation(entry, build, test, logs):
 
     check("baseline")
     try:
-        path.write_bytes(source.replace(old, new).encode())
+        path.write_bytes(source.encode())
         check("mutant")
     finally:
         path.write_bytes(original)

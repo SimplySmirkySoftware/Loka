@@ -15,6 +15,7 @@
 #include "platform/null/NullScenePlatformController.hpp"
 #include "scenarios/MineSweeperScenarios.hpp"
 #include "standalone/MineSweeperStandaloneFlowAppConfig.hpp"
+#include "StandaloneLoopLaunchTests.hpp"
 #include "WindowRootRefusalTests.hpp"
 #include "platform/null/NullApp.hpp"
 #include "platform/null/NullPlatformContext.hpp"
@@ -375,6 +376,12 @@ void testMineSweeperStandaloneFlowWritesExpectedAudit()
   LOKA_VERIFY(actual == expected);
   std::remove(actualPath);
   std::printf("testMineSweeperStandaloneFlowWritesExpectedAudit passed\n");
+}
+
+void testMineSweeperStandaloneLoopCloseBeforeFirstIdleSucceeds()
+{
+  StandaloneLoopLaunchTestSupport::verifyCloseBeforeFirstIdle<
+      loka::standalone_tests::MineSweeperStandaloneFlowAppConfig>("_loka_minesweeper_loop_close.audit");
 }
 
 void testMineSweeperStandaloneDeclarationRefusalIsWindowless()

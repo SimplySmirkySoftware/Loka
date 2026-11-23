@@ -21,9 +21,11 @@ namespace loka
     class FloppyBirdStandaloneFlowAppConfig : public AppConfigurable
     {
     public:
-      explicit FloppyBirdStandaloneFlowAppConfig(PlatformContext *context,
-                                                 const platform::file::FileHandle *auditFile = 0,
-                                                 std::FILE *diagnostics = 0);
+      explicit FloppyBirdStandaloneFlowAppConfig(
+          PlatformContext *context,
+          const platform::file::FileHandle *auditFile = 0,
+          std::FILE *diagnostics = 0,
+          StandaloneRunControl::CompletionMode mode = StandaloneRunControl::CONFIGURED_COMPLETION_MODE);
       virtual ~FloppyBirdStandaloneFlowAppConfig();
 
       int exitCode() const;

@@ -20,9 +20,11 @@ namespace loka
     class HelloWorldStandaloneFlowAppConfig : public HelloWorldAppConfig
     {
     public:
-      explicit HelloWorldStandaloneFlowAppConfig(PlatformContext *context,
-                                                 const platform::file::FileHandle *auditFile = 0,
-                                                 std::FILE *diagnostics = 0);
+      explicit HelloWorldStandaloneFlowAppConfig(
+          PlatformContext *context,
+          const platform::file::FileHandle *auditFile = 0,
+          std::FILE *diagnostics = 0,
+          StandaloneRunControl::CompletionMode mode = StandaloneRunControl::CONFIGURED_COMPLETION_MODE);
       virtual ~HelloWorldStandaloneFlowAppConfig();
 
       int exitCode() const;

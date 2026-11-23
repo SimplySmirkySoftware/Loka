@@ -24,7 +24,6 @@
 #include "scenarios/ScrapbookScenarios.hpp"
 #include "scenarios/ObservedMainDefinition.hpp"
 #include "standalone/ScrapbookStandaloneFlowAppConfig.hpp"
-#include "support/WindowAdmissionTestApp.hpp"
 #include "support/MenuPresentationVerify.hpp"
 #include "StandaloneLoopLaunchTests.hpp"
 #include "WindowRootRefusalTests.hpp"
@@ -577,16 +576,6 @@ namespace
     }
   };
 
-  class LoopCloseApp : public NullApp
-  {
-  public:
-    explicit LoopCloseApp(AppConfigurable *config)
-        : NullApp(config)
-    {
-    }
-    using App::admitAndApplyWindows;
-    using App::reclaimWindows;
-  };
 } // namespace
 
 void testStandaloneLoopDeclarationRefusalIsWindowless()
@@ -613,28 +602,10 @@ void testStandaloneLoopFactoryRefusalIsWindowless()
   std::remove(path);
 }
 
-void testStandaloneLoopCloseBeforeFirstIdleSucceeds()
+void testScrapbookStandaloneLoopCloseBeforeFirstIdleSucceeds()
 {
-  const char *path = "_loka_loop_close.audit";
-  std::remove(path);
-  {
-    loka::platform::file::FileHandle file;
-    file.displayPath = loka::core::String::Literal(path);
-    WindowRootRefusalTestSupport::CountingContext context;
-    LoopScrapbookConfig config(&context, &file);
-    LoopCloseApp app(&config);
-    LOKA_VERIFY(config.exitCode() == 0);
-    config.setApp(&app);
-    app.run();
-    LOKA_VERIFY(context.creates == 1 && app.adoptedWindows().size() == 1);
-    Window *window = app.adoptedWindows()[0];
-    LOKA_VERIFY(window && window->scene() && window->scene()->liveNodeCount() > 1);
-    LOKA_VERIFY(window->scene()->getAttachedState()->get() && !window->scene()->composeRefusedForMemory());
-    app.requestWindowClose(window);
-    RunWindowAdmissionOperation(app);
-    LOKA_VERIFY(config.exitCode() == 0);
-  }
-  std::remove(path);
+  StandaloneLoopLaunchTestSupport::verifyCloseBeforeFirstIdle<loka::standalone_tests::ScrapbookStandaloneFlowAppConfig>(
+      "_loka_scrapbook_loop_close.audit");
 }
 
 void testScrapbookStandaloneDeclarationRefusalIsWindowless()

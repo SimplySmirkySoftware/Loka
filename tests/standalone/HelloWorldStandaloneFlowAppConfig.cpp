@@ -16,13 +16,14 @@ namespace loka
 
     HelloWorldStandaloneFlowAppConfig::HelloWorldStandaloneFlowAppConfig(PlatformContext *context,
                                                                          const platform::file::FileHandle *auditFile,
-                                                                         std::FILE *diagnostics)
+                                                                         std::FILE *diagnostics,
+                                                                         StandaloneRunControl::CompletionMode mode)
         : HelloWorldAppConfig(context, 0x13579BDFUL),
           audit_(auditFile ? *auditFile : ResolveStandaloneAuditFile(), "toggle-action-probe"),
-          scenario_(new (std::nothrow) scenario_tests::HelloWorldScenario(
+          scenario_(new(std::nothrow) scenario_tests::HelloWorldScenario(
               scenario_tests::SCENARIO_COMPLETION_HOLD_FINAL_SCENE, &this->audit_)),
           borrowedMainNode_(0),
-          runControl_("HelloWorld", scenario_tests::HelloWorldReelCells().dropFirst(1), diagnostics)
+          runControl_("HelloWorld", scenario_tests::HelloWorldReelCells().dropFirst(1), diagnostics, mode)
     {
     }
 

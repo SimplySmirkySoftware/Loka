@@ -21,9 +21,11 @@ namespace loka
     class MineSweeperStandaloneFlowAppConfig : public AppConfigurable
     {
     public:
-      explicit MineSweeperStandaloneFlowAppConfig(PlatformContext *context,
-                                                  const platform::file::FileHandle *auditFile = 0,
-                                                  std::FILE *diagnostics = 0);
+      explicit MineSweeperStandaloneFlowAppConfig(
+          PlatformContext *context,
+          const platform::file::FileHandle *auditFile = 0,
+          std::FILE *diagnostics = 0,
+          StandaloneRunControl::CompletionMode mode = StandaloneRunControl::CONFIGURED_COMPLETION_MODE);
       virtual ~MineSweeperStandaloneFlowAppConfig();
 
       int exitCode() const;

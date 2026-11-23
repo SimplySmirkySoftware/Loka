@@ -14,16 +14,16 @@ namespace loka
       const char *const kTutorialStandaloneCells[] = {"increment-summary-toggle"};
     }
 
-    TutorialStandaloneFlowAppConfig::TutorialStandaloneFlowAppConfig(
-        PlatformContext *context,
-        const platform::file::FileHandle *auditFile,
-        std::FILE *diagnostics)
+    TutorialStandaloneFlowAppConfig::TutorialStandaloneFlowAppConfig(PlatformContext *context,
+                                                                     const platform::file::FileHandle *auditFile,
+                                                                     std::FILE *diagnostics,
+                                                                     StandaloneRunControl::CompletionMode mode)
         : AppConfigurable(context),
           audit_(auditFile ? *auditFile : ResolveStandaloneAuditFile(), kTutorialStandaloneCells[0]),
-          scenario_(new (std::nothrow) scenario_tests::TutorialScenario(
+          scenario_(new(std::nothrow) scenario_tests::TutorialScenario(
               scenario_tests::SCENARIO_COMPLETION_HOLD_FINAL_SCENE, &this->audit_)),
           borrowedMainNode_(0),
-          runControl_("Tutorial", scenario_tests::ScenarioCellTable(kTutorialStandaloneCells, 1), diagnostics)
+          runControl_("Tutorial", scenario_tests::ScenarioCellTable(kTutorialStandaloneCells, 1), diagnostics, mode)
     {
     }
 
