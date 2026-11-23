@@ -254,8 +254,9 @@ namespace loka
         {
         }
 
-        /** Capture one item using the next committed ordinal. No sibling traversal. */
-        NumberedList &operator<<(const ItemDefinition &item)
+        /** Capture one item using the next committed ordinal. No sibling traversal.
+            Takes the item's definition base so a chained `doc::Item("x").tag(1)` is accepted too. */
+        NumberedList &operator<<(const scene::NodeDefinition<ItemProps, ItemNode> &item)
         {
           if (this->childrenCount() >= NumberedItemProps::MaximumOrdinal)
           {
