@@ -107,6 +107,15 @@ namespace
              "<p>before</p>\n<p><img src=\"map\" alt=\"Route\"></p>\n<p>after</p>\n");
     e.golden(Column() << doc::Paragraph("before") << doc::Image("", "Route"), 0, 0);
     e.golden(Column() << doc::Paragraph("before") << (doc::List() << doc::Image("map", "")), 0, 0);
+    const doc::ImageDefinition sized = doc::Image(String("map&1"), String("Route <\"A\">"), doc::ImageSize(480, 320));
+    e.golden(doc::Quote() << doc::Image("map", "") << sized << doc::Paragraph("after"),
+             "> ![](<map>)\n>\n> <img src=\"map&amp;1\" alt=\"Route &lt;&quot;A&quot;&gt;\" width=\"480\" "
+             "height=\"320\">\n>\n> after\n",
+             "<blockquote>\n<p><img src=\"map\" alt=\"\"></p>\n"
+             "<p><img src=\"map&amp;1\" alt=\"Route &lt;&quot;A&quot;&gt;\" width=\"480\" "
+             "height=\"320\"></p>\n<p>after</p>\n</blockquote>\n");
+    e.golden(Column() << doc::Paragraph("before") << doc::Image("map", "", doc::ImageSize(0, 1)), 0, 0);
+    e.golden(Column() << doc::Paragraph("before") << doc::Image("map", "", doc::ImageSize(1, 0)), 0, 0);
     const std::string invalid[] = {"a\rb", "a\nb", std::string("a\0b", 3), "a\xff"};
     for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i)
     {
@@ -207,6 +216,34 @@ void testDocumentImageRender()
   LOKA_VERIFY(doc::RenderHtml(Boundary<P::NodeType>(P(&page)), html));
   LOKA_VERIFY(markdown == "before\n\n![Route](<map (1)>)\n");
   LOKA_VERIFY(html == "<p>before</p>\n<p><img src=\"map (1)\" alt=\"Route\"></p>\n");
+  const doc::ImageSize invalid[] = {doc::ImageSize(0, 1), doc::ImageSize(1, 0)};
+  for (size_t i = 0; i < 2; ++i)
+  {
+    ColumnDefinition bad;
+    bad << doc::Paragraph("before") << doc::Image("map", "Route", invalid[i]);
+    markdown = html = "prefix";
+    LOKA_VERIFY(!doc::RenderMarkdown(Boundary<P::NodeType>(P(&bad)), markdown));
+    LOKA_VERIFY(!doc::RenderHtml(Boundary<P::NodeType>(P(&bad)), html));
+    LOKA_VERIFY(markdown == "prefix" && html == "prefix");
+  }
+}
+
+void testDocumentImageRetainedSize()
+{
+  Fixture<doc::ImageDefinition> f(doc::Image("map", "Route", doc::ImageSize(2, 1)));
+  const doc::ImageDefinition resized = doc::Image("map", "Route", doc::ImageSize(2, 3));
+  const doc::ImageProps unsized = doc::Image("map", "Route").props;
+  const doc::ImageProps zero = doc::Image("map", "Route", doc::ImageSize(0, 0)).props;
+  LOKA_VERIFY(unsized < zero && !(zero < unsized));
+  const doc::ImageProps wider = doc::Image("map", "Route", doc::ImageSize(3, 1)).props;
+  LOKA_VERIFY(resized.props < wider && !(wider < resized.props));
+  LOKA_VERIFY(f.definition.props < resized.props && !(resized.props < f.definition.props));
+  const Exit html = {true};
+  html.check(f.node(), 0, "<p><img src=\"map\" alt=\"Route\" width=\"2\" height=\"1\"></p>\n");
+  Node *resident = f.node();
+  applyProps(f.scene, resized);
+  LOKA_VERIFY(f.node() == resident);
+  html.check(f.node(), 0, "<p><img src=\"map\" alt=\"Route\" width=\"2\" height=\"3\"></p>\n");
 }
 
 void testDocumentMarkdownContainers()

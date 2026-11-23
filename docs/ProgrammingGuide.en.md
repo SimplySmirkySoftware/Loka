@@ -2392,6 +2392,9 @@ Include `app/doc/Image.hpp` to write an image block. For example,
 Markdown and `<p><img src="map.png" alt="Trail map"></p>` in HTML. On screen
 it currently shows the alternative text in italics. The alternative text is
 required. Pass `""` for a decorative image. An image cannot be a list item.
+Pass `doc::ImageSize(480, 320)` as the third argument to supply a positive
+width and height in CSS pixels. HTML adds both attributes to the image, and
+Markdown emits the same raw HTML image tag as its own block.
 
 Include `app/doc/List.hpp` and `app/doc/Quote.hpp` to group document blocks.
 

@@ -3,6 +3,7 @@
 
 #include "app/doc/detail/Projection.hpp"
 #include "app/doc/detail/ContainerWriter.hpp"
+#include "app/doc/detail/HtmlImage.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -334,8 +335,16 @@ namespace loka
             return true;
           }
           /** Cost: once per image, escape its label and destination and emit one block. */
-          void image(const std::string &source, const std::string &alt)
+          bool image(const std::string &source, const std::string &alt, const ImageSize *size)
           {
+            if (size)
+            {
+              std::string tag;
+              if (!AppendHtmlImage(tag, source, alt, size))
+                return false;
+              this->block(tag);
+              return true;
+            }
             std::string body = "![";
             for (size_t i = 0; i < alt.size(); ++i)
             {
@@ -346,6 +355,7 @@ namespace loka
             }
             CloseMarkdownLink(body, source.c_str());
             this->block(body);
+            return true;
           }
           /** Cost: each visited paragraph forwards one input. */
           virtual bool read(const ParagraphProps &p)
