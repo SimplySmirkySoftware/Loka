@@ -429,7 +429,7 @@ namespace
     Scene scene((Boundary<CappedList<Count> >()));
     scene.mount(&platform);
     loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
-    LOKA_VERIFY(root(scene)->composeResult().allocationFailed == (Count > 99));
+    LOKA_VERIFY(!root(scene)->composeResult().allocationFailed); // the limit drops the item, the page mounts
   }
 } // namespace
 

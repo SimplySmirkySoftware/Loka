@@ -2405,7 +2405,7 @@ quoted blocks in `blockquote`. An empty item shows a bullet on screen. Both
 exports omit empty bullet items and containers with no emitted content.
 
 Write a numbered list as `doc::NumberedList() << doc::Item("Find the trail.") << doc::Item("Follow the signs.")`.
-It accepts up to 99 items. Numbers start at 1 and are fixed at declaration.
+It accepts up to 99 items; an item added after the 99th is ignored. Numbers start at 1 and are fixed at declaration.
 To change the count, swap the whole list with `Show` or `Match`.
 Markdown writes numbered markers and HTML writes an `ol` with one `li` per item.
 An empty numbered item keeps its number on screen and in both exports.

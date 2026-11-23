@@ -83,6 +83,8 @@ namespace loka
           return buffer;
         }
 
+        /** Cost: reconciliation calls this once per offered item. Different ordinals compare in O(1);
+            equal ordinals, the retained case, fall through to comparing this item's own inline segments. */
         bool operator<(const scene::PropsBase &rhs) const
         {
           if (rhs.propsTypeId() != this->propsTypeId())
@@ -258,11 +260,9 @@ namespace loka
             Takes the item's definition base so a chained `doc::Item("x").tag(1)` is accepted too. */
         NumberedList &operator<<(const scene::NodeDefinition<ItemProps, ItemNode> &item)
         {
+          // The limit is an input rule, not an allocation failure: the list keeps its 99 items and mounts.
           if (this->childrenCount() >= NumberedItemProps::MaximumOrdinal)
-          {
-            scene::NoteDefinitionCaptureRefusal();
             return *this;
-          }
           scene::NodeDefinition<NumberedItemProps, NumberedItemNode> numbered(
               NumberedItemProps(item.props, this->childrenCount() + 1));
           numbered.copyTestIdPolicyFrom(item);
