@@ -121,7 +121,7 @@ Loka uses a **CMake + Ninja** based build system.
 
 For the main development and test workflow:
 
-- CMake 3.19 or newer when using `CMakePresets.json`
+- CMake 3.21 or newer when using `CMakePresets.json`
 - Ninja
 - A C++ compiler capable of building C++98 code
 - Python 3, for the test suite only (CTest drives part of it through Python scripts)
