@@ -11,11 +11,23 @@ struct Reader : BlockReader
   {
     return true;
   }
+  bool read(const NumberedItemProps &)
+  {
+    return true;
+  }
   bool enter(const ListProps &)
   {
     return true;
   }
+  bool enter(const NumberedListProps &)
+  {
+    return true;
+  }
   bool leave(const ListProps &)
+  {
+    return true;
+  }
+  bool leave(const NumberedListProps &)
   {
     return true;
   }

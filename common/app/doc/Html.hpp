@@ -54,7 +54,7 @@ namespace loka
             if (!input.collect(content, heading))
               return false;
             input.normalizeEdges();
-            if (!heading && input.runs.empty())
+            if (!heading && input.runs.empty() && this->frames[this->depth].kind != NUMBERED_LIST)
               return true;
             this->beginLeaf();
             this->fragment += '<';
@@ -91,12 +91,12 @@ namespace loka
           /** Cost: one opening tag per emitted container. */
           void open(Kind kind)
           {
-            this->fragment += kind == LIST ? "<ul>\n" : "<blockquote>\n";
+            this->fragment += kind == LIST ? "<ul>\n" : kind == NUMBERED_LIST ? "<ol>\n" : "<blockquote>\n";
           }
           /** Cost: one closing tag per emitted container. */
           void close(Kind kind)
           {
-            this->fragment += kind == LIST ? "</ul>\n" : "</blockquote>\n";
+            this->fragment += kind == LIST ? "</ul>\n" : kind == NUMBERED_LIST ? "</ol>\n" : "</blockquote>\n";
           }
           /** Cost: once per image, emit one block and escape both of its attribute values. */
           bool image(const std::string &source, const std::string &alt, const ImageSize *size)
@@ -112,6 +112,11 @@ namespace loka
           virtual bool read(const ItemProps &p)
           {
             return this->accepts(true) && this->inlineBlock(p.content, false, "li");
+          }
+
+          virtual bool read(const NumberedItemProps &p)
+          {
+            return this->frames[this->depth].acceptsOrdinal(p.ordinal()) && this->inlineBlock(p.content, false, "li");
           }
 
           /** Cost: the walk projects the authored content once per attached heading. */

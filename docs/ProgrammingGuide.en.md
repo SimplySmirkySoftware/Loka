@@ -2408,12 +2408,17 @@ On screen, each item has a bullet and its continuation lines align with its
 body. A quote indents its blocks. Markdown writes tight bullet lists and
 prefixes quoted lines with `>`. HTML writes `ul` with `li` children and wraps
 quoted blocks in `blockquote`. An empty item shows a bullet on screen. Both
-exports omit empty items and containers with no emitted content.
+exports omit empty bullet items and containers with no emitted content.
+
+Write a numbered list as `doc::NumberedList() << doc::Item("Find the trail.") << doc::Item("Follow the signs.")`.
+It accepts up to 99 items; an item added after the 99th is ignored. Numbers start at 1 and are fixed at declaration.
+To change the count, swap the whole list with `Show` or `Match`.
+Markdown writes numbered markers and HTML writes an `ol` with one `li` per item.
+An empty numbered item keeps its number on screen and in both exports.
 
 Items accept inline content and belong inside a list. Lists accept only items.
 A quote accepts paragraphs, headings, images, code blocks, lists and other quotes.
-Ordinary layout wrappers can surround these blocks. Numbered and nested lists
-are unavailable. A mis-nested tree can display on screen, but exporting it
+Ordinary layout wrappers can surround these blocks. Lists cannot be nested. A mis-nested tree can display on screen, but exporting it
 returns false and preserves the destination. These rules apply from the root
 passed to the export. Both exports accept at most 16 enclosing lists and quotes
 combined.

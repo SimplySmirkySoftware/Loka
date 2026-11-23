@@ -9,14 +9,14 @@ PROJECTION = HTML.parent / "detail/Projection.hpp"
 ESCAPE = HTML.parent / "detail/HtmlImage.hpp"
 FRAMES = HTML.parent / "detail/ContainerWriter.hpp"
 MUTATIONS = [
-    ("empty-container", FRAMES, "if (frame.previous)",
-     "if (!frame.previous) static_cast<Writer &>(*this).open(frame.kind);\n            if (true)", "Containers"),
-    ("item-outside-list", FRAMES, "return (this->frames[this->depth].kind == LIST) == item;",
-     "return item || this->frames[this->depth].kind != LIST;", "Containers"),
+    ("empty-container", FRAMES, "if (frame.emitted())",
+     "if (!frame.emitted()) static_cast<Writer &>(*this).open(frame.kind);\n            if (true)", "Containers"),
+    ("item-outside-list", FRAMES, "return item ? parent.kind == LIST : !parent.isList();",
+     "return item || !parent.isList();", "Containers"),
     # Move the quote check. Valid lists still pass, exposing the illegal List(Quote) admission.
     ("validate-after-push", FRAMES, "!this->accepts(false) || this->depth == MaxDepth",
      "(kind == LIST && !this->accepts(false)) || this->depth == MaxDepth", "Containers",
-     ("frame.kind = kind;", "frame.kind = kind; if (kind == QUOTE && !this->accepts(false)) return false;")),
+     ("frame.reset(kind);", "frame.reset(kind); if (kind == QUOTE && !this->accepts(false)) return false;")),
     # Enlarge the mutant's backing array so accepting depth 17 tests grammar without corrupting memory.
     ("drop-depth-bound", FRAMES, " || this->depth == MaxDepth", "", "Containers",
      ("Frame frames[MaxDepth + 1]", "Frame frames[MaxDepth + 2]")),
