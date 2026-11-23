@@ -23,8 +23,8 @@ def mutations(source):
     geometry = block("  const NSRect fragment =", "  *out = chars;")
     unsupported = block("    if (![manager respondsToSelector:@selector(truncatedGlyph", "\n  }")
     intersection = block("    if (truncated.location", "\n  }")
-    presence = "if (!view || !this->projection_.value())\n    return MAC_HIT_REFUSED;"
-    provenance = "if (!this->projection_.queryProvenance(chars.location, NSMaxRange(chars), source))\n    return MAC_HIT_REFUSED;"
+    presence = "if (!view || !this->links_.table().value())\n    return MAC_HIT_REFUSED;"
+    provenance = "if (!this->links_.table().queryProvenance(chars.location, NSMaxRange(chars), source))\n    return MAC_HIT_REFUSED;"
     # Last column lists the expected survivors. The line witness is decided by
     # the baseline test's explicit skip message independently on each host.
     both = ("tahoe", "mavericks")

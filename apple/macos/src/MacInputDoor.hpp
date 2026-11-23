@@ -9,6 +9,7 @@
 #include "context/MacPopupMenuContext.hpp"
 #include "context/MacScrollViewContext.hpp"
 #include "context/MacCellContext.hpp"
+#include "context/MacAttributedTextContext.hpp"
 #include "context/MacTextEditorContext.hpp"
 
 /** Complete synchronous macOS input operations, parallel to Win32InputDoor.
@@ -71,6 +72,16 @@ public:
   static void scrollerStyleChange(MacScrollViewContext &c)
   {
     collect(c.controller(), c, &MacScrollViewContext::handleScrollerStyleChange, 0, 0);
+  }
+  /** One turn per live primary DOWN. Body walks this leaf; settlement visits enrolled ledgers. */
+  static void linkDown(MacAttributedTextContext &c, void *event)
+  {
+    collect(c.controller(), c, &MacAttributedTextContext::handleLinkDown, event, 0);
+  }
+  /** One turn per live primary UP. At most one checked preparation before app publication. */
+  static void linkUp(MacAttributedTextContext &c, void *event)
+  {
+    collect(c.controller(), c, &MacAttributedTextContext::handleLinkUp, event, 0);
   }
   static void cellClick(MacCellContext &c, void *event)
   {

@@ -3252,7 +3252,8 @@ namespace
 
 namespace
 {
-  void VerifyClick(NSWindow *window, NSView *target, bool key)
+  // forwards: an old label passes both halves to its parent; AttributedText consumes them (3b-3s Q2 A).
+  void VerifyClick(NSWindow *window, NSView *target, bool key, bool forwards)
   {
     if (key)
     {
@@ -3302,7 +3303,10 @@ namespace
                                               dequeue:YES];
     if (remaining)
       [window sendEvent:remaining];
-    LOKA_VERIFY(clickCount == 2 && forwarded[0] == kTextDown && forwarded[1] == kTextUp);
+    if (forwards)
+      LOKA_VERIFY(clickCount == 2 && forwarded[0] == kTextDown && forwarded[1] == kTextUp);
+    else
+      LOKA_VERIFY(clickCount == 0);
   }
 
   void PaintUnclipped(id self, SEL, NSRect)
@@ -3424,8 +3428,8 @@ void testMacAttributedTextWindow()
     [root addSubview:label];
     for (int key = 0; key < 2; ++key)
     {
-      VerifyClick(window, label, key != 0);
-      VerifyClick(window, view, key != 0);
+      VerifyClick(window, label, key != 0, true);
+      VerifyClick(window, view, key != 0, false);
     }
     VerifyViewClipping(root, view);
     NSTextView *sibling = [[[NSTextView alloc] initWithFrame:NSMakeRect(0, 80, 160, 30)] autorelease];

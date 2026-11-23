@@ -1333,3 +1333,28 @@ namespace loka
   } // namespace macos
 } // namespace loka
 #endif
+
+#if defined(TEST_BUILD) && defined(__APPLE__)
+#include "../apple/macos/src/testing/MacLinkPressHooks.hpp"
+namespace loka
+{
+  namespace testing
+  {
+    namespace
+    {
+      MacLinkPressHook linkPressHook = 0;
+      void *linkPressData = 0;
+    } // namespace
+    void observeMacLinkPress(MacLinkPressHook hook, void *data)
+    {
+      linkPressHook = hook;
+      linkPressData = data;
+    }
+    void visitMacLinkPress(MacLinkPressVisit visit)
+    {
+      if (linkPressHook)
+        linkPressHook(visit, linkPressData);
+    }
+  } // namespace testing
+} // namespace loka
+#endif

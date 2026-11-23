@@ -1501,11 +1501,17 @@ On Win32, pressing and releasing over the same link run activates it: the
 app's `activatedLink` box receives the target. Links have no hover or pressed
 look. A modal or another window taking the mouse cancels a pending press.
 
+On macOS, press and release over the same link run to activate it. Links have
+no hover or pressed appearance. A double click activates twice. Control-click
+does not activate. If a release is lost and AppKit later sends a release
+to the text without its press, it can still activate the same link under the pointer in the window
+where the button was released. It never activates a different link.
+
 Toolbox delivers on release on the same link run. The release point is the
 cursor when the app processes the click (queued clicks may land elsewhere).
 A linked text owns clicks on its whole visible area; plain labels above it
 pass through, while native controls and shields refuse. There is no pressed
-look. Link activation on the remaining rails follows in separate work.
+look. Web link activation follows in separate work.
 
 On Win32, plain `Text` with wrap=NONE, CLIP truncation, and CENTER/RIGHT alignment
 can wrap overflowing words inside its one-line-high native control; ellipsis uses

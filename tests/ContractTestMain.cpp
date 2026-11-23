@@ -125,6 +125,7 @@
 #include "DerivedNodeStateTests.hpp"
 #ifdef __APPLE__
 #include "MacWindowAdmissionTests.hpp"
+#include "MacAttributedTextPressTests.hpp"
 #include "MacQuitEventTests.hpp"
 #include "MacURLOpenTests.hpp"
 #include "MacWindowFrameClampTests.hpp"
