@@ -10,7 +10,7 @@ FRAMES = DOC / "detail/ContainerWriter.hpp"
 MD = DOC / "Markdown.hpp"
 HTML = DOC / "Html.hpp"
 MUTATIONS = [
-    ("constant-ordinal", LIST, "item.props, this->childrenCount() + 1", "item.props, 1", "Screen"),
+    ("constant-ordinal", LIST, "item.props, static_cast<unsigned>(this->childrenCount()) + 1", "item.props, 1", "Screen"),
     ("allow-gap", FRAMES, "&& ordinal == static_cast<unsigned>(this->previous) + 1", "", "Markdown"),
     ("allow-unordered-item", FRAMES, "item ? parent.kind == LIST", "item ? parent.isList()", "Html"),
     ("unordered-tag", HTML, '"<ol>\\n"', '"<ul>\\n"', "Html"),

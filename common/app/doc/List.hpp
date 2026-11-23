@@ -264,7 +264,7 @@ namespace loka
           if (this->childrenCount() >= NumberedItemProps::MaximumOrdinal)
             return *this;
           scene::NodeDefinition<NumberedItemProps, NumberedItemNode> numbered(
-              NumberedItemProps(item.props, this->childrenCount() + 1));
+              NumberedItemProps(item.props, static_cast<unsigned>(this->childrenCount()) + 1));
           numbered.copyTestIdPolicyFrom(item);
           Base::operator<<(numbered);
           return *this;
