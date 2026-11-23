@@ -11,6 +11,8 @@ namespace loka
     {
       struct ListProps;
       struct ItemProps;
+      struct NumberedItemProps;
+      struct NumberedListProps;
       struct QuoteProps;
       struct HeadingProps;
       struct ParagraphProps;
@@ -36,6 +38,10 @@ namespace loka
 
         /** Cost: one borrowed input per visited item. */
         virtual bool read(const ItemProps &) = 0;
+        /** Each numbered container has one entry and one successful leave, with one read per item. */
+        virtual bool enter(const NumberedListProps &) = 0;
+        virtual bool leave(const NumberedListProps &) = 0;
+        virtual bool read(const NumberedItemProps &) = 0;
         /** Cost: the walk calls once per List enter, borrowing its props only. */
         virtual bool enter(const ListProps &) = 0;
         /** Cost: the walk calls once per List leave, borrowing its props only. */

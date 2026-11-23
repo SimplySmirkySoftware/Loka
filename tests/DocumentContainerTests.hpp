@@ -1,5 +1,10 @@
 #ifndef LOKA_DOCUMENT_CONTAINER_TESTS_HPP
 #define LOKA_DOCUMENT_CONTAINER_TESTS_HPP
+void testDocumentNumberedListMarkdown();
+void testDocumentNumberedListHtml();
+void testDocumentNumberedListCap();
+void testDocumentNumberedListScreen();
+void testDocumentNumberedListRetention();
 void testDocumentImageMarkdown();
 void testDocumentImageHtml();
 void testDocumentImageRender();

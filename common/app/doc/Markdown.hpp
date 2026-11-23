@@ -286,10 +286,19 @@ namespace loka
           /** Cost: each completed Markdown container needs no closing delimiter. */
           void close(Kind) {}
           /** Cost: each emitted leaf scans its own spelling once, prefixing physical lines. */
-          void block(const std::string &value)
+          void block(const std::string &value, const NumberedItemProps *numbered = 0)
           {
             this->beginLeaf();
-            const bool item = this->frames[this->depth].kind == LIST;
+            const bool item = this->frames[this->depth].isList();
+            std::string marker;
+            if (item)
+            {
+              const char delimiter = this->frames[this->depth - 1].siblingMarker();
+              if (numbered)
+                marker = numbered->marker(delimiter);
+              else
+                marker += delimiter;
+            }
             const unsigned quotes = this->depth - (item ? 1 : 0);
             size_t start = 0;
             for (;;)
@@ -299,11 +308,12 @@ namespace loka
               if (item)
               {
                 if (start)
-                  this->fragment += "  ";
+                  this->fragment.append(marker.size() + 1, ' ');
                 else
                 {
-                  this->fragment += this->frames[this->depth - 1].previous;
-                  this->fragment += ' ';
+                  this->fragment += marker;
+                  if (!value.empty())
+                    this->fragment += ' ';
                 }
               }
               this->fragment.append(value, start, end == std::string::npos ? end : end - start);
@@ -325,13 +335,13 @@ namespace loka
             return true;
           }
           /** Cost: once per inline leaf, check its parent and spell its own runs once. */
-          bool inlineLeaf(const AttributedString &content, bool item)
+          bool inlineLeaf(const AttributedString &content, const NumberedItemProps *numbered = 0)
           {
             std::string body;
-            if (!this->accepts(item) || !WriteInline(content, false, body))
+            if (!WriteInline(content, false, body))
               return false;
-            if (!body.empty())
-              this->block(body);
+            if (numbered || !body.empty())
+              this->block(body, numbered);
             return true;
           }
           /** Cost: once per image, escape its label and destination and emit one block. */
@@ -360,12 +370,16 @@ namespace loka
           /** Cost: each visited paragraph forwards one input. */
           virtual bool read(const ParagraphProps &p)
           {
-            return this->inlineLeaf(p.content, false);
+            return this->accepts(false) && this->inlineLeaf(p.content);
           }
           /** Cost: each visited item forwards one input. */
           virtual bool read(const ItemProps &p)
           {
-            return this->inlineLeaf(p.content, true);
+            return this->accepts(true) && this->inlineLeaf(p.content);
+          }
+          virtual bool read(const NumberedItemProps &p)
+          {
+            return this->frames[this->depth].acceptsOrdinal(p.ordinal()) && this->inlineLeaf(p.content, &p);
           }
           /** Cost: one collection per visited code block, then linear newline and fence scans. */
           virtual bool read(const CodeBlockProps &p)

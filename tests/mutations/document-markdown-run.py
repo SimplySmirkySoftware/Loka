@@ -9,9 +9,9 @@ PROJECTION = MARKDOWN.parent / "detail/Projection.hpp"
 WALK = MARKDOWN.parent / "BlockWalk.hpp"
 FRAMES = MARKDOWN.parent / "detail/ContainerWriter.hpp"
 MUTATIONS = [
-    ("drop-marker", MARKDOWN, "this->fragment += this->frames[this->depth - 1].previous;", "", "Containers"),
+    ("drop-marker", MARKDOWN, "this->fragment += marker;", "", "Containers"),
     ("drop-prefix-level", MARKDOWN, "i < quotes;", "i + 1 < quotes;", "Containers"),
-    ("ignore-sibling-marker", FRAMES, "(parent.previous == '-' ? '*' : '-')", "'-'", "Containers"),
+    ("ignore-sibling-marker", FRAMES, "this->previous == '-' ? '*' : '-'", "'-'", "Containers"),
     ("skip-leave", WALK, "return reader.leave(props) ? scene::DOCUMENT_BLOCK_READ : scene::DOCUMENT_BLOCK_REFUSED;",
      "return scene::DOCUMENT_BLOCK_READ;", "Containers"),
     ("prune", WALK, "case scene::DOCUMENT_BLOCK_READ:\n            return true;",

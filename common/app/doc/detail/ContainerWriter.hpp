@@ -22,12 +22,50 @@ namespace loka
           {
             ROOT,
             LIST,
+            NUMBERED_LIST,
             QUOTE
           };
           struct Frame
           {
             Kind kind;
-            char previous; // zero if empty, list marker for a list, 'p' for any other block
+
+            void reset(Kind parent)
+            {
+              this->kind = parent;
+              this->previous = 0;
+            }
+            bool emitted() const
+            {
+              return this->previous != 0;
+            }
+            bool isList() const
+            {
+              return this->kind == LIST || this->kind == NUMBERED_LIST;
+            }
+            bool acceptsOrdinal(unsigned ordinal) const
+            {
+              return this->kind == NUMBERED_LIST && ordinal <= NumberedItemProps::MaximumOrdinal
+                     && ordinal == static_cast<unsigned>(this->previous) + 1;
+            }
+            char siblingMarker() const
+            {
+              assert(!this->isList());
+              return this->previous;
+            }
+            void recordChild(Kind child)
+            {
+              if (this->kind == NUMBERED_LIST)
+                ++this->previous;
+              else if (child == LIST)
+                this->previous = this->previous == '-' ? '*' : '-';
+              else if (child == NUMBERED_LIST)
+                this->previous = this->previous == '.' ? ')' : '.';
+              else
+                this->previous = 'p';
+            }
+
+          private:
+            char previous;
           };
           enum
           {
@@ -39,13 +77,13 @@ namespace loka
           ContainerWriter()
               : depth(0)
           {
-            this->frames[0].kind = ROOT;
-            this->frames[0].previous = 0;
+            this->frames[0].reset(ROOT);
           }
           /** Cost: each semantic event checks its immediate parent once, including empty inputs. */
           bool accepts(bool item) const
           {
-            return (this->frames[this->depth].kind == LIST) == item;
+            const Frame &parent = this->frames[this->depth];
+            return item ? parent.kind == LIST : !parent.isList();
           }
           /** Cost: once per emitted leaf, visit at most sixteen enclosing frames, opening each once. */
           void beginLeaf()
@@ -54,13 +92,13 @@ namespace loka
             for (unsigned i = 0; i <= this->depth; ++i)
             {
               const bool leaf = i == this->depth;
-              if (!leaf && this->frames[i + 1].previous)
+              if (!leaf && this->frames[i + 1].emitted())
                 continue;
               Frame &parent = this->frames[i];
               const Kind child = leaf ? ROOT : this->frames[i + 1].kind;
-              if (parent.previous && parent.kind != LIST)
+              if (parent.emitted() && !parent.isList())
                 writer.separator(i);
-              parent.previous = child == LIST ? (parent.previous == '-' ? '*' : '-') : 'p';
+              parent.recordChild(child);
               if (!leaf)
                 writer.open(child);
             }
@@ -84,15 +122,14 @@ namespace loka
             if (!this->accepts(false) || this->depth == MaxDepth)
               return false;
             Frame &frame = this->frames[++this->depth];
-            frame.kind = kind;
-            frame.previous = 0;
+            frame.reset(kind);
             return true;
           }
           /** Cost: one frame and at most one closing tag per completed container. */
           bool pop()
           {
             Frame &frame = this->frames[this->depth--];
-            if (frame.previous)
+            if (frame.emitted())
               static_cast<Writer &>(*this).close(frame.kind);
             return true;
           }
@@ -103,6 +140,14 @@ namespace loka
           }
           /** Cost: once per visited List leave, one local frame. */
           virtual bool leave(const ListProps &)
+          {
+            return this->pop();
+          }
+          virtual bool enter(const NumberedListProps &)
+          {
+            return this->push(NUMBERED_LIST);
+          }
+          virtual bool leave(const NumberedListProps &)
           {
             return this->pop();
           }
