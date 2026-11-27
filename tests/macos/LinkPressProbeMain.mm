@@ -210,17 +210,17 @@ namespace
     if (context.get())
     {
       ProbeApp manual(context.get());
-      SelfCheck check(context.get());
-      AppConfigurable *config = checking ? &check : &manual;
+      SelfCheck selfCheck(context.get());
+      AppConfigurable *config = checking ? &selfCheck : &manual;
       loka::core::ScopedPtr<App> app(context->createApp(config, 0, 0));
       if (app.get())
       {
-        check.app = app.get();
+        selfCheck.app = app.get();
         {
-          Observe observe(checking ? &check : 0);
+          Observe observe(checking ? &selfCheck : 0);
           app->run();
         }
-        return checking ? check.result() : 0;
+        return checking ? selfCheck.result() : 0;
       }
     }
     std::puts(checking ? "self-check FAIL bootstrap" : "probe bootstrap failed");
