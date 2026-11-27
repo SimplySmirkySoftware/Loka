@@ -1,4 +1,5 @@
 #include "app/doc/List.hpp"
+#include "app/doc/Image.hpp"
 #include "app/doc/Quote.hpp"
 #include "app/doc/CodeBlock.hpp"
 #include "app/doc/Heading.hpp"
@@ -43,8 +44,10 @@ namespace
                    << doc::Paragraph(Styled("Download the ", TextStyle()) + doc::Link("map", "https://example.org/map"))
                    << doc::CodeBlock("survey --offline")
                    << (doc::List() << (Column() << For(32, checklist, ComponentItemFactory<doc::ItemProps>())))
+                   << (doc::NumberedList() << doc::Item("Find the trail.") << doc::Item("Follow the signs."))
                    << (Show(*this->showNotes_.state())
-                       << (doc::Quote() << doc::Paragraph("Record the trail conditions."))));
+                       << (doc::Quote() << doc::Image("map.png", "Trail & ridge", doc::ImageSize(480, 320))
+                                        << doc::Paragraph("Record the trail conditions."))));
     }
   };
 } // namespace

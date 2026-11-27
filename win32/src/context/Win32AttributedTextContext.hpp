@@ -53,7 +53,7 @@ private:
   static void EnsureClassRegistered();
   static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
   HitAnswer prepareLinkHit(POINT client, LinkHit &out);
-  bool queryEligibleRun(const LinkHit &hit, Win32PressedRun &out) const;
+  bool queryEligibleRun(const LinkHit &hit, loka::app::internal::PressedRun &out) const;
   void handleLinkButton(UINT, LPARAM);
   friend class Win32InputDoor;
   void clearMeasurement();

@@ -1027,3 +1027,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   loka_enable_warnings(documentMarkdownLink)
   add_test(NAME documentMarkdownLink COMMAND documentMarkdownLink)
 endif()
+
+loka_compile_pin(document-numbered-list-item
+  REFUSES pins/refuses_document_numbered_list_item.cpp
+  ACCEPTS pins/accepts_document_numbered_list_item.cpp)

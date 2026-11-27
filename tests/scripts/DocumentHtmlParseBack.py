@@ -18,7 +18,7 @@ def html_projection(html5lib, source):
         for block in parent:
             if block.tail != "\n":
                 raise ValueError("missing block separator")
-            if block.tag in ("ul", "blockquote"):
+            if block.tag in ("ul", "ol", "blockquote"):
                 value = blocks(block, "\n")
             elif block.tag == "pre":
                 if len(block) != 1 or block.text or block[0].tag != "code" or block[0].tail or len(block[0]):

@@ -29,7 +29,7 @@ class PageParser(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         self.tree.start(tag, dict(attrs))
-        if tag in ("meta", "link"):
+        if tag in ("meta", "link", "img"):
             self.tree.end(tag)
 
     def handle_endtag(self, tag):
@@ -39,9 +39,9 @@ class PageParser(HTMLParser):
         self.tree.data(data)
 
 
-def page_tree(path):
+def page_tree(html):
     parser = PageParser()
-    parser.feed(path.read_text(encoding="utf-8"))
+    parser.feed(html)
     parser.close()
     return parser.tree.close()
 
@@ -56,7 +56,7 @@ def files(directory, sheet):
 
 def pages(directory):
     for name, (title, heading, destinations) in PAGES.items():
-        root = page_tree(directory / name)
+        root = page_tree((directory / name).read_text(encoding="utf-8"))
         assert [node.text for node in root.findall("head/title")] == [title]
         assert [node.text for node in root.iter("h1")] == [heading]
         assert [n.get("href") for n in root.findall('head/link[@rel="stylesheet"]')] == ["site.css"]
@@ -70,20 +70,49 @@ def pages(directory):
         assert len(root.findall(".//ul/li/a")) == len(destinations)
 
 
+def images_are_local(root, emitted):
+    for image in root.iter("img"):
+        src = image.get("src")
+        if not src or "/" in src or urlsplit(src).scheme or src not in emitted:
+            return False
+        if not src.endswith((".png", ".jpg", ".gif")):  # The writer's image suffixes; a page or stylesheet is no image.
+            return False
+    return True
+
+
+def check_page(html, directory, emitted, expected):
+    root = page_tree(html)
+    assert images_are_local(root, emitted)
+    assert [a.get("href") for a in root.iter("a")] == expected
+    assert [a.get("href") for a in root.findall(".//ul/li/a")] == expected
+    for node in root.iter():
+        if "href" in node.attrib:
+            href = node.attrib["href"]
+            url = urlsplit(href)
+            if url.scheme or url.netloc:
+                assert href.startswith(REPO)
+            else:
+                target = (directory / url.path).resolve()
+                assert target.parent == directory.resolve() and target.is_file()
+
+
 def links(directory):
+    emitted = {p.name for p in directory.iterdir() if p.is_file()}
+    control = page_tree('<p><img src="map.png"></p>')
+    assert images_are_local(control, {"map.png"})
+    assert not images_are_local(control, set())
+    assert not images_are_local(page_tree('<p><img src="site.css"></p>'), {"site.css"})
     for name, (_, _, expected) in PAGES.items():
-        root = page_tree(directory / name)
-        assert [a.get("href") for a in root.iter("a")] == expected
-        assert [a.get("href") for a in root.findall(".//ul/li/a")] == expected
-        for node in root.iter():
-            if "href" in node.attrib:
-                href = node.attrib["href"]
-                url = urlsplit(href)
-                if url.scheme or url.netloc:
-                    assert href.startswith(REPO)
-                else:
-                    target = (directory / url.path).resolve()
-                    assert target.parent == directory.resolve() and target.is_file()
+        html = (directory / name).read_text(encoding="utf-8")
+        check_page(html, directory, emitted, expected)
+        # No published page has an image yet, so prove the page check itself refuses a missing one.
+        broken = html.replace("</main>", '<p><img src="missing.png" alt=""></p></main>')
+        assert broken != html
+        try:
+            check_page(broken, directory, emitted, expected)
+        except AssertionError:
+            continue
+        raise AssertionError(name + ": a missing image passed the page check")
 
 
 def parse(directory):

@@ -47,8 +47,8 @@ def layer_mutations():
              "[[self lokaTextContainer]", OWNER),
         kill("window-move-door", "presentation_->dropPresented();\n  }\n  [super viewWillMove",
              "\n  }\n  [super viewWillMove", OWNER),
-        kill("retirement-door", "    this->clearProjection();\n    [(NSView *)this->view_ remove",
-             "    this->projection_.clear();\n    [(NSView *)this->view_ remove", OWNER),
+        kill("retirement-door", "    this->links_.clear(this->view_);\n    [(NSView *)this->view_ remove",
+             "    this->links_.clear(0);\n    [(NSView *)this->view_ remove", OWNER),
         kill("native-width", "    [[self lokaTextContainer] setContainerSize:NSMakeSize(width, kMacTextContainerHeight)];",
              "", OWNER),
         kill("commit-installed", " || !presentation_->installed()", "", OWNER),
@@ -209,8 +209,7 @@ def mutations():
         "trace.entries + 1 == MacTestRepaintEntries()", path=CONTROLLER)
     add("omit-root-mark", "  [root setNeedsDisplay:YES];", "", "PassRepaint", 'trace.sends == "MD"', path=CONTROLLER)
     add("repaint-L", "  if (MacTextLayerCapable())\n    return;\n", "", "PassScope", "trace.sends.empty()", "both", CONTROLLER)
-    add("omit-hide-drop", "  if (next != loka::app::scene::NODE_FACT_ATTACHED)\n"
-        "    [(LokaAttributedTextView *)this->view_ dropWindowPresentation];\n", "", "Drops", NONE + " && " + SIZE)
+    add("omit-hide-drop", "    [(LokaAttributedTextView *)this->view_ dropWindowPresentation];\n  }\n", "  }\n", "Drops", NONE + " && " + SIZE)
     add("clear-L-on-placement", "      if (this->record_.path == MacPresentedRecord::WINDOW)\n        this->dropPresented();",
         "      this->dropPresented();", "LayerRecordKept", "[view queryPresentedFact:&fact] && [[view layer] contents] == image", "both")
     add("keep-partial-after-resize", "else if (!presentation_->matchesWindowSize(bounds.size))\n    presentation_->dropPresented();",

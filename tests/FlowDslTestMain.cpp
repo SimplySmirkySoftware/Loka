@@ -130,6 +130,7 @@
 #include "MacNodeHandlerEnsureTests.hpp"
 #include "MacScrollViewTests.hpp"
 #include "MacWindowAdmissionTests.hpp"
+#include "MacAttributedTextPressTests.hpp"
 #include "MacQuitEventTests.hpp"
 #include "MacURLOpenTests.hpp"
 #include "MacWindowFrameClampTests.hpp"
@@ -210,6 +211,7 @@
 #include "TextAlignmentTests.hpp"
 // UTF-8 route, edge, and style-boundary pins are registered in ContractTestRegistry.inc.
 #include "AttributedStringTests.hpp"
+#include "LinkPressSessionTests.hpp"
 #include "AttributedTextTests.hpp"
 #include "DocumentVocabularyTests.hpp"
 #include "DocumentHeadlessTests.hpp"

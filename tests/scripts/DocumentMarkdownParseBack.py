@@ -18,6 +18,10 @@ def projection(parser, source):
         elif token.type == "fence" and not token.info:
             stack[-1][1].append(("pre", plain_glyphs(token.content)))
         elif token.nesting == 1:
+            if token.type == "list_item_open" and stack[-1][0] == "ol":
+                expected_number = len(stack[-1][1]) + 1
+                if token.info != str(expected_number):
+                    raise ValueError(f"ordered item {expected_number} has source ordinal {token.info!r}")
             node = (token.tag, [])
             stack[-1][1].append(node)
             stack.append(node)
@@ -87,14 +91,14 @@ def expected_leaf(kind, glyphs):
     return [({"h": "h2", "c": "pre", "p": "p"}[kind], glyphs)] if glyphs or kind != "p" else []
 
 
-def authored_forest(nodes):
+def authored_forest(nodes, parent=None):
     forest = []
     for tag, value in nodes:
-        if tag in ("blockquote", "ul"):
-            children = authored_forest(value)
+        if tag in ("blockquote", "ul", "ol"):
+            children = authored_forest(value, tag)
             if children:
                 forest.append((tag, children))
-        elif value or tag in ("h2", "pre"):
+        elif value or tag in ("h2", "pre") or (tag == "li" and parent == "ol"):
             if tag == "h2":
                 value = value.replace("\n", " ")
             if tag == "pre" and value and not value.endswith("\n"):

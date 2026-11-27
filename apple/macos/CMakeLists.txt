@@ -139,6 +139,7 @@ if(NOT LOKA_MAC_OS_10_4)
     ${PROJECT_SOURCE_DIR}/tests/MacMenuProjectionTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacNativeResourceRetirementTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacNodeHandlerEnsureTests.mm
+    ${PROJECT_SOURCE_DIR}/tests/MacAttributedTextPressTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacNaturalWidthTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacInputDoorTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacTextStoreTests.mm

@@ -271,6 +271,10 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
       "import pathlib, subprocess, sys; sys.exit(subprocess.check_output([sys.argv[1], '--html']) != pathlib.Path(sys.argv[2]).read_bytes())"
       $<TARGET_FILE:DocumentPage> ${PROJECT_SOURCE_DIR}/example/DocumentPage/FieldGuide.html)
 
+    add_test(NAME testDocumentImageParseBack COMMAND python3
+      ${PROJECT_SOURCE_DIR}/tests/scripts/DocumentImageParseBack.py $<TARGET_FILE:DocumentPage>)
+    set_tests_properties(testDocumentImageParseBack PROPERTIES SKIP_RETURN_CODE 77)
+
     add_executable(DocumentSite example/DocumentSite/main.cpp)
     add_executable(DocumentSiteFixture tests/DocumentSiteFixture.cpp)
     add_executable(LokaSite site/main.cpp)
