@@ -1,5 +1,6 @@
 #ifndef LOKA_APP_DOC_LIST_HPP
 #define LOKA_APP_DOC_LIST_HPP
+#include "app/doc/CodeBlock.hpp"
 #include "app/doc/InlineBlock.hpp"
 #include "app/doc/Container.hpp"
 #include "app/nodes/nestable/Box.hpp"
@@ -300,44 +301,45 @@ namespace loka
         };
       } // namespace detail
 
-      /** An item and its captured child lists. Copying clones the captured subtrees. */
+      /** An item and its captured lists and code blocks. Copying clones the captured subtrees. */
       class NestedItem
       {
         typedef scene::NodeDefinition<ItemProps, ItemNode> Head;
         Head head_;
-        Column lists_;
+        Column children_;
 
         friend struct List;
         friend struct NumberedList;
         friend NestedItem operator<<(const Head &, const List &);
         friend NestedItem operator<<(const Head &, const NumberedList &);
+        friend NestedItem operator<<(const Head &, const CodeBlockDefinition &);
         NestedItem &operator=(const NestedItem &);
 
         NestedItem(const Head &head, const scene::NodeDefinitionBase &first)
             : head_(head)
         {
-          this->lists_.gap(ListGap);
+          this->children_.gap(ListGap);
           this->capture(first);
         }
 
-        void capture(const scene::NodeDefinitionBase &list)
+        void capture(const scene::NodeDefinitionBase &child)
         {
-          const size_t before = this->lists_.childrenCount();
-          this->lists_ << list;
-          if (this->lists_.childrenCount() != before + 1)
-            this->lists_ = Column().gap(ListGap);
+          const size_t before = this->children_.childrenCount();
+          this->children_ << child;
+          if (this->children_.childrenCount() != before + 1)
+            this->children_ = Column().gap(ListGap);
         }
 
-        NestedItem &appendList(const scene::NodeDefinitionBase &list)
+        NestedItem &appendChild(const scene::NodeDefinitionBase &child)
         {
-          if (this->lists_.childrenCount())
-            this->capture(list);
+          if (this->children_.childrenCount())
+            this->capture(child);
           return *this;
         }
 
         bool captured() const
         {
-          if (this->lists_.childrenCount())
+          if (this->children_.childrenCount())
             return true;
           scene::NoteDefinitionCaptureRefusal();
           return false;
@@ -353,7 +355,7 @@ namespace loka
             *shell << head;
             if (shell->childrenCount() == 1)
             {
-              row->gap(0) << Box().width(indent) << this->lists_;
+              row->gap(0) << Box().width(indent) << this->children_;
               if (row->childrenCount() == 2)
               {
                 shell->addOwnedChild(row.take());
@@ -368,20 +370,30 @@ namespace loka
       public:
         NestedItem(const NestedItem &other)
             : head_(other.head_),
-              lists_(other.lists_)
+              children_(other.children_)
         {
         }
         NestedItem &operator<<(const List &list)
         {
-          return this->appendList(list);
+          return this->appendChild(list);
         }
         NestedItem &operator<<(const NumberedList &list);
+        NestedItem &operator<<(const CodeBlockDefinition &code)
+        {
+          return this->appendChild(code);
+        }
       };
 
       /** Capture the first child list and preserve the authored head's metadata. */
       inline NestedItem operator<<(const scene::NodeDefinition<ItemProps, ItemNode> &head, const List &list)
       {
         return NestedItem(head, list);
+      }
+
+      inline NestedItem operator<<(const scene::NodeDefinition<ItemProps, ItemNode> &head,
+                                   const CodeBlockDefinition &code)
+      {
+        return NestedItem(head, code);
       }
 
       inline List &List::operator<<(const NestedItem &item)
@@ -441,7 +453,7 @@ namespace loka
 
       inline NestedItem &NestedItem::operator<<(const NumberedList &list)
       {
-        return this->appendList(list);
+        return this->appendChild(list);
       }
 
       typedef NumberedList OrderedList;

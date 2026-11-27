@@ -913,6 +913,150 @@ void testDocumentNestedListScreen()
   checkNestedScreen<doc::NumberedList>(28);
 }
 
+void testDocumentItemBlocksOrder()
+{
+  const doc::CodeBlockDefinition code = doc::CodeBlock("c");
+  bothExits(doc::NumberedList() << (doc::Item("Configure:") << doc::CodeBlock("cmake --preset testing")),
+            "1. Configure:\n   ```\n   cmake --preset testing\n   ```\n",
+            "<ol>\n<li>Configure:<pre><code>cmake --preset testing\n</code></pre></li>\n</ol>\n");
+  const doc::NumberedList bare = doc::NumberedList() << doc::Item("");
+  bothExits(doc::List() << (doc::Item("h") << doc::CodeBlock("") << bare << code << code),
+            "- h\n  ```\n  ```\n  1.\n  ```\n  c\n  ```\n  ```\n  c\n  ```\n",
+            "<ul>\n<li>h<pre><code></code></pre><ol>\n<li></li>\n</ol>"
+            "<pre><code>c\n</code></pre><pre><code>c\n</code></pre></li>\n</ul>\n");
+  bothExits(doc::List() << (doc::Item("h") << doc::List() << bare << code) << doc::Item("s"),
+            "- h\n\n  1.\n  ```\n  c\n  ```\n- s\n",
+            "<ul>\n<li>h<ol>\n<li></li>\n</ol><pre><code>c\n</code></pre></li>\n<li>s</li>\n</ul>\n");
+}
+
+void testDocumentItemBlocksPayload()
+{
+  bothExits(
+      doc::Quote() << (doc::List() << (doc::Item("h") << doc::CodeBlock(" x\r\n\r\n\ty\r  \n\t\n```\n>\n-\n1.\n#"))),
+      "> - h\n>   ````\n>    x\n>\n>   \ty\n>     \n>   \t\n>   ```\n>   >\n>   -\n>   1.\n>   #\n>   ````\n",
+      "<blockquote>\n<ul>\n<li>h<pre><code> x\n\n\ty\n  "
+      "\n\t\n```\n&gt;\n-\n1.\n#\n</code></pre></li>\n</ul>\n</blockquote>\n");
+}
+
+void testDocumentItemBlocksIndent()
+{
+  const doc::List inner = doc::List() << (doc::Item("") << doc::CodeBlock("x"));
+  bothExits(inner, "- ```\n  x\n  ```\n", "<ul>\n<li><pre><code>x\n</code></pre></li>\n</ul>\n");
+  bothExits(doc::List() << (doc::Item("") << (doc::List() << (doc::Item("") << inner))),
+            "- - - ```\n      x\n      ```\n",
+            "<ul>\n<li><ul>\n<li><ul>\n<li><pre><code>x\n</code></pre></li>\n</ul></li>\n</ul></li>\n</ul>\n");
+  doc::NumberedList parent;
+  std::string html = "<ol>\n";
+  for (unsigned i = 1; i < 10; ++i)
+  {
+    parent << doc::Item("");
+    html += "<li></li>\n";
+  }
+  parent << (doc::Item("ten") << doc::CodeBlock("x"));
+  html += "<li>ten<pre><code>x\n</code></pre></li>\n</ol>\n";
+  bothExits(parent, "1.\n2.\n3.\n4.\n5.\n6.\n7.\n8.\n9.\n10. ten\n    ```\n    x\n    ```\n", html.c_str());
+}
+
+void testDocumentItemBlocksGrammar()
+{
+  doc::CodeBlockDefinition code = doc::CodeBlock("valid");
+  doc::List direct;
+  static_cast<INestableDefinition &>(direct) << code;
+  bothExits(direct, 0, 0);
+  doc::NumberedList numbered;
+  numbered.addChild(&code);
+  bothExits(numbered, 0, 0);
+
+  doc::detail::NestedItemDefinition beforeHead;
+  beforeHead << code;
+  doc::List misplaced;
+  misplaced.addChild(&beforeHead);
+  bothExits(misplaced, 0, 0);
+  *misplaced.childrenHead()->asNestableDefinition() << doc::Item("late");
+  bothExits(misplaced, 0, 0);
+
+  const doc::List valid = doc::List() << (doc::Item("head") << code);
+  const doc::ParagraphDefinition paragraph = doc::Paragraph("p");
+  const doc::ImageDefinition image = doc::Image("src", "alt");
+  const doc::Quote quote;
+  const doc::HeadingDefinition heading = doc::Heading(2, "h");
+  const NodeDefinitionBase *forbidden[] = {&paragraph, &image, &quote, &heading};
+  for (size_t i = 0; i < sizeof(forbidden) / sizeof(*forbidden); ++i)
+  {
+    doc::detail::NestedItemDefinition shell;
+    shell << doc::Item("head") << *forbidden[i];
+    doc::List first;
+    first.addChild(&shell);
+    bothExits(first, 0, 0);
+
+    doc::List invalid(valid);
+    *invalid.childrenHead()->asNestableDefinition() << *forbidden[i];
+    bothExits(invalid, 0, 0);
+  }
+  bothExits(
+      doc::List() << (doc::Item("head") << doc::CodeBlock(DocumentExportCases::raw(std::string("a\0b", 3)))), 0, 0);
+}
+
+namespace
+{
+  class RefusingCode : public doc::CodeBlockDefinition
+  {
+  public:
+    RefusingCode()
+        : doc::CodeBlockDefinition(doc::CodeBlock("refuse"))
+    {
+    }
+    virtual NodeDefinitionBase *clone() const
+    {
+      return 0;
+    }
+  };
+
+  class ItemCodeLayout : public NullScenePlatformController
+  {
+  public:
+    std::vector<int> cardEdges;
+    virtual bool prepareProjectedLayout(Node *node, LayoutState &offer)
+    {
+      CardBandNode *band = node ? node->asCardBandNode() : 0;
+      if (band && band->props.role == CARD_BAND_TOP && offer.width > 0)
+        this->cardEdges.push_back(offer.x);
+      return NullScenePlatformController::prepareProjectedLayout(node, offer);
+    }
+  };
+} // namespace
+
+void testDocumentItemBlocksCaptureRefusal()
+{
+  RefusingCode probe;
+  doc::NestedItem first = doc::Item("head") << probe;
+  first << doc::CodeBlock("later");
+  checkRefusedInsertion(first);
+  doc::NestedItem later = doc::Item("head") << doc::CodeBlock("first");
+  later << probe << doc::List();
+  checkRefusedInsertion(later);
+}
+
+void testDocumentItemBlocksScreen()
+{
+  const doc::NestedItem step = doc::Item("h") << doc::CodeBlock("c");
+  Column page;
+  page << (doc::List() << step) << (doc::NumberedList() << step);
+  ItemCodeLayout platform;
+  Scene scene((Boundary<Tree<Column> >(Props<Column>(&page))));
+  LOKA_VERIFY(scene.mount(&platform));
+  loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+  settle(scene);
+  LayoutState offer;
+  offer.x = 13;
+  offer.width = 200;
+  offer.height = 200;
+  platform.cardEdges.clear();
+  platform.projectLayoutForTesting(root(scene)->childrenHead(), offer);
+  LOKA_VERIFY(platform.cardEdges.size() == 2);
+  LOKA_VERIFY(platform.cardEdges[0] == offer.x + 16 && platform.cardEdges[1] == offer.x + 28);
+}
+
 namespace
 {
   /** Builds authored definitions and records their input forest before either export. */
@@ -925,18 +1069,61 @@ namespace
       this->state = this->state * 1664525u + 1013904223u;
       return (this->state >> 8) % limit;
     }
+    const char *recordText(const char *value)
+    {
+      this->authored += '"';
+      for (const char *c = value; *c; ++c)
+      {
+        switch (*c)
+        {
+        case '\n':
+          this->authored += "\\n";
+          break;
+        case '\r':
+          this->authored += "\\r";
+          break;
+        case '\t':
+          this->authored += "\\t";
+          break;
+        case '"':
+        case '\\':
+          this->authored += '\\';
+          this->authored += *c;
+          break;
+        default:
+          this->authored += *c;
+        }
+      }
+      this->authored += '"';
+      return value;
+    }
     const char *body()
     {
       const char *values[] = {"", "a", "b\nc", "- x", "1. y", "> z", "* * *", "a\n\nb", "日本語", "a & b"};
-      const char *value = values[this->pick(static_cast<unsigned>(sizeof(values) / sizeof(*values)))];
-      this->authored += '"';
-      for (const char *c = value; *c; ++c)
-        if (*c == '\n')
-          this->authored += "\\n";
-        else
-          this->authored += *c;
-      this->authored += '"';
-      return value;
+      return this->recordText(values[this->pick(static_cast<unsigned>(sizeof(values) / sizeof(*values)))]);
+    }
+    doc::CodeBlockDefinition code()
+    {
+      const char *values[] = {
+          "", "\n", "a\n\nb", " a\r\n\tb\rc", "  \n\t\n", "```", ">\n-\n1.\n#", "\"<&>\\", "日本語"};
+      this->authored += "[\"pre\",";
+      const char *text = this->recordText(values[this->pick(static_cast<unsigned>(sizeof(values) / sizeof(*values)))]);
+      this->authored += ']';
+      return doc::CodeBlock(text);
+    }
+
+    // The first insertion returns a value, subsequent insertions extend it in place.
+    template <class Result, class Item> Result appendChild(Item &item, unsigned depth)
+    {
+      switch (this->pick(3))
+      {
+      case 0:
+        return item << this->list<doc::List>("ul", depth, this->pick(4));
+      case 1:
+        return item << this->list<doc::NumberedList>("ol", depth, this->pick(4));
+      default:
+        return item << this->code();
+      }
     }
 
     template <class List> List list(const char *tag, unsigned depth, unsigned count)
@@ -952,20 +1139,15 @@ namespace
         const bool linked = this->pick(4) == 0;
         this->authored += linked ? ",\"link\":\"map\"," : ",\"link\":\"\",";
         const doc::ItemDefinition item = linked ? doc::Item(doc::Link(value, "map")) : doc::Item(value);
-        this->authored += "\"lists\":[";
+        this->authored += "\"children\":[";
         const unsigned children = depth < 3 && this->pick(4) == 0 ? this->pick(3) + 1 : 0;
         if (children)
         {
-          doc::NestedItem nested = this->pick(2)
-                                       ? item << this->list<doc::List>("ul", depth + 1, this->pick(4))
-                                       : item << this->list<doc::NumberedList>("ol", depth + 1, this->pick(4));
+          doc::NestedItem nested = this->appendChild<doc::NestedItem>(item, depth + 1);
           for (unsigned child = 1; child < children; ++child)
           {
             this->authored += ',';
-            if (this->pick(2))
-              nested << this->list<doc::List>("ul", depth + 1, this->pick(4));
-            else
-              nested << this->list<doc::NumberedList>("ol", depth + 1, this->pick(4));
+            this->appendChild<doc::NestedItem &>(nested, depth + 1);
           }
           parent << nested;
         }

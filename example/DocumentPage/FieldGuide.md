@@ -2,14 +2,13 @@
 
 Download the [map](<https://example.org/map>)
 
-```
-survey --offline
-```
-
 - Pack a notebook.
 - Bring water.
 
 1. Find the trail.
+   ```
+   survey --offline
+   ```
 2. Follow the signs.
    - Look for blue posts.
 

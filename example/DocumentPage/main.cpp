@@ -42,10 +42,9 @@ namespace
       c.declare(
           Column() << doc::Heading(1, "Field guide")
                    << doc::Paragraph(Styled("Download the ", TextStyle()) + doc::Link("map", "https://example.org/map"))
-                   << doc::CodeBlock("survey --offline")
                    << (doc::List() << (Column() << For(32, checklist, ComponentItemFactory<doc::ItemProps>())))
                    << (doc::NumberedList()
-                       << doc::Item("Find the trail.")
+                       << (doc::Item("Find the trail.") << doc::CodeBlock("survey --offline"))
                        << (doc::Item("Follow the signs.") << (doc::List() << doc::Item("Look for blue posts."))))
                    << (Show(*this->showNotes_.state())
                        << (doc::Quote() << doc::Image("map.svg", "Trail & ridge", doc::ImageSize(480, 320))

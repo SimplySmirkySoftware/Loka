@@ -1040,6 +1040,18 @@ loka_compile_pin(document-item-child
   REFUSES pins/refuses_document_item_child.cpp
   ACCEPTS pins/accepts_document_item_child.cpp)
 
+loka_compile_pin(document-item-code
+  REFUSES pins/refuses_document_item_code.cpp
+  ACCEPTS pins/accepts_document_item_code.cpp)
+
+loka_compile_pin(document-item-later-code
+  REFUSES pins/refuses_document_item_later_code.cpp
+  ACCEPTS pins/accepts_document_item_later_code.cpp)
+
+loka_compile_pin(document-item-tagged-code
+  REFUSES pins/refuses_document_item_tagged_code.cpp
+  ACCEPTS pins/accepts_document_item_tagged_code.cpp)
+
 loka_compile_pin(document-nested-child
   REFUSES pins/refuses_document_nested_child.cpp
   ACCEPTS pins/accepts_document_nested_child.cpp)

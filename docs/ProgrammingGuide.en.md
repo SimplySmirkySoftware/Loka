@@ -2430,14 +2430,20 @@ The child list aligns with the parent item's body on screen. Markdown indents
 it by the width of the parent marker and its following space. An empty head
 shares its line with the first emitted child. HTML places each child list inside
 its parent's `li`. Markdown adds one blank line after a nonempty head when its
-first emitted child list starts with a bare numbered marker.
+first emitted child is a list that starts with a bare numbered marker.
+
+An item can own code blocks and lists in any order. For example,
+`doc::NumberedList() << (doc::Item("Configure:") << doc::CodeBlock("cmake --preset testing"))`
+puts the command under its step, aligned with the item body. Markdown writes
+an indented fenced block. HTML places `<pre><code>` directly inside the item's
+`li`. Other block types under an item do not compile.
 
 Items accept inline content and belong inside a list. A list accepts only items.
 A quote accepts paragraphs, headings, images, code blocks, lists and other
 quotes. Ordinary layout wrappers can surround these blocks.
 Exporting a mis-nested tree returns false and
 preserves the destination. From the export root, both formats accept up to 16
-enclosing lists, items with child lists, and quotes combined.
+enclosing lists, items with children, and quotes combined.
 
 Inline content is `AttributedString`. Use `Styled` for bold, italic, and other
 styles; `doc::Link` contributes a linked segment and `doc::Code` contributes
