@@ -11,6 +11,7 @@
 #endif
 #include "platform/file/FileHandle.hpp"
 #include "core/util/ScopedPtr.hpp"
+#include "app/core/WindowDefinition.hpp"
 
 class App;
 class Window;
@@ -66,6 +67,8 @@ namespace loka
           std::FILE *diagnostics = 0,
           CompletionMode completionMode = CONFIGURED_COMPLETION_MODE);
 
+      /** Records the successful logical factory return, before any idle or mount verdict. */
+      void windowCreated();
       void setApp(App *app);
       /** Existing App borrow used to admit a scenario rearm between steps. */
       App *app() const { return this->borrowedApp_; }
@@ -99,11 +102,36 @@ namespace loka
       scenario_tests::ScenarioReelPosition position_;
       scenario_tests::ScenarioReelTitle operatorTitle_;
       long tick_;
-      bool mountFailed_;
+      enum LaunchPhase
+      {
+        AWAITING_WINDOW,
+        WINDOW_CREATED,
+        FAILED
+      };
+      LaunchPhase phase_;
       bool completed_;
 #if LOKA_STANDALONE_PERFORMANCE_RUNS > 0
       StandaloneScenarioVerdict scenarioVerdict_;
 #endif
+    };
+
+    /** Reports a successful factory return to the config that owns the run. */
+    class StandaloneWindowDefinition : public WindowDefinition<WindowProps>
+    {
+    public:
+      StandaloneWindowDefinition(const WindowProps &props, StandaloneRunControl &runControl)
+          : WindowDefinition<WindowProps>(props),
+            runControl_(runControl)
+      {
+      }
+      virtual WindowDefinitionBase *clone() const
+      {
+        return cloneWindowDefinition(*this);
+      }
+      virtual Window *create(PlatformContext *context) const;
+
+    private:
+      StandaloneRunControl &runControl_;
     };
 
     /** Owns one scenario rail and replaces it failure-atomically between

@@ -14,17 +14,17 @@ namespace loka
       const char *const kFloppyBirdStandaloneCells[] = {"fixed-step-flaps"};
     }
 
-    FloppyBirdStandaloneFlowAppConfig::FloppyBirdStandaloneFlowAppConfig(
-        PlatformContext *context,
-        const platform::file::FileHandle *auditFile,
-        std::FILE *diagnostics)
+    FloppyBirdStandaloneFlowAppConfig::FloppyBirdStandaloneFlowAppConfig(PlatformContext *context,
+                                                                         const platform::file::FileHandle *auditFile,
+                                                                         std::FILE *diagnostics,
+                                                                         StandaloneRunControl::CompletionMode mode)
         : AppConfigurable(context),
           audit_(auditFile ? *auditFile : ResolveStandaloneAuditFile(), kFloppyBirdStandaloneCells[0]),
-          scenario_(new (std::nothrow) scenario_tests::FloppyBirdScenario(
+          scenario_(new(std::nothrow) scenario_tests::FloppyBirdScenario(
               scenario_tests::SCENARIO_COMPLETION_HOLD_FINAL_SCENE, &this->audit_)),
           game_(scenario_tests::FloppyBirdScenarioSeed()),
           borrowedMainNode_(0),
-          runControl_("FloppyBird", scenario_tests::ScenarioCellTable(kFloppyBirdStandaloneCells, 1), diagnostics)
+          runControl_("FloppyBird", scenario_tests::ScenarioCellTable(kFloppyBirdStandaloneCells, 1), diagnostics, mode)
     {
     }
 
@@ -44,16 +44,18 @@ namespace loka
 
     void FloppyBirdStandaloneFlowAppConfig::compose(AppComposition &composition)
     {
-      composition << scenario_tests::MakeScenarioWindow<floppybird::MainProps, floppybird::MainNode>(
-          floppybird::MainProps(&this->game_),
-          &this->borrowedMainNode_,
-          380,
-          340,
-          kFloppyBirdStandaloneTitle,
-          app::IdlePolicy::everyTick(),
-          &FloppyBirdStandaloneFlowAppConfig::OnWindowIdle,
-          this,
-          this->runControl_.displayTitleState(kFloppyBirdStandaloneTitle));
+      composition << StandaloneWindowDefinition(
+          scenario_tests::MakeScenarioWindowProps<floppybird::MainProps, floppybird::MainNode>(
+              floppybird::MainProps(&this->game_),
+              &this->borrowedMainNode_,
+              380,
+              340,
+              kFloppyBirdStandaloneTitle,
+              app::IdlePolicy::everyTick(),
+              &FloppyBirdStandaloneFlowAppConfig::OnWindowIdle,
+              this,
+              this->runControl_.displayTitleState(kFloppyBirdStandaloneTitle)),
+          this->runControl_);
     }
 
     void FloppyBirdStandaloneFlowAppConfig::OnWindowIdle(Window *window,

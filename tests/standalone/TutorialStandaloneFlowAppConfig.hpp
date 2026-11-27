@@ -21,9 +21,11 @@ namespace loka
     class TutorialStandaloneFlowAppConfig : public AppConfigurable
     {
     public:
-      explicit TutorialStandaloneFlowAppConfig(PlatformContext *context,
-                                               const platform::file::FileHandle *auditFile = 0,
-                                               std::FILE *diagnostics = 0);
+      explicit TutorialStandaloneFlowAppConfig(
+          PlatformContext *context,
+          const platform::file::FileHandle *auditFile = 0,
+          std::FILE *diagnostics = 0,
+          StandaloneRunControl::CompletionMode mode = StandaloneRunControl::CONFIGURED_COMPLETION_MODE);
       virtual ~TutorialStandaloneFlowAppConfig();
 
       int exitCode() const;

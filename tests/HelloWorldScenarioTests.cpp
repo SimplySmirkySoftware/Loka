@@ -25,6 +25,7 @@
 #include "scenarios/SceneScenarioDriver.hpp"
 #include "standalone/HelloWorldStandaloneFlowAppConfig.hpp"
 #include "support/MenuPresentationVerify.hpp"
+#include "StandaloneLoopLaunchTests.hpp"
 #include "WindowRootRefusalTests.hpp"
 #include "testing/scene/ScenarioAudit.hpp"
 
@@ -295,6 +296,12 @@ void testHelloWorldStandaloneWindowMatchesExample()
   delete standaloneWindow;
 
   std::printf("testHelloWorldStandaloneWindowMatchesExample passed\n");
+}
+
+void testHelloWorldStandaloneLoopCloseBeforeFirstIdleSucceeds()
+{
+  StandaloneLoopLaunchTestSupport::verifyCloseBeforeFirstIdle<
+      loka::standalone_tests::HelloWorldStandaloneFlowAppConfig>("_loka_helloworld_loop_close.audit");
 }
 
 void testHelloWorldStandaloneDeclarationRefusalIsWindowless()

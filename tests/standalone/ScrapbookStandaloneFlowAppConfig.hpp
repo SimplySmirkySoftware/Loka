@@ -20,9 +20,11 @@ namespace loka
     class ScrapbookStandaloneFlowAppConfig : public ScrapbookAppConfig
     {
     public:
-      explicit ScrapbookStandaloneFlowAppConfig(PlatformContext *context,
-                                                const platform::file::FileHandle *auditFile = 0,
-                                                std::FILE *diagnostics = 0);
+      explicit ScrapbookStandaloneFlowAppConfig(
+          PlatformContext *context,
+          const platform::file::FileHandle *auditFile = 0,
+          std::FILE *diagnostics = 0,
+          StandaloneRunControl::CompletionMode mode = StandaloneRunControl::CONFIGURED_COMPLETION_MODE);
       virtual ~ScrapbookStandaloneFlowAppConfig();
 
       int exitCode() const;

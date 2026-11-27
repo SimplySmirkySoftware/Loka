@@ -25,6 +25,7 @@
 #include "scenarios/ObservedMainDefinition.hpp"
 #include "standalone/ScrapbookStandaloneFlowAppConfig.hpp"
 #include "support/MenuPresentationVerify.hpp"
+#include "StandaloneLoopLaunchTests.hpp"
 #include "WindowRootRefusalTests.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include "testing/scene/ScenarioAudit.hpp"
@@ -552,6 +553,59 @@ void testScrapbookStandaloneMenuMatchesExample()
   LOKA_VERIFY(loka::testing::MenuPresentationsEqual(exampleMenu, standaloneMenu));
 
   std::printf("testScrapbookStandaloneMenuMatchesExample passed\n");
+}
+
+namespace
+{
+  class LoopScrapbookConfig : public loka::standalone_tests::ScrapbookStandaloneFlowAppConfig
+  {
+  public:
+    LoopScrapbookConfig(PlatformContext *context, const loka::platform::file::FileHandle *file)
+        : ScrapbookStandaloneFlowAppConfig(
+              context, file, 0, loka::standalone_tests::StandaloneRunControl::REARM_COMPLETED_SCENE)
+    {
+    }
+  };
+
+  class RefusingWindowContext : public NullPlatformContext
+  {
+  public:
+    virtual Window *createWindow(const WindowProps &)
+    {
+      return 0;
+    }
+  };
+
+} // namespace
+
+void testStandaloneLoopDeclarationRefusalIsWindowless()
+{
+  WindowRootRefusalTestSupport::verifyDeclarationRefusal<LoopScrapbookConfig>("_loka_loop_refusal.audit");
+}
+
+void testStandaloneLoopFactoryRefusalIsWindowless()
+{
+  const char *path = "_loka_loop_factory_refusal.audit";
+  std::remove(path);
+  {
+    loka::platform::file::FileHandle file;
+    file.displayPath = loka::core::String::Literal(path);
+    RefusingWindowContext context;
+    LoopScrapbookConfig config(&context, &file);
+    NullApp app(&config);
+    LOKA_VERIFY(config.exitCode() == 0);
+    config.setApp(&app);
+    app.run();
+    LOKA_VERIFY(app.adoptedWindows().empty() && app.bootstrapWindowlessReported());
+    LOKA_VERIFY(config.exitCode() != 0);
+  }
+  std::remove(path);
+}
+
+void testScrapbookStandaloneLoopCloseBeforeFirstIdleSucceeds()
+{
+  StandaloneLoopLaunchTestSupport::verifyCloseBeforeFirstIdle<loka::standalone_tests::ScrapbookStandaloneFlowAppConfig>(
+      "_loka_scrapbook_loop_close.audit");
 }
 
 void testScrapbookStandaloneDeclarationRefusalIsWindowless()
