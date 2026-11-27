@@ -2405,10 +2405,11 @@ Column()
 ```
 
 On screen, each item has a bullet and its continuation lines align with its
-body. A quote indents its blocks. Markdown writes tight bullet lists and
+body. A quote indents its blocks. Markdown writes tight lists for flat bullet items and
 prefixes quoted lines with `>`. HTML writes `ul` with `li` children and wraps
 quoted blocks in `blockquote`. An empty item shows a bullet on screen. Both
-exports omit empty bullet items and containers with no emitted content.
+exports omit a bullet item when its body and children contribute nothing.
+They also omit containers with no emitted content.
 
 Write a numbered list as `doc::NumberedList() << doc::Item("Find the trail.") << doc::Item("Follow the signs.")`.
 It accepts up to 99 items; an item added after the 99th is ignored. Numbers start at 1 and are fixed at declaration.
@@ -2416,12 +2417,27 @@ To change the count, swap the whole list with `Show` or `Match`.
 Markdown writes numbered markers and HTML writes an `ol` with one `li` per item.
 An empty numbered item keeps its number on screen and in both exports.
 
-Items accept inline content and belong inside a list. Lists accept only items.
-A quote accepts paragraphs, headings, images, code blocks, lists and other quotes.
-Ordinary layout wrappers can surround these blocks. Lists cannot be nested. A mis-nested tree can display on screen, but exporting it
-returns false and preserves the destination. These rules apply from the root
-passed to the export. Both exports accept at most 16 enclosing lists and quotes
-combined.
+To nest either kind of list, attach it to the item that owns it. Keep the
+parentheses around the item and its child list. An item can own several child
+lists of either kind. Placing a list directly in another list does not compile.
+
+```cpp
+doc::List() << (doc::Item("Fruit") << (doc::List() << doc::Item("Apple")))
+            << doc::Item("Bread");
+```
+
+The child list aligns with the parent item's body on screen. Markdown indents
+it by the width of the parent marker and its following space. An empty head
+shares its line with the first emitted child. HTML places each child list inside
+its parent's `li`. Markdown adds one blank line after a nonempty head when its
+first emitted child list starts with a bare numbered marker.
+
+Items accept inline content and belong inside a list. A list accepts only items.
+A quote accepts paragraphs, headings, images, code blocks, lists and other
+quotes. Ordinary layout wrappers can surround these blocks.
+Exporting a mis-nested tree returns false and
+preserves the destination. From the export root, both formats accept up to 16
+enclosing lists, items with child lists, and quotes combined.
 
 Inline content is `AttributedString`. Use `Styled` for bold, italic, and other
 styles; `doc::Link` contributes a linked segment and `doc::Code` contributes

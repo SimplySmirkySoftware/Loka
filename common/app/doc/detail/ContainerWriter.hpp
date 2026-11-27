@@ -23,20 +23,47 @@ namespace loka
             ROOT,
             LIST,
             NUMBERED_LIST,
+            NESTED_ITEM,
             QUOTE
           };
           struct Frame
           {
             Kind kind;
+            std::string head;
+
+            // Before any output, a shell can hold a head and an ordered list can have accepted ordinal 1.
+            // Subsequent emitted children reuse the ordinary ordinal or sibling-marker representation.
+            enum
+            {
+              Pending = -1
+            };
+            bool needsHead() const
+            {
+              return this->kind == NESTED_ITEM && this->previous == 0;
+            }
+            void captureHead(std::string &body)
+            {
+              this->head.swap(body);
+              this->previous = Pending;
+            }
+            unsigned ordinal() const
+            {
+              return this->previous == Pending ? 1U : static_cast<unsigned>(this->previous);
+            }
+            void advanceOrdinal()
+            {
+              this->previous = static_cast<signed char>(this->previous ? this->previous + 1 : Pending);
+            }
 
             void reset(Kind parent)
             {
               this->kind = parent;
+              this->head.clear();
               this->previous = 0;
             }
             bool emitted() const
             {
-              return this->previous != 0;
+              return this->previous > 0;
             }
             bool isList() const
             {
@@ -45,7 +72,7 @@ namespace loka
             bool acceptsOrdinal(unsigned ordinal) const
             {
               return this->kind == NUMBERED_LIST && ordinal <= NumberedItemProps::MaximumOrdinal
-                     && ordinal == static_cast<unsigned>(this->previous) + 1;
+                     && ordinal == this->ordinal() + 1;
             }
             char siblingMarker() const
             {
@@ -55,7 +82,7 @@ namespace loka
             void recordChild(Kind child)
             {
               if (this->kind == NUMBERED_LIST)
-                ++this->previous;
+                this->previous = static_cast<signed char>(this->ordinal());
               else if (child == LIST)
                 this->previous = this->previous == '-' ? '*' : '-';
               else if (child == NUMBERED_LIST)
@@ -65,7 +92,7 @@ namespace loka
             }
 
           private:
-            char previous;
+            signed char previous;
           };
           enum
           {
@@ -80,36 +107,77 @@ namespace loka
             this->frames[0].reset(ROOT);
           }
           /** Cost: each semantic event checks its immediate parent once, including empty inputs. */
-          bool accepts(bool item) const
+          bool acceptsBlock() const
           {
-            const Frame &parent = this->frames[this->depth];
-            return item ? parent.kind == LIST : !parent.isList();
+            const Kind parent = this->frames[this->depth].kind;
+            return parent == ROOT || parent == QUOTE;
           }
-          /** Cost: once per emitted leaf, visit at most sixteen enclosing frames, opening each once. */
-          void beginLeaf()
+
+          /** Open the ancestors of a visible leaf, outside in. A pending shell opens with its owned head. */
+          void beginLeaf(unsigned level, bool bare)
           {
             Writer &writer = static_cast<Writer &>(*this);
-            for (unsigned i = 0; i <= this->depth; ++i)
+            for (unsigned i = 0; i <= level; ++i)
             {
-              const bool leaf = i == this->depth;
+              const bool leaf = i == level;
               if (!leaf && this->frames[i + 1].emitted())
                 continue;
               Frame &parent = this->frames[i];
               const Kind child = leaf ? ROOT : this->frames[i + 1].kind;
-              if (parent.emitted() && !parent.isList())
+              if (parent.emitted() && (parent.kind == ROOT || parent.kind == QUOTE))
                 writer.separator(i);
               parent.recordChild(child);
               if (!leaf)
-                writer.open(child);
+                writer.open(i + 1, bare && i + 2 == level);
             }
           }
 
+          void beginLeaf()
+          {
+            this->beginLeaf(this->depth, false);
+          }
+
           using BlockReader::read;
+          /** One projection per accepted item. Shells retain the spelling until a child emits or the shell ends. */
+          bool readItem(const AttributedString &content, const NumberedItemProps *numbered)
+          {
+            Frame &parent = this->frames[this->depth];
+            const bool nested = parent.kind == NESTED_ITEM;
+            if (nested && !parent.needsHead())
+              return false;
+            const unsigned level = nested ? this->depth - 1 : this->depth;
+            Frame &list = this->frames[level];
+            if (numbered ? !list.acceptsOrdinal(numbered->ordinal()) : list.kind != LIST)
+              return false;
+            Writer &writer = static_cast<Writer &>(*this);
+            std::string body;
+            if (!writer.spellItem(content, body))
+              return false;
+            if (numbered)
+              list.advanceOrdinal();
+            if (nested)
+              parent.captureHead(body);
+            else if (numbered || !body.empty())
+            {
+              this->beginLeaf(level, body.empty());
+              writer.item(level, body, false);
+            }
+            return true;
+          }
+          virtual bool read(const ItemProps &p)
+          {
+            return this->readItem(p.content, 0);
+          }
+          virtual bool read(const NumberedItemProps &p)
+          {
+            return this->readItem(p.content, &p);
+          }
+
           /** Cost: once per image, check its parent and collect its two fields before emitting it. */
           virtual bool read(const ImageProps &p)
           {
             std::string source, alt;
-            if (!this->accepts(false) || !CollectDocumentLine(p.source, source) || source.empty()
+            if (!this->acceptsBlock() || !CollectDocumentLine(p.source, source) || source.empty()
                 || !CollectDocumentLine(p.alt, alt))
               return false;
             return static_cast<Writer &>(*this).image(source, alt, p.size.get());
@@ -119,19 +187,40 @@ namespace loka
           /** Cost: the walk checks one parent and initializes one frame per container entry. */
           bool push(Kind kind)
           {
-            if (!this->accepts(false) || this->depth == MaxDepth)
+            const Frame &parent = this->frames[this->depth];
+            const bool admitted =
+                kind == NESTED_ITEM
+                    ? parent.isList()
+                    : this->acceptsBlock() || (kind != QUOTE && parent.kind == NESTED_ITEM && !parent.needsHead());
+            if (!admitted || this->depth == MaxDepth)
               return false;
-            Frame &frame = this->frames[++this->depth];
-            frame.reset(kind);
+            this->frames[++this->depth].reset(kind);
             return true;
           }
-          /** Cost: one frame and at most one closing tag per completed container. */
-          bool pop()
+          /** A shell without visible child lists follows the same emission rule as a flat item. */
+          bool pop(Kind kind)
           {
-            Frame &frame = this->frames[this->depth--];
+            Frame &frame = this->frames[this->depth];
+            if (frame.kind != kind || frame.needsHead())
+              return false;
+            Writer &writer = static_cast<Writer &>(*this);
+            --this->depth;
             if (frame.emitted())
-              static_cast<Writer &>(*this).close(frame.kind);
+              writer.close(kind);
+            else if (kind == NESTED_ITEM && (!frame.head.empty() || this->frames[this->depth].kind == NUMBERED_LIST))
+            {
+              this->beginLeaf(this->depth, frame.head.empty());
+              writer.item(this->depth, frame.head, false);
+            }
             return true;
+          }
+          virtual bool enter(const NestedItemProps &)
+          {
+            return this->push(NESTED_ITEM);
+          }
+          virtual bool leave(const NestedItemProps &)
+          {
+            return this->pop(NESTED_ITEM);
           }
           /** Cost: once per visited List enter, one local frame. */
           virtual bool enter(const ListProps &)
@@ -141,7 +230,7 @@ namespace loka
           /** Cost: once per visited List leave, one local frame. */
           virtual bool leave(const ListProps &)
           {
-            return this->pop();
+            return this->pop(LIST);
           }
           virtual bool enter(const NumberedListProps &)
           {
@@ -149,7 +238,7 @@ namespace loka
           }
           virtual bool leave(const NumberedListProps &)
           {
-            return this->pop();
+            return this->pop(NUMBERED_LIST);
           }
           /** Cost: once per visited Quote enter, one local frame. */
           virtual bool enter(const QuoteProps &)
@@ -159,7 +248,7 @@ namespace loka
           /** Cost: once per visited Quote leave, one local frame. */
           virtual bool leave(const QuoteProps &)
           {
-            return this->pop();
+            return this->pop(QUOTE);
           }
         };
       } // namespace detail

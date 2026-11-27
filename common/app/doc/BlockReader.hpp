@@ -9,6 +9,7 @@ namespace loka
   {
     namespace doc
     {
+      struct NestedItemProps;
       struct ListProps;
       struct ItemProps;
       struct NumberedItemProps;
@@ -42,6 +43,9 @@ namespace loka
         virtual bool enter(const NumberedListProps &) = 0;
         virtual bool leave(const NumberedListProps &) = 0;
         virtual bool read(const NumberedItemProps &) = 0;
+        /** Visit the head and child lists once per nested item. */
+        virtual bool enter(const NestedItemProps &) = 0;
+        virtual bool leave(const NestedItemProps &) = 0;
         /** Cost: the walk calls once per List enter, borrowing its props only. */
         virtual bool enter(const ListProps &) = 0;
         /** Cost: the walk calls once per List leave, borrowing its props only. */

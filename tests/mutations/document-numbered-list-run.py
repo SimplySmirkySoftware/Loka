@@ -11,12 +11,12 @@ MD = DOC / "Markdown.hpp"
 HTML = DOC / "Html.hpp"
 MUTATIONS = [
     ("constant-ordinal", LIST, "item.props, static_cast<unsigned>(this->childrenCount()) + 1", "item.props, 1", "Screen"),
-    ("allow-gap", FRAMES, "&& ordinal == static_cast<unsigned>(this->previous) + 1", "", "Markdown"),
-    ("allow-unordered-item", FRAMES, "item ? parent.kind == LIST", "item ? parent.isList()", "Html"),
+    ("allow-gap", FRAMES, "&& ordinal == this->ordinal() + 1", "", "Markdown"),
+    ("allow-unordered-item", FRAMES, ": list.kind != LIST)", ": !list.isList())", "Html"),
     ("unordered-tag", HTML, '"<ol>\\n"', '"<ul>\\n"', "Html"),
-    ("fixed-indent", MD, "marker.size() + 1", "numbered ? 3 : 2", "Markdown"),
+    ("fixed-indent", MD, "marker.size() + 1", "marker.size() > 1 ? 3 : 2", "Markdown"),
     ("repeat-delimiter", FRAMES, "this->previous == '.' ? ')' : '.'", "'.'", "Markdown"),
-    ("drop-empty", MD, "numbered || !body.empty()", "!body.empty()", "Markdown"),
+    ("drop-empty", FRAMES, "numbered || !body.empty()", "!body.empty()", "Markdown"),
     ("drop-cap", LIST, "this->childrenCount() >= NumberedItemProps::MaximumOrdinal", "false", "Cap"),
     ("ignore-ordinal-order", LIST, "return this->ordinal_ < other.ordinal_;", "return false;", "Retention"),
     ("ignore-ordinal-compatibility", LIST, "return node->props.ordinal() == props.ordinal();",

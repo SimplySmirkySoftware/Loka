@@ -5,6 +5,7 @@
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/Text.hpp"
 #include <cstdio>
+#include <new>
 
 namespace loka
 {
@@ -30,9 +31,16 @@ namespace loka
           return false;
         }
       };
+      class NestedItem;
+      struct NumberedList;
+      struct NumberedListProps;
+
       /** Unordered list. Cost: the nestable definition owns one capture per authored child. */
       struct List : scene::NestableNodeDefinition<ListProps, ListProps::NodeType, List>
       {
+        using scene::NestableNodeDefinition<ListProps, ListProps::NodeType, List>::operator<<;
+        List &operator<<(const NestedItem &item);
+
         /** Cost: authoring starts with one childless definition. */
         List() {}
         /** Cost: each clone starts with one childless definition. */
@@ -40,6 +48,13 @@ namespace loka
             : scene::NestableNodeDefinition<ListProps, ListProps::NodeType, List>(shell)
         {
         }
+
+      private:
+        // A list belongs to an item. The definition bases close the spelling after tag() as well.
+        List &operator<<(const List &);
+        List &operator<<(const NumberedList &);
+        List &operator<<(const scene::NodeDefinition<ListProps, ListProps::NodeType> &);
+        List &operator<<(const scene::NodeDefinition<NumberedListProps, ContainerNode<NumberedListProps> > &);
       };
       class ItemNode;
 
@@ -61,6 +76,17 @@ namespace loka
         }
       };
       class NumberedItemNode;
+      namespace detail
+      {
+        /** Format an admitted ordinal for its screen or Markdown marker. */
+        inline std::string OrdinalMarker(unsigned ordinal, char delimiter)
+        {
+          char buffer[12]; // holds any unsigned and the delimiter
+          ::snprintf(buffer, sizeof(buffer), "%u%c", ordinal, delimiter);
+          return buffer;
+        }
+      } // namespace detail
+
       /** A captured numbered item owns its declaration ordinal and borrows its link destination. */
       struct NumberedItemProps : InlineBlockProps<NumberedItemProps>
       {
@@ -78,9 +104,7 @@ namespace loka
         /** Format the committed ordinal for a screen or Markdown marker in bounded space. */
         std::string marker(char delimiter) const
         {
-          char buffer[4];
-          ::snprintf(buffer, sizeof(buffer), "%u%c", this->ordinal_, delimiter);
-          return buffer;
+          return detail::OrdinalMarker(this->ordinal_, delimiter);
         }
 
         /** Cost: reconciliation calls this once per offered item. Different ordinals compare in O(1);
@@ -246,6 +270,127 @@ namespace loka
         }
       };
 
+      /** The item and its indented lists share one vertical stack. */
+      struct NestedItemProps : scene::NodePropsBase<NestedItemProps>
+      {
+        struct TypeTag
+        {
+        };
+        typedef ContainerNode<NestedItemProps> NodeType;
+        static StackProps layout()
+        {
+          return ListProps::layout();
+        }
+        bool operator<(const scene::PropsBase &) const
+        {
+          return false;
+        }
+      };
+
+      namespace detail
+      {
+        struct NestedItemDefinition
+            : scene::NestableNodeDefinition<NestedItemProps, NestedItemProps::NodeType, NestedItemDefinition>
+        {
+          NestedItemDefinition() {}
+          explicit NestedItemDefinition(const scene::CloneShell<NestedItemDefinition> &shell)
+              : scene::NestableNodeDefinition<NestedItemProps, NestedItemProps::NodeType, NestedItemDefinition>(shell)
+          {
+          }
+        };
+      } // namespace detail
+
+      /** An item and its captured child lists. Copying clones the captured subtrees. */
+      class NestedItem
+      {
+        typedef scene::NodeDefinition<ItemProps, ItemNode> Head;
+        Head head_;
+        Column lists_;
+
+        friend struct List;
+        friend struct NumberedList;
+        friend NestedItem operator<<(const Head &, const List &);
+        friend NestedItem operator<<(const Head &, const NumberedList &);
+        NestedItem &operator=(const NestedItem &);
+
+        NestedItem(const Head &head, const scene::NodeDefinitionBase &first)
+            : head_(head)
+        {
+          this->lists_.gap(ListGap);
+          this->capture(first);
+        }
+
+        void capture(const scene::NodeDefinitionBase &list)
+        {
+          const size_t before = this->lists_.childrenCount();
+          this->lists_ << list;
+          if (this->lists_.childrenCount() != before + 1)
+            this->lists_ = Column().gap(ListGap);
+        }
+
+        NestedItem &appendList(const scene::NodeDefinitionBase &list)
+        {
+          if (this->lists_.childrenCount())
+            this->capture(list);
+          return *this;
+        }
+
+        bool captured() const
+        {
+          if (this->lists_.childrenCount())
+            return true;
+          scene::NoteDefinitionCaptureRefusal();
+          return false;
+        }
+
+        /** Complete both owning definitions before transferring the shell to its parent. */
+        void appendTo(scene::NestableDefinitionBase &parent, const scene::NodeDefinitionBase &head, int indent) const
+        {
+          core::OwnedDef<detail::NestedItemDefinition> shell(new (std::nothrow) detail::NestedItemDefinition());
+          core::OwnedDef<Row> row(new (std::nothrow) Row());
+          if (shell.isSet() && row.isSet())
+          {
+            *shell << head;
+            if (shell->childrenCount() == 1)
+            {
+              row->gap(0) << Box().width(indent) << this->lists_;
+              if (row->childrenCount() == 2)
+              {
+                shell->addOwnedChild(row.take());
+                parent.addOwnedChild(shell.take());
+                return;
+              }
+            }
+          }
+          scene::NoteDefinitionCaptureRefusal();
+        }
+
+      public:
+        NestedItem(const NestedItem &other)
+            : head_(other.head_),
+              lists_(other.lists_)
+        {
+        }
+        NestedItem &operator<<(const List &list)
+        {
+          return this->appendList(list);
+        }
+        NestedItem &operator<<(const NumberedList &list);
+      };
+
+      /** Capture the first child list and preserve the authored head's metadata. */
+      inline NestedItem operator<<(const scene::NodeDefinition<ItemProps, ItemNode> &head, const List &list)
+      {
+        return NestedItem(head, list);
+      }
+
+      inline List &List::operator<<(const NestedItem &item)
+      {
+        if (item.captured())
+          item.appendTo(*this, item.head_, MarkerWidth + ItemGap);
+        return *this;
+      }
+
       /** A list of up to 99 inline items, numbered in declaration order. */
       struct NumberedList : scene::NestableNodeDefinition<NumberedListProps, NumberedListProps::NodeType, NumberedList>
       {
@@ -261,15 +406,44 @@ namespace loka
         NumberedList &operator<<(const scene::NodeDefinition<ItemProps, ItemNode> &item)
         {
           // The limit is an input rule, not an allocation failure: the list keeps its 99 items and mounts.
-          if (this->childrenCount() >= NumberedItemProps::MaximumOrdinal)
+          if (this->full())
             return *this;
+          Base::operator<<(this->numberedHead(item));
+          return *this;
+        }
+
+        NumberedList &operator<<(const NestedItem &item)
+        {
+          if (!this->full() && item.captured())
+            item.appendTo(*this, this->numberedHead(item.head_), NumberedMarkerWidth + ItemGap);
+          return *this;
+        }
+
+      private:
+        bool full() const
+        {
+          return this->childrenCount() >= NumberedItemProps::MaximumOrdinal;
+        }
+
+        scene::NodeDefinition<NumberedItemProps, NumberedItemNode>
+        numberedHead(const scene::NodeDefinition<ItemProps, ItemNode> &item) const
+        {
           scene::NodeDefinition<NumberedItemProps, NumberedItemNode> numbered(
               NumberedItemProps(item.props, static_cast<unsigned>(this->childrenCount()) + 1));
           numbered.copyTestIdPolicyFrom(item);
-          Base::operator<<(numbered);
-          return *this;
+          return numbered;
         }
       };
+      inline NestedItem operator<<(const scene::NodeDefinition<ItemProps, ItemNode> &head, const NumberedList &list)
+      {
+        return NestedItem(head, list);
+      }
+
+      inline NestedItem &NestedItem::operator<<(const NumberedList &list)
+      {
+        return this->appendList(list);
+      }
+
       typedef NumberedList OrderedList;
     } // namespace doc
   } // namespace app
