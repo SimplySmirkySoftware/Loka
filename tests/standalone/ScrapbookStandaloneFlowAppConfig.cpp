@@ -17,13 +17,14 @@ namespace loka
 
     ScrapbookStandaloneFlowAppConfig::ScrapbookStandaloneFlowAppConfig(PlatformContext *context,
                                                                        const platform::file::FileHandle *auditFile,
-                                                                       std::FILE *diagnostics)
+                                                                       std::FILE *diagnostics,
+                                                                       StandaloneRunControl::CompletionMode mode)
         : ScrapbookAppConfig(context),
           audit_(auditFile ? *auditFile : ResolveStandaloneAuditFile(), kScrapbookStandaloneCells[0]),
-          scenario_(new (std::nothrow) scenario_tests::ScrapbookScenario(
+          scenario_(new(std::nothrow) scenario_tests::ScrapbookScenario(
               scenario_tests::ScenarioLaunchPlan::StandaloneTour(), &this->audit_)),
           borrowedMainNode_(0),
-          runControl_("Scrapbook", scenario_tests::ScenarioCellTable(kScrapbookStandaloneCells, 1), diagnostics)
+          runControl_("Scrapbook", scenario_tests::ScenarioCellTable(kScrapbookStandaloneCells, 1), diagnostics, mode)
     {
     }
 
@@ -43,16 +44,18 @@ namespace loka
 
     void ScrapbookStandaloneFlowAppConfig::compose(AppComposition &composition)
     {
-      composition << scenario_tests::MakeScenarioWindow<scrapbook::MainProps, scrapbook::MainNode>(
-          scrapbook::MainProps().platformContext(this->getPlatformContext()),
-          &this->borrowedMainNode_,
-          340,
-          274,
-          kScrapbookStandaloneTitle,
-          app::IdlePolicy::interval(0.1),
-          &ScrapbookStandaloneFlowAppConfig::OnWindowIdle,
-          this,
-          this->runControl_.displayTitleState(kScrapbookStandaloneTitle));
+      composition << StandaloneWindowDefinition(
+          scenario_tests::MakeScenarioWindowProps<scrapbook::MainProps, scrapbook::MainNode>(
+              scrapbook::MainProps().platformContext(this->getPlatformContext()),
+              &this->borrowedMainNode_,
+              340,
+              274,
+              kScrapbookStandaloneTitle,
+              app::IdlePolicy::interval(0.1),
+              &ScrapbookStandaloneFlowAppConfig::OnWindowIdle,
+              this,
+              this->runControl_.displayTitleState(kScrapbookStandaloneTitle)),
+          this->runControl_);
     }
 
     void ScrapbookStandaloneFlowAppConfig::OnWindowIdle(Window *window, double elapsedSeconds, void *userData)

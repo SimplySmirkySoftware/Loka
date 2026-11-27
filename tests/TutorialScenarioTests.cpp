@@ -26,6 +26,7 @@
 #include "scenarios/ObservedMainDefinition.hpp"
 #include "standalone/TutorialStandaloneFlowAppConfig.hpp"
 #include "support/MenuPresentationVerify.hpp"
+#include "StandaloneLoopLaunchTests.hpp"
 #include "WindowRootRefusalTests.hpp"
 #include "testing/scene/ScenarioAudit.hpp"
 
@@ -274,6 +275,12 @@ void testTutorialStandaloneFlowWritesExpectedAudit()
   LOKA_VERIFY(actual == expected);
   std::remove(actualPath);
   std::printf("testTutorialStandaloneFlowWritesExpectedAudit passed\n");
+}
+
+void testTutorialStandaloneLoopCloseBeforeFirstIdleSucceeds()
+{
+  StandaloneLoopLaunchTestSupport::verifyCloseBeforeFirstIdle<loka::standalone_tests::TutorialStandaloneFlowAppConfig>(
+      "_loka_tutorial_loop_close.audit");
 }
 
 void testTutorialStandaloneDeclarationRefusalIsWindowless()

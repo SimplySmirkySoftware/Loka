@@ -144,6 +144,7 @@
 #include "WindowFrameStateTests.hpp"
 #include "WindowIdleTests.hpp"
 #include "DefinitionCloneTests.hpp"
+#include "StandaloneLoopLaunchTests.hpp"
 #include "WindowRootRefusalTests.hpp"
 #include "FlowDslTests.hpp"
 #include "OwnershipDumpTests.hpp"

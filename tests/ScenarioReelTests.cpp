@@ -1000,6 +1000,36 @@ void testScenarioReelReplacementPreservesDriverAndStopsBeforeDetach()
   std::printf("testScenarioReelReplacementPreservesDriverAndStopsBeforeDetach passed\n");
 }
 
+void testStandaloneLoopCreatedBeforeMountSucceeds()
+{
+  typedef loka::standalone_tests::StandaloneRunControl Control;
+  NullApp app(0);
+  Control control(
+      "LoopProbe", loka::scenario_tests::ScenarioCellTable(kProbeCells + 1, 2), 0, Control::REARM_COMPLETED_SCENE);
+  control.setApp(&app);
+  LOKA_VERIFY(control.failed());
+  control.windowCreated();
+  LOKA_VERIFY(!control.failed());
+  control.setApp(&app);
+  LOKA_VERIFY(!control.failed());
+}
+
+void testLateWindowCreationPreservesDeadlineFailure()
+{
+  typedef loka::standalone_tests::StandaloneRunControl Control;
+  NullApp app(0);
+  Control control(
+      "LoopProbe", loka::scenario_tests::ScenarioCellTable(kProbeCells + 1, 2), 0, Control::REARM_COMPLETED_SCENE);
+  control.setApp(&app);
+  for (int i = 0; i < 4; ++i)
+    LOKA_VERIFY(control.advance(false) == Control::ADVANCE_WAITING);
+  LOKA_VERIFY(control.advance(false) == Control::ADVANCE_FAILED);
+  LOKA_VERIFY(app.quitRequested());
+  control.windowCreated();
+  LOKA_VERIFY(control.failed());
+  LOKA_VERIFY(control.advance(true) == Control::ADVANCE_FAILED);
+}
+
 void testStandaloneRunControlRearmsCompletedSceneWithoutQuittingApp()
 {
   const loka::scenario_tests::ScenarioCellTable cells(kProbeCells + 1, 2);
@@ -1015,6 +1045,7 @@ void testStandaloneRunControlRearmsCompletedSceneWithoutQuittingApp()
       completed.displayTitleState("Loka Probe"));
   NullWindow completedWindow(&context, completedWindowProps);
   completed.setApp(&completedApp);
+  completed.windowCreated();
   LOKA_VERIFY(completed.advance(true)
               == loka::standalone_tests::StandaloneRunControl::ADVANCE_MOUNTED);
   LOKA_VERIFY(completed.tick() == 1);
@@ -1037,6 +1068,7 @@ void testStandaloneRunControlRearmsCompletedSceneWithoutQuittingApp()
       0,
       loka::standalone_tests::StandaloneRunControl::REARM_COMPLETED_SCENE);
   userClosed.setApp(&userClosedApp);
+  userClosed.windowCreated();
   LOKA_VERIFY(!userClosedApp.quitRequested());
   LOKA_VERIFY(!userClosed.failed());
 

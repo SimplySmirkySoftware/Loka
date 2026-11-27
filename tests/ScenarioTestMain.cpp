@@ -8,6 +8,7 @@
 #include "MineSweeperScenarioTests.hpp"
 #include "FloppyBirdScenarioTests.hpp"
 #include "StartupScenarioTests.hpp"
+#include "StandaloneLoopLaunchTests.hpp"
 #include "ScenarioReelTests.hpp"
 #include "StandalonePerformanceTests.hpp"
 

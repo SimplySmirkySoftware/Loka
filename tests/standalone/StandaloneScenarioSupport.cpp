@@ -61,9 +61,23 @@ namespace loka
           position_(cells, 0),
           operatorTitle_(position_.cell(), position_.completedCycles()),
           tick_(0),
-          mountFailed_(false),
+          phase_(AWAITING_WINDOW),
           completed_(false)
     {
+    }
+
+    Window *StandaloneWindowDefinition::create(PlatformContext *context) const
+    {
+      Window *window = WindowDefinition<WindowProps>::create(context);
+      if (window)
+        this->runControl_.windowCreated();
+      return window;
+    }
+
+    void StandaloneRunControl::windowCreated()
+    {
+      if (this->phase_ == AWAITING_WINDOW)
+        this->phase_ = WINDOW_CREATED;
     }
 
     void StandaloneRunControl::setApp(App *app)
@@ -86,7 +100,7 @@ namespace loka
 
     StandaloneRunControl::Advance StandaloneRunControl::advance(bool mainNodeMounted)
     {
-      if (this->mountFailed_)
+      if (this->phase_ == FAILED)
       {
         return ADVANCE_FAILED;
       }
@@ -100,7 +114,7 @@ namespace loka
         return ADVANCE_WAITING;
       }
 
-      this->mountFailed_ = true;
+      this->phase_ = FAILED;
       std::fprintf(this->diagnostics_,
                    "Loka %s standalone startup failed: "
                    "MainNode was not mounted after %d idle ticks.\n",
@@ -167,7 +181,7 @@ namespace loka
         this->completed_ = false;
         return;
       }
-      this->mountFailed_ = true;
+      this->phase_ = FAILED;
       std::fprintf(this->diagnostics_,
                    "Loka %s standalone loop failed: "
                    "the next scenario rail or Scene could not be prepared.\n",
@@ -187,12 +201,13 @@ namespace loka
     bool StandaloneRunControl::failed() const
     {
 #if LOKA_STANDALONE_PERFORMANCE_RUNS > 0
-      return this->mountFailed_ || this->scenarioVerdict_.refusesCompletedPass();
+      return this->phase_ == FAILED || this->scenarioVerdict_.refusesCompletedPass();
 #else
       // An interactive loop may be closed by its operator between cells.
       const bool awaitingVerdict =
-          this->borrowedApp_ && !this->completed_ && this->completionMode_ != REARM_COMPLETED_SCENE;
-      return this->mountFailed_ || awaitingVerdict;
+          this->borrowedApp_ && !this->completed_
+          && (this->completionMode_ != REARM_COMPLETED_SCENE || this->phase_ == AWAITING_WINDOW);
+      return this->phase_ == FAILED || awaitingVerdict;
 #endif
     }
 
