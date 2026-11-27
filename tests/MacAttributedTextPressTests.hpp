@@ -1,5 +1,6 @@
 #ifndef LOKA_MAC_ATTRIBUTED_TEXT_PRESS_TESTS_HPP
 #define LOKA_MAC_ATTRIBUTED_TEXT_PRESS_TESTS_HPP
+void testMacLinkPressEntryEvent();
 void testMacLinkPressIdentity();
 void testMacLinkPressModifiers();
 void testMacLinkPressConsumption();

@@ -47,6 +47,7 @@ LOKA_TEST(testMacOpenFileDialogCompletionDuringSceneWaitsForAdmission)
 LOKA_TEST(testMacOpenFileDialogCloseDropsPendingAtDrain)
 LOKA_TEST(testMacOpenFileDialogRetargetDropsResult)
 
+LOKA_TEST(testMacLinkPressEntryEvent)
 LOKA_TEST(testMacLinkPressIdentity)
 LOKA_TEST(testMacLinkPressModifiers)
 LOKA_TEST(testMacLinkPressConsumption)

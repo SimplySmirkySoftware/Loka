@@ -272,17 +272,28 @@ function(loka_configure_scenario_test_bundle target bundle_id example_include_di
   )
 endfunction()
 
+execute_process(COMMAND git rev-parse HEAD
+  WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+  OUTPUT_VARIABLE LOKA_MAC_PROBE_REVISION
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  RESULT_VARIABLE LOKA_MAC_PROBE_REVISION_RESULT)
+if(NOT LOKA_MAC_PROBE_REVISION_RESULT EQUAL 0)
+  # Source archives can still build shipping targets without Git metadata.
+  set(LOKA_MAC_PROBE_REVISION "unavailable")
+endif()
+
+add_executable(LokaLinkPressProbeMacOS EXCLUDE_FROM_ALL MACOSX_BUNDLE
+  ${PROJECT_SOURCE_DIR}/tests/macos/LinkPressProbeMain.mm
+  ${PROJECT_SOURCE_DIR}/tests/TestingHooks.cpp
+  ${LOKA_MACOS_CORE_SOURCES} ${COMMON_SOURCES})
+loka_configure_scenario_test_bundle(LokaLinkPressProbeMacOS
+  "com.cubenoy22.loka.LinkPressProbe" "tests/probes")
+target_compile_definitions(LokaLinkPressProbeMacOS PRIVATE
+  LOKA_PROBE_REVISION="${LOKA_MAC_PROBE_REVISION}")
+
 if(NOT LOKA_MAC_OS_10_4)
-  execute_process(COMMAND git rev-parse HEAD
-    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
-    OUTPUT_VARIABLE LOKA_URL_RECEIVE_PROBE_REVISION
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    RESULT_VARIABLE LOKA_URL_RECEIVE_PROBE_REVISION_RESULT)
-  if(NOT LOKA_URL_RECEIVE_PROBE_REVISION_RESULT EQUAL 0)
-    # Source archives can still build shipping targets without Git metadata.
-    # The evidence script refuses this unattributed probe.
-    set(LOKA_URL_RECEIVE_PROBE_REVISION "unavailable")
-  endif()
+  # URLReceiveProbe-Info.plist.in embeds the same revision as the executable.
+  set(LOKA_URL_RECEIVE_PROBE_REVISION "${LOKA_MAC_PROBE_REVISION}")
   add_executable(LokaURLReceiveProbeMacOS EXCLUDE_FROM_ALL MACOSX_BUNDLE
     ${PROJECT_SOURCE_DIR}/tests/macos/URLReceiveProbeMain.mm
     ${PROJECT_SOURCE_DIR}/tests/TestingHooks.cpp
@@ -290,7 +301,7 @@ if(NOT LOKA_MAC_OS_10_4)
   loka_configure_scenario_test_bundle(LokaURLReceiveProbeMacOS
     "com.cubenoy22.loka.URLReceiveProbe" "tests/macos")
   target_compile_definitions(LokaURLReceiveProbeMacOS PRIVATE
-    LOKA_PROBE_REVISION="${LOKA_URL_RECEIVE_PROBE_REVISION}")
+    LOKA_PROBE_REVISION="${LOKA_MAC_PROBE_REVISION}")
   set_target_properties(LokaURLReceiveProbeMacOS PROPERTIES
     MACOSX_BUNDLE_INFO_PLIST "${PROJECT_SOURCE_DIR}/tests/macos/URLReceiveProbe-Info.plist.in")
 endif()

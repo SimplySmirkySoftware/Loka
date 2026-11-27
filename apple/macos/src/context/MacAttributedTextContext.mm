@@ -1372,7 +1372,8 @@ namespace
 void MacAttributedTextContext::handleLinkDown(void *nativeEvent)
 {
 #ifdef TEST_BUILD
-  loka::testing::visitMacLinkPress(loka::testing::MAC_LINK_DOWN_ENTRY);
+  NSEvent *e = (NSEvent *)nativeEvent;
+  loka::testing::visitMacLinkPressEntry(loka::testing::MAC_LINK_DOWN_ENTRY, (long)[e eventNumber], (long)[e clickCount]);
 #endif
   MacPressProcedure p(this->links_.session());
   if (!p.admitted())
@@ -1399,7 +1400,8 @@ void MacAttributedTextContext::handleLinkDown(void *nativeEvent)
 void MacAttributedTextContext::handleLinkUp(void *nativeEvent)
 {
 #ifdef TEST_BUILD
-  loka::testing::visitMacLinkPress(loka::testing::MAC_LINK_UP_ENTRY);
+  NSEvent *e = (NSEvent *)nativeEvent;
+  loka::testing::visitMacLinkPressEntry(loka::testing::MAC_LINK_UP_ENTRY, (long)[e eventNumber], (long)[e clickCount]);
 #endif
   MacPressProcedure p(this->links_.session());
   if (!p.admitted())
