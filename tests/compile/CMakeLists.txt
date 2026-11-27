@@ -1051,6 +1051,9 @@ loka_compile_pin(document-nested-parent
 loka_compile_pin(document-direct-list
   REFUSES pins/refuses_document_direct_list.cpp
   ACCEPTS pins/accepts_document_direct_list.cpp)
+loka_compile_pin(document-tagged-direct-list
+  REFUSES pins/refuses_document_tagged_direct_list.cpp
+  ACCEPTS pins/accepts_document_tagged_direct_list.cpp)
 
 loka_compile_pin(document-nested-parentheses
   REFUSES pins/refuses_document_nested_parentheses.cpp

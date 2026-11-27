@@ -893,6 +893,8 @@ void testDocumentNestedListCaptureRefusal()
   LOKA_VERIFY(parent.childrenCount() == 1 && parent.childrenHead() == old);
   parent << doc::Item("next");
   bothExits(parent, "1. old\n2. next\n", "<ol>\n<li>old</li>\n<li>next</li>\n</ol>\n");
+#else
+  std::puts("[skip] nested head clone refusal needs the wrapped-new allocation hook (LOKA_CARD_CLONE_FAULT_PINS).");
 #endif
 }
 

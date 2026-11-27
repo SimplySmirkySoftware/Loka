@@ -33,6 +33,7 @@ namespace loka
       };
       class NestedItem;
       struct NumberedList;
+      struct NumberedListProps;
 
       /** Unordered list. Cost: the nestable definition owns one capture per authored child. */
       struct List : scene::NestableNodeDefinition<ListProps, ListProps::NodeType, List>
@@ -49,8 +50,11 @@ namespace loka
         }
 
       private:
+        // A list belongs to an item. The definition bases close the spelling after tag() as well.
         List &operator<<(const List &);
         List &operator<<(const NumberedList &);
+        List &operator<<(const scene::NodeDefinition<ListProps, ListProps::NodeType> &);
+        List &operator<<(const scene::NodeDefinition<NumberedListProps, ContainerNode<NumberedListProps> > &);
       };
       class ItemNode;
 
@@ -77,7 +81,7 @@ namespace loka
         /** Format an admitted ordinal for its screen or Markdown marker. */
         inline std::string OrdinalMarker(unsigned ordinal, char delimiter)
         {
-          char buffer[4];
+          char buffer[12]; // holds any unsigned and the delimiter
           ::snprintf(buffer, sizeof(buffer), "%u%c", ordinal, delimiter);
           return buffer;
         }
