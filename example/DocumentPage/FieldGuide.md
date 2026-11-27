@@ -13,6 +13,6 @@ survey --offline
 2. Follow the signs.
    - Look for blue posts.
 
-> <img src="map.png" alt="Trail &amp; ridge" width="480" height="320">
+> <img src="map.svg" alt="Trail &amp; ridge" width="480" height="320">
 >
 > Record the trail conditions.

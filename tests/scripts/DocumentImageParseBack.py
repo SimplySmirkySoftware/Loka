@@ -22,7 +22,7 @@ def main():
     quote = tree.find("blockquote")
     if quote is None or [child.tag for child in quote] != ["img", "p"]:
         raise ValueError(html)
-    if quote[0].attrib != {"src": "map.png", "alt": "Trail & ridge", "width": "480", "height": "320"}:
+    if quote[0].attrib != {"src": "map.svg", "alt": "Trail & ridge", "width": "480", "height": "320"}:
         raise ValueError(quote[0].attrib)
     if quote[1].text != "Record the trail conditions.":
         raise ValueError(html)

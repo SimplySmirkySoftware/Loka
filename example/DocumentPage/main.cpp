@@ -48,7 +48,7 @@ namespace
                        << doc::Item("Find the trail.")
                        << (doc::Item("Follow the signs.") << (doc::List() << doc::Item("Look for blue posts."))))
                    << (Show(*this->showNotes_.state())
-                       << (doc::Quote() << doc::Image("map.png", "Trail & ridge", doc::ImageSize(480, 320))
+                       << (doc::Quote() << doc::Image("map.svg", "Trail & ridge", doc::ImageSize(480, 320))
                                         << doc::Paragraph("Record the trail conditions."))));
     }
   };
