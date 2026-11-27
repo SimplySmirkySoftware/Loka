@@ -19,7 +19,7 @@ MUTATIONS = [
     ("close-head-before-children", HTML, "if (!withChildren)", "if (true || !withChildren)", "Html"),
     ("newline-before-child-list", HTML, "this->fragment += body;",
      "this->fragment += body; if (withChildren) this->fragment += '\\n';", "Html"),
-    ("no-head-first-rule", FRAMES, "parent.kind == NESTED_ITEM && !parent.needsHead()", "parent.kind == NESTED_ITEM", "Grammar"),
+    ("no-head-first-rule", FRAMES, "frame.kind == NESTED_ITEM && !frame.needsHead()", "frame.kind == NESTED_ITEM", "Grammar"),
     ("advance-ordinal-again", FRAMES, "static_cast<signed char>(this->ordinal());",
      "static_cast<signed char>(this->ordinal() + (child == NESTED_ITEM ? 1 : 0));", "Ordinal"),
     ("empty-head-own-line", MD, "if (!withChildren || !value.empty())", "if (true)", "SetextHeading"),
@@ -33,8 +33,8 @@ MUTATIONS = [
     ("admit-refused-value", LIST, "scene::NoteDefinitionCaptureRefusal();\n          return false;",
      "return true;", "CaptureRefusal"),
     ("use-default-row-gap", LIST, "row->gap(0) << Box().width(indent)", "(*row) << Box().width(indent)", "Screen"),
-    ("admit-list-under-list", FRAMES, ": this->acceptsBlock() ||",
-     ": (parent.isList() && (kind == LIST || kind == NUMBERED_LIST)) || this->acceptsBlock() ||",
+    ("admit-list-under-list", FRAMES, ": this->acceptsListOrCodeBlock();",
+     ": parent.isList() || this->acceptsListOrCodeBlock();",
      "Grammar"),
 ]
 

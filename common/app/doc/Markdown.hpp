@@ -311,7 +311,7 @@ namespace loka
           {
             const unsigned quotes = this->quoteCount(level);
             size_t indent = 0;
-            for (unsigned i = 1; i < level; ++i)
+            for (unsigned i = 1; i <= level; ++i)
               if (this->frames[i].kind == NESTED_ITEM)
                 indent += this->itemMarker(i - 1).size() + 1;
             size_t start = 0;
@@ -321,8 +321,10 @@ namespace loka
               // An empty enclosing head has already written this physical line's prefix and marker.
               if (this->fragment.empty() || this->fragment[this->fragment.size() - 1] == '\n')
               {
-                this->prefix(quotes, marker.empty() && end == start);
-                this->fragment.append(indent, ' ');
+                const bool blank = marker.empty() && end == start;
+                this->prefix(quotes, blank);
+                if (!blank)
+                  this->fragment.append(indent, ' ');
               }
               if (!marker.empty())
               {
@@ -403,7 +405,7 @@ namespace loka
           /** Cost: one collection per visited code block, then linear newline and fence scans. */
           virtual bool read(const CodeBlockProps &p)
           {
-            if (!this->acceptsBlock())
+            if (!this->acceptsListOrCodeBlock())
               return false;
             std::string body;
             if (!CollectCodeBlock(p.text, body))

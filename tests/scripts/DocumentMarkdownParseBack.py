@@ -98,15 +98,15 @@ def authored_list(kind, items, markdown):
         if tag != "li":
             raise ValueError(f"unexpected authored list child {tag}")
         head = [(c, 0, item["link"]) for c in item["body"]]
-        lists = authored_forest(item["lists"], markdown)
-        if head or lists or kind == "ol":
-            emitted.append((head, lists))
+        children = authored_forest(item["children"], markdown)
+        if head or children or kind == "ol":
+            emitted.append((head, children))
         # Only a bare first marker interrupts a nonempty head paragraph. An empty
         # head followed by descendants starts a compound marker line instead.
-        if head and lists and lists[0][0] == "ol" and lists[0][1][0] == ("li", []):
+        if head and children and children[0][0] == "ol" and children[0][1][0] == ("li", []):
             loose = True
-    return [("li", ([("p", head)] if markdown and loose and head else head) + lists)
-            for head, lists in emitted]
+    return [("li", ([("p", head)] if markdown and loose and head else head) + children)
+            for head, children in emitted]
 
 
 def authored_forest(nodes, markdown):
@@ -120,8 +120,10 @@ def authored_forest(nodes, markdown):
         elif value or tag in ("h2", "pre"):
             if tag == "h2":
                 value = value.replace("\n", " ")
-            if tag == "pre" and value and not value.endswith("\n"):
-                value += "\n"
+            if tag == "pre":
+                value = value.replace("\r\n", "\n").replace("\r", "\n")
+                if value and not value.endswith("\n"):
+                    value += "\n"
             forest.append((tag, plain_glyphs(value)))
     return forest
 

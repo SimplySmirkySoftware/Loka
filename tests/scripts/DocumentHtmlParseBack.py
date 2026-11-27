@@ -10,6 +10,27 @@ from DocumentMarkdownParseBack import containers, decode, expected_glyphs, expec
 
 def html_projection(html5lib, source):
     fragment = html5lib.parseFragment(source, container="div", namespaceHTMLElements=False)
+
+    def block_value(block):
+        if block.tag in ("ul", "ol", "blockquote"):
+            return blocks(block, "\n")
+        if block.tag == "pre":
+            if len(block) != 1 or block.text or block[0].tag != "code" or block[0].tail or len(block[0]):
+                raise ValueError("unexpected code block")
+            return [(c, 0, "") for c in block[0].text or ""]
+        if block.tag == "li":
+            allowed = ("ul", "ol", "pre")
+            first = next((i for i, child in enumerate(block) if child.tag in allowed), len(block))
+            value = inline_glyphs(block, first)
+            for child in block[first:]:
+                if child.tag not in allowed or child.tail:
+                    raise ValueError("unexpected content after item block")
+                value.append((child.tag, block_value(child)))
+            return value
+        if block.tag in ("h2", "p"):
+            return inline_glyphs(block)
+        raise ValueError(block.tag)
+
     def blocks(parent, lead=""):
         # The fragment root carries no text; an emitted container carries exactly its formatting LF.
         if (parent.text or "") != lead:
@@ -18,25 +39,9 @@ def html_projection(html5lib, source):
         for block in parent:
             if block.tail != "\n":
                 raise ValueError("missing block separator")
-            if block.tag in ("ul", "ol", "blockquote"):
-                value = blocks(block, "\n")
-            elif block.tag == "pre":
-                if len(block) != 1 or block.text or block[0].tag != "code" or block[0].tail or len(block[0]):
-                    raise ValueError("unexpected code block")
-                value = [(c, 0, "") for c in block[0].text or ""]
-            elif block.tag == "li":
-                first_list = next((i for i, child in enumerate(block) if child.tag in ("ul", "ol")), len(block))
-                value = inline_glyphs(block, first_list)
-                for child in block[first_list:]:
-                    if child.tag not in ("ul", "ol") or child.tail:
-                        raise ValueError("unexpected content after child list")
-                    value.append((child.tag, blocks(child, "\n")))
-            elif block.tag in ("h2", "p"):
-                value = inline_glyphs(block)
-            else:
-                raise ValueError(block.tag)
-            result.append((block.tag, value))
+            result.append((block.tag, block_value(block)))
         return result
+
     return blocks(fragment)
 
 

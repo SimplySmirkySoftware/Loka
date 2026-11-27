@@ -68,6 +68,10 @@ namespace loka
             }
             current.transition(empty, input.targets, out);
           }
+          bool parentNeedsNewline() const
+          {
+            return this->frames[this->depth].kind != NESTED_ITEM;
+          }
           bool inlineBlock(const AttributedString &content, bool heading, const char *tag)
           {
             InlineProjection input;
@@ -136,7 +140,7 @@ namespace loka
             case ROOT:
               return;
             }
-            if (this->frames[this->depth].kind != NESTED_ITEM)
+            if (this->parentNeedsNewline())
               this->fragment += '\n';
           }
           /** Cost: once per image, emit one block and escape both of its attribute values. */
@@ -168,7 +172,7 @@ namespace loka
           /** Cost: the walk collects and escapes the body once per attached code block. */
           virtual bool read(const CodeBlockProps &p)
           {
-            if (!this->acceptsBlock())
+            if (!this->acceptsListOrCodeBlock())
               return false;
             std::string body;
             if (!CollectCodeBlock(p.text, body))
@@ -177,7 +181,9 @@ namespace loka
             this->fragment += "<pre><code>";
             for (size_t i = 0; i < body.size(); ++i)
               AppendHtmlByte(this->fragment, body[i], false);
-            this->fragment += "</code></pre>\n";
+            this->fragment += "</code></pre>";
+            if (this->parentNeedsNewline())
+              this->fragment += '\n';
             return true;
           }
         };

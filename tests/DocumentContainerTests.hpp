@@ -1,5 +1,11 @@
 #ifndef LOKA_DOCUMENT_CONTAINER_TESTS_HPP
 #define LOKA_DOCUMENT_CONTAINER_TESTS_HPP
+void testDocumentItemBlocksOrder();
+void testDocumentItemBlocksPayload();
+void testDocumentItemBlocksIndent();
+void testDocumentItemBlocksGrammar();
+void testDocumentItemBlocksCaptureRefusal();
+void testDocumentItemBlocksScreen();
 void testDocumentNestedListMarkdown();
 void testDocumentNestedListHtml();
 void testDocumentNestedListGrammar();

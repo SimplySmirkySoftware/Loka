@@ -113,6 +113,12 @@ namespace loka
             return parent == ROOT || parent == QUOTE;
           }
 
+          bool acceptsListOrCodeBlock() const
+          {
+            const Frame &frame = this->frames[this->depth];
+            return this->acceptsBlock() || (frame.kind == NESTED_ITEM && !frame.needsHead());
+          }
+
           /** Open the ancestors of a visible leaf, outside in. A pending shell opens with its owned head. */
           void beginLeaf(unsigned level, bool bare)
           {
@@ -127,8 +133,9 @@ namespace loka
               if (parent.emitted() && (parent.kind == ROOT || parent.kind == QUOTE))
                 writer.separator(i);
               parent.recordChild(child);
+              // A shell's first line can come directly from a leaf or from the first item in a child list.
               if (!leaf)
-                writer.open(i + 1, bare && i + 2 == level);
+                writer.open(i + 1, bare && i + 2 >= level);
             }
           }
 
@@ -188,16 +195,15 @@ namespace loka
           bool push(Kind kind)
           {
             const Frame &parent = this->frames[this->depth];
-            const bool admitted =
-                kind == NESTED_ITEM
-                    ? parent.isList()
-                    : this->acceptsBlock() || (kind != QUOTE && parent.kind == NESTED_ITEM && !parent.needsHead());
+            const bool admitted = kind == NESTED_ITEM ? parent.isList()
+                                  : kind == QUOTE     ? this->acceptsBlock()
+                                                      : this->acceptsListOrCodeBlock();
             if (!admitted || this->depth == MaxDepth)
               return false;
             this->frames[++this->depth].reset(kind);
             return true;
           }
-          /** A shell without visible child lists follows the same emission rule as a flat item. */
+          /** A shell without visible children follows the same emission rule as a flat item. */
           bool pop(Kind kind)
           {
             Frame &frame = this->frames[this->depth];
