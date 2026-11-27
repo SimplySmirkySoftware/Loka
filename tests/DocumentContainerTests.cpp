@@ -65,6 +65,14 @@ namespace
     {
       return this->event('N');
     }
+    virtual bool enter(const doc::NestedItemProps &)
+    {
+      return this->event('S');
+    }
+    virtual bool leave(const doc::NestedItemProps &)
+    {
+      return this->event('s');
+    }
     virtual bool read(const doc::ParagraphProps &)
     {
       return this->event('p');
@@ -169,7 +177,9 @@ namespace
     e.golden(doc::List() << doc::Paragraph(""), 0, 0);
     e.golden(doc::List() << doc::Heading(2, "h"), 0, 0);
     e.golden(doc::List() << doc::CodeBlock(""), 0, 0);
-    e.golden(doc::List() << doc::List(), 0, 0);
+    doc::List direct, child;
+    direct.addChild(&child);
+    e.golden(direct, 0, 0);
     e.golden(doc::List() << (doc::Quote() << doc::Paragraph("x")), 0, 0);
     e.golden(doc::List() << (Column() << doc::Paragraph("x")), 0, 0);
     e.golden(doc::List() << Text("ordinary"), "", "");
@@ -264,8 +274,8 @@ void testDocumentMarkdownContainers()
   containers(e);
   Fixture<doc::Quote> f(doc::Quote() << doc::Image("map", "")
                                      << (doc::List() << doc::Item("first") << doc::Item("second"))
-                                     << (doc::NumberedList() << doc::Item("")));
-  const std::string complete = "QILiilNonq";
+                                     << (doc::NumberedList() << (doc::Item("") << doc::List())));
+  const std::string complete = "QILiilNSoLlsnq";
   for (size_t stop = 1; stop <= complete.size() + 1; ++stop)
   {
     RefusingReader reader(stop);
@@ -540,6 +550,369 @@ void testDocumentNumberedListRetention()
 
 namespace
 {
+  template <class D> void bothExits(const D &definition, const char *markdown, const char *html)
+  {
+    Fixture<D> mounted(definition, false);
+    const Exit md = {false}, ht = {true};
+    md.check(mounted.node(), markdown, html);
+    ht.check(mounted.node(), markdown, html);
+  }
+
+  void nestedLists(const Exit &e)
+  {
+    doc::List bullet;
+    bullet << doc::Item("y");
+    doc::NumberedList number;
+    number << doc::Item("n");
+    e.golden(doc::List() << (doc::Item("x") << bullet) << doc::Item("z"),
+             "- x\n  - y\n- z\n",
+             "<ul>\n<li>x<ul>\n<li>y</li>\n</ul></li>\n<li>z</li>\n</ul>\n");
+    e.golden(
+        doc::List() << (doc::Item("x") << number), "- x\n  1. n\n", "<ul>\n<li>x<ol>\n<li>n</li>\n</ol></li>\n</ul>\n");
+    e.golden(doc::NumberedList() << (doc::Item("x") << bullet),
+             "1. x\n   - y\n",
+             "<ol>\n<li>x<ul>\n<li>y</li>\n</ul></li>\n</ol>\n");
+    e.golden(doc::NumberedList() << (doc::Item("x") << number),
+             "1. x\n   1. n\n",
+             "<ol>\n<li>x<ol>\n<li>n</li>\n</ol></li>\n</ol>\n");
+    e.golden(
+        doc::Quote() << (doc::List() << (doc::Item("A\nB") << (doc::NumberedList() << (doc::Item("z") << bullet)))),
+        "> - A\\\n>   B\n>   1. z\n>      - y\n",
+        "<blockquote>\n<ul>\n<li>A<br>B<ol>\n<li>z<ul>\n<li>y</li>\n</ul></li>\n</ol></li>\n</ul>\n</blockquote>\n");
+    e.golden(doc::List() << (doc::Item("x") << bullet << bullet),
+             "- x\n  - y\n  * y\n",
+             "<ul>\n<li>x<ul>\n<li>y</li>\n</ul><ul>\n<li>y</li>\n</ul></li>\n</ul>\n");
+    e.golden(doc::List() << (doc::Item("x") << number << number),
+             "- x\n  1. n\n  1) n\n",
+             "<ul>\n<li>x<ol>\n<li>n</li>\n</ol><ol>\n<li>n</li>\n</ol></li>\n</ul>\n");
+    e.golden(doc::List() << (doc::Item("x") << number << bullet),
+             "- x\n  1. n\n  - y\n",
+             "<ul>\n<li>x<ol>\n<li>n</li>\n</ol><ul>\n<li>y</li>\n</ul></li>\n</ul>\n");
+    e.golden(doc::List() << (doc::Item("x") << bullet << number),
+             "- x\n  - y\n  1. n\n",
+             "<ul>\n<li>x<ul>\n<li>y</li>\n</ul><ol>\n<li>n</li>\n</ol></li>\n</ul>\n");
+    e.golden(doc::List() << (doc::Item("x") << doc::List()) << (doc::Item("") << doc::NumberedList()),
+             "- x\n",
+             "<ul>\n<li>x</li>\n</ul>\n");
+    e.golden(doc::NumberedList() << (doc::Item("") << doc::List()), "1.\n", "<ol>\n<li></li>\n</ol>\n");
+    e.golden(doc::NumberedList() << (doc::Item("") << bullet),
+             "1. - y\n",
+             "<ol>\n<li><ul>\n<li>y</li>\n</ul></li>\n</ol>\n");
+    e.golden(doc::List() << (doc::Item("") << number), "- 1. n\n", "<ul>\n<li><ol>\n<li>n</li>\n</ol></li>\n</ul>\n");
+    doc::List inner;
+    inner << (doc::Item("") << (doc::NumberedList() << doc::Item("")));
+    e.golden(doc::List() << (doc::Item("") << (doc::List() << (doc::Item("") << inner))),
+             "- - - 1.\n",
+             "<ul>\n<li><ul>\n<li><ul>\n<li><ol>\n<li></li>\n</ol></li>\n</ul></li>\n</ul></li>\n</ul>\n");
+  }
+
+  struct ListFactory
+  {
+    doc::List operator()(const doc::ItemProps &, std::size_t) const
+    {
+      return doc::List();
+    }
+  };
+} // namespace
+
+void testDocumentNestedListMarkdown()
+{
+  const Exit e = {false};
+  nestedLists(e);
+}
+void testDocumentNestedListHtml()
+{
+  const Exit e = {true};
+  nestedLists(e);
+}
+
+void testDocumentNestedListLostOrderedList()
+{
+  bothExits(
+      doc::Quote() << (doc::List() << (doc::Item("Fruit")
+                                       << doc::List() << (doc::NumberedList() << doc::Item("") << doc::Item("x")))),
+      "> - Fruit\n>\n>   1.\n>   2. x\n",
+      "<blockquote>\n<ul>\n<li>Fruit<ol>\n<li></li>\n<li>x</li>\n</ol></li>\n</ul>\n</blockquote>\n");
+}
+
+void testDocumentNestedListSetextHeading()
+{
+  bothExits(doc::List() << (doc::Item("Fruit") << (doc::List() << (doc::Item("") << (doc::List() << doc::Item("y"))))),
+            "- Fruit\n  - - y\n",
+            "<ul>\n<li>Fruit<ul>\n<li><ul>\n<li>y</li>\n</ul></li>\n</ul></li>\n</ul>\n");
+}
+
+void testDocumentNestedListLooseSeparator()
+{
+  bothExits(doc::List() << (doc::Item("Fruit") << (doc::List() << doc::Item("a"))
+                                               << (doc::NumberedList() << doc::Item("") << doc::Item("b"))),
+            "- Fruit\n  - a\n  1.\n  2. b\n",
+            "<ul>\n<li>Fruit<ul>\n<li>a</li>\n</ul><ol>\n<li></li>\n<li>b</li>\n</ol></li>\n</ul>\n");
+}
+
+void testDocumentNestedListOrdinal()
+{
+  doc::NumberedList parent;
+  std::string html = "<ol>\n";
+  for (unsigned i = 0; i < 9; ++i)
+  {
+    parent << doc::Item("a");
+    html += "<li>a</li>\n";
+  }
+  parent << (doc::Item("ten") << (doc::List() << doc::Item("y"))) << doc::Item("end");
+  html += "<li>ten<ul>\n<li>y</li>\n</ul></li>\n<li>end</li>\n</ol>\n";
+  bothExits(parent, "1. a\n2. a\n3. a\n4. a\n5. a\n6. a\n7. a\n8. a\n9. a\n10. ten\n    - y\n11. end\n", html.c_str());
+}
+
+void testDocumentNestedListGrammar()
+{
+  doc::List direct, child;
+  direct.addChild(&child);
+  bothExits(direct, 0, 0);
+  doc::List bypass;
+  static_cast<INestableDefinition &>(bypass) << doc::NumberedList();
+  bothExits(bypass, 0, 0);
+  const doc::ItemProps items[] = {doc::ItemProps("one")};
+  bothExits(doc::List() << For(32, items, ListFactory()), 0, 0);
+  MutableState<bool> visible(false);
+  Fixture<doc::List> seats(doc::List() << (Show(visible) << doc::List()));
+  const Exit md = {false}, ht = {true};
+  md.check(seats.node(), "", "");
+  ht.check(seats.node(), "", "");
+  visible.set(true);
+  settle(seats.scene);
+  md.check(seats.node(), 0, 0);
+  ht.check(seats.node(), 0, 0);
+
+  doc::List parent;
+  parent << (doc::Item("head") << doc::List());
+  bothExits(doc::Quote() << *parent.childrenHead(), 0, 0);
+  Fixture<doc::List> valid(parent);
+  Node *shell = valid.node()->asNestable()->childrenHead();
+  md.check(shell, 0, 0);
+  ht.check(shell, 0, 0);
+  Node *head = shell->asNestable()->childrenHead();
+  NotifySubtreeNodeDetached(head);
+  md.check(valid.node(), 0, 0);
+  ht.check(valid.node(), 0, 0);
+  NotifySubtreeNodeDetached(head->nextInComposition);
+  md.check(valid.node(), 0, 0);
+  ht.check(valid.node(), 0, 0);
+
+  doc::List second(parent), block(parent);
+  *second.childrenHead()->asNestableDefinition() << doc::Item("second");
+  *block.childrenHead()->asNestableDefinition() << doc::Paragraph("paragraph");
+  bothExits(second, 0, 0);
+  // The empty child list must refuse at entry even if a valid head would follow it.
+  Fixture<doc::List> lateHead(second, false);
+  Node *lateShell = lateHead.node()->asNestable()->childrenHead();
+  NotifySubtreeNodeDetached(lateShell->asNestable()->childrenHead());
+  md.check(lateHead.node(), 0, 0);
+  ht.check(lateHead.node(), 0, 0);
+  bothExits(block, 0, 0);
+  doc::NumberedList crossed;
+  crossed.addChild(parent.childrenHead());
+  bothExits(crossed, 0, 0);
+}
+
+void testDocumentNestedListDepth()
+{
+  // 13 quotes and List / shell / empty child list consume all sixteen entries.
+  doc::Quote deep;
+  deep << (doc::List() << (doc::Item("head") << doc::List()));
+  std::string md = "> - head\n", ht = "<blockquote>\n<ul>\n<li>head</li>\n</ul>\n</blockquote>\n";
+  for (unsigned i = 1; i < 13; ++i)
+  {
+    deep = doc::Quote() << deep;
+    md = "> " + md;
+    ht = "<blockquote>\n" + ht + "</blockquote>\n";
+  }
+  bothExits(deep, md.c_str(), ht.c_str());
+  bothExits(doc::Quote() << deep, 0, 0);
+}
+
+namespace
+{
+  template <class List> void checkNestedScreen(int indent)
+  {
+    doc::ItemDefinition authored = doc::Item("head");
+    authored.setTestId("nested-head");
+    List parent;
+    parent << (authored.tag(17) << (doc::List() << doc::Item("child")));
+    Fixture<List> mounted(parent);
+    LayoutState offer;
+    offer.x = 13;
+    offer.width = 200;
+    offer.height = 200;
+    offer.spacing = 4;
+    offer.lineHeight = 12;
+    mounted.controller.projectLayoutForTesting(mounted.node(), offer);
+    const PaintQuery query = {mounted.controller.paintScope(), PLACEMENT_ELIGIBLE};
+    Node *shell = mounted.node()->asNestable()->childrenHead();
+    Node *head = shell->asNestable()->childrenHead();
+    LOKA_VERIFY(head->nodeTag() == 17 && head->testId() == "nested-head");
+    LOKA_VERIFY(shell->nodeTag() != 17 && shell->testId() != "nested-head");
+    Node *marker = head->asNestable()->childrenHead()->asStackNode()->childrenHead();
+    AttributedTextNode *body = marker->nextInComposition->asAttributedTextNode();
+    NullAttributedTextContext *bodyContext = static_cast<NullAttributedTextContext *>(body->getContext());
+    LOKA_VERIFY(bodyContext->commitPresented(body->props.text_->get(), query.scope));
+    const PaintAnswer bodyPlacement = bodyContext->queryPaintDamage(query);
+    LOKA_VERIFY(bodyPlacement.kind == PAINT_ANSWER_EXACT && bodyPlacement.damage.x == offer.x + indent);
+    Node *column = head->nextInComposition->asStackNode()->childrenHead()->nextInComposition;
+    Node *child = column->asStackNode()->childrenHead()->asStackNode()->childrenHead();
+    TextNode *bullet =
+        child->asNestable()->childrenHead()->asStackNode()->childrenHead()->asBoxNode()->childrenHead()->asTextNode();
+    NullTextContext *bulletContext = static_cast<NullTextContext *>(bullet->getContext());
+    LOKA_VERIFY(bulletContext->commitPresented(bullet->props.text_->get(), query.scope));
+    const PaintAnswer childPlacement = bulletContext->queryPaintDamage(query);
+    LOKA_VERIFY(childPlacement.kind == PAINT_ANSWER_EXACT && childPlacement.damage.x == bodyPlacement.damage.x);
+  }
+
+  /** Clones share the test's refusal switch, so a later explicit copy or row capture can fail. */
+  class RefusingList : public doc::List
+  {
+    const bool &refuse_;
+
+  public:
+    explicit RefusingList(const bool &refuse)
+        : refuse_(refuse)
+    {
+    }
+    virtual NodeDefinitionBase *clone() const
+    {
+      return this->refuse_ ? 0 : new RefusingList(*this);
+    }
+  };
+
+  void checkRefusedInsertion(const doc::NestedItem &value)
+  {
+    doc::List bullet;
+    bullet << doc::Item("old");
+    NodeDefinitionBase *oldBullet = bullet.childrenHead();
+    bullet << value;
+    LOKA_VERIFY(bullet.childrenCount() == 1 && bullet.childrenHead() == oldBullet && !oldBullet->nextInComposition);
+    bothExits(bullet, "- old\n", "<ul>\n<li>old</li>\n</ul>\n");
+
+    doc::NumberedList parent;
+    parent << doc::Item("old");
+    NodeDefinitionBase *old = parent.childrenHead();
+    parent << value;
+    LOKA_VERIFY(parent.childrenCount() == 1 && parent.childrenHead() == old && !old->nextInComposition);
+    parent << doc::Item("next");
+    bothExits(parent, "1. old\n2. next\n", "<ol>\n<li>old</li>\n<li>next</li>\n</ol>\n");
+  }
+
+  template <unsigned Count> class NestedAdmissionBoundary;
+  template <unsigned Count> struct NestedAdmissionProps : NodePropsBase<NestedAdmissionProps<Count> >
+  {
+    typedef NestedAdmissionBoundary<Count> NodeType;
+    struct TypeTag
+    {
+    };
+    const doc::NestedItem *value;
+    explicit NestedAdmissionProps(const doc::NestedItem &item)
+        : value(&item)
+    {
+    }
+    bool operator<(const PropsBase &rhs) const
+    {
+      return this->value < static_cast<const NestedAdmissionProps &>(rhs).value;
+    }
+  };
+
+  /** Offer an externally built capture while the composition's refusal ledger is active. */
+  template <unsigned InitialCount>
+  class NestedAdmissionBoundary : public StdCompositionBoundaryNodeBase<NestedAdmissionProps<InitialCount> >
+  {
+    typedef NestedAdmissionProps<InitialCount> Input;
+
+  public:
+    explicit NestedAdmissionBoundary(const Input &p)
+        : StdCompositionBoundaryNodeBase<Input>(p)
+    {
+    }
+    virtual void composeNode(NodeComposition &composition)
+    {
+      doc::NumberedList parent;
+      for (unsigned i = 0; i < InitialCount; ++i)
+        parent << doc::Item("old");
+      LOKA_VERIFY(NodeComposition::current() == &composition);
+      parent << *this->props.value;
+      LOKA_VERIFY(parent.childrenCount() == InitialCount);
+      composition.declare(parent);
+    }
+  };
+
+  template <unsigned Count> void checkWindow(const doc::NestedItem &value, bool allocationFailed)
+  {
+    NullScenePlatformController controller;
+    Scene scene((Boundary<NestedAdmissionBoundary<Count> >(NestedAdmissionProps<Count>(value))));
+    scene.mount(&controller);
+    loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+    BoundaryNode *owner = root(scene);
+    LOKA_VERIFY(owner && owner->composeResult().allocationFailed == allocationFailed);
+    if (!allocationFailed)
+      LOKA_VERIFY(owner->childrenHead() && owner->childrenHead()->asNestable()->childrenCount() == Count);
+  }
+} // namespace
+
+void testDocumentNestedListCaptureRefusal()
+{
+  LOKA_VERIFY(!NodeComposition::current());
+  bool refuse = true;
+  RefusingList probe(refuse);
+  doc::NestedItem first = doc::Item("head") << probe;
+  first << doc::List();
+  checkRefusedInsertion(first);
+  checkWindow<1>(first, true);
+  doc::NestedItem middle = doc::Item("head") << doc::List();
+  middle << probe << doc::List();
+  checkRefusedInsertion(middle);
+  doc::NestedItem later = doc::Item("head") << doc::NumberedList();
+  later << doc::List() << probe;
+  checkRefusedInsertion(later);
+
+  refuse = false;
+  doc::NestedItem source = doc::Item("head") << doc::List();
+  source << probe;
+  refuse = true;
+  const doc::NestedItem copied(source);
+  refuse = false;
+  checkRefusedInsertion(copied);
+  refuse = true;
+  checkRefusedInsertion(source); // capturing the completed column into the candidate row
+
+#ifdef LOKA_CARD_CLONE_FAULT_PINS
+  // The value owns a concrete copy of its head. Fail the allocation made by that concrete clone.
+  refuse = false;
+  doc::NumberedList parent;
+  parent << doc::Item("old");
+  NodeDefinitionBase *old = parent.childrenHead();
+  refuseNextDefinitionAllocation(sizeof(NodeDefinition<doc::NumberedItemProps, doc::NumberedItemNode>));
+  parent << source;
+  LOKA_VERIFY(parent.childrenCount() == 1 && parent.childrenHead() == old);
+  parent << doc::Item("next");
+  bothExits(parent, "1. old\n2. next\n", "<ol>\n<li>old</li>\n<li>next</li>\n</ol>\n");
+#endif
+}
+
+void testDocumentNestedListCap()
+{
+  const doc::NestedItem value = doc::Item("over cap") << doc::List();
+  checkWindow<99>(value, false);
+  // The cap takes precedence even when the offered capture already refused.
+  const bool refuse = true;
+  checkWindow<99>(doc::Item("over cap") << RefusingList(refuse), false);
+}
+
+void testDocumentNestedListScreen()
+{
+  checkNestedScreen<doc::List>(16);
+  checkNestedScreen<doc::NumberedList>(28);
+}
+
+namespace
+{
   /** Builds authored definitions and records their input forest before either export. */
   struct ForestGenerator
   {
@@ -550,13 +923,11 @@ namespace
       this->state = this->state * 1664525u + 1013904223u;
       return (this->state >> 8) % limit;
     }
-    const char *leaf(const char *tag)
+    const char *body()
     {
       const char *values[] = {"", "a", "b\nc", "- x", "1. y", "> z", "* * *", "a\n\nb", "日本語", "a & b"};
-      const char *value = values[this->pick(sizeof(values) / sizeof(*values))];
-      this->authored += "[\"";
-      this->authored += tag;
-      this->authored += "\",\"";
+      const char *value = values[this->pick(static_cast<unsigned>(sizeof(values) / sizeof(*values)))];
+      this->authored += '"';
       for (const char *c = value; *c; ++c)
         if (*c == '\n')
           this->authored += "\\n";
@@ -566,20 +937,45 @@ namespace
       return value;
     }
 
-    void ordered(doc::NumberedList &list)
+    template <class List> List list(const char *tag, unsigned depth, unsigned count)
     {
-      const unsigned count = this->pick(14);
-      this->authored += '[';
+      List parent;
+      this->authored += std::string("[\"") + tag + "\",[";
       for (unsigned i = 0; i < count; ++i)
       {
         if (i)
           this->authored += ',';
-        list << doc::Item(this->leaf("li"));
-        this->authored += ']';
+        this->authored += "[\"li\",{\"body\":";
+        const char *value = this->body();
+        const bool linked = this->pick(4) == 0;
+        this->authored += linked ? ",\"link\":\"map\"," : ",\"link\":\"\",";
+        const doc::ItemDefinition item = linked ? doc::Item(doc::Link(value, "map")) : doc::Item(value);
+        this->authored += "\"lists\":[";
+        const unsigned children = depth < 3 && this->pick(4) == 0 ? this->pick(3) + 1 : 0;
+        if (children)
+        {
+          doc::NestedItem nested = this->pick(2)
+                                       ? item << this->list<doc::List>("ul", depth + 1, this->pick(4))
+                                       : item << this->list<doc::NumberedList>("ol", depth + 1, this->pick(4));
+          for (unsigned child = 1; child < children; ++child)
+          {
+            this->authored += ',';
+            if (this->pick(2))
+              nested << this->list<doc::List>("ul", depth + 1, this->pick(4));
+            else
+              nested << this->list<doc::NumberedList>("ol", depth + 1, this->pick(4));
+          }
+          parent << nested;
+        }
+        else
+          parent << item;
+        this->authored += "]}]";
       }
-      this->authored += ']';
+      this->authored += "]]";
+      return parent;
     }
-    void append(INestableDefinition &parent, unsigned depth, bool inList)
+
+    void quoteContents(doc::Quote &quote, unsigned depth)
     {
       const unsigned count = this->pick(4);
       this->authored += '[';
@@ -587,38 +983,31 @@ namespace
       {
         if (i)
           this->authored += ',';
-        const unsigned kind = inList ? 5 : this->pick(depth < 4 ? 6 : 3);
-        if (!inList && kind == 5)
+        const unsigned kind = this->pick(depth < 4 ? 6 : 3);
+        if (kind == 5)
+          quote << this->list<doc::NumberedList>("ol", 1, this->pick(14));
+        else if (kind == 4)
         {
-          doc::NumberedList list;
-          this->authored += "[\"ol\",";
-          this->ordered(list);
-          parent << list;
+          doc::Quote child;
+          this->authored += "[\"blockquote\",";
+          this->quoteContents(child, depth + 1);
+          this->authored += ']';
+          quote << child;
         }
-        else if (!inList && kind >= 3)
-        {
-          doc::List list;
-          doc::Quote quote;
-          const bool items = kind != 4;
-          this->authored += items ? "[\"ul\"," : "[\"blockquote\",";
-          INestableDefinition &container =
-              items ? static_cast<INestableDefinition &>(list) : static_cast<INestableDefinition &>(quote);
-          this->append(container, depth + 1, items);
-          parent << *container.asNodeDefinitionBase();
-        }
+        else if (kind == 3)
+          quote << this->list<doc::List>("ul", 1, this->pick(4));
         else
         {
-          const char *value = this->leaf(inList ? "li" : kind == 0 ? "p" : kind == 1 ? "h2" : "pre");
-          if (inList)
-            parent << doc::Item(value);
-          else if (!kind)
-            parent << doc::Paragraph(value);
+          this->authored += kind == 0 ? "[\"p\"," : kind == 1 ? "[\"h2\"," : "[\"pre\",";
+          const char *value = this->body();
+          if (!kind)
+            quote << doc::Paragraph(value);
           else if (kind == 1)
-            parent << doc::Heading(2, value);
+            quote << doc::Heading(2, value);
           else
-            parent << doc::CodeBlock(value);
+            quote << doc::CodeBlock(value);
+          this->authored += ']';
         }
-        this->authored += ']';
       }
       this->authored += ']';
     }
@@ -635,18 +1024,15 @@ int documentContainerCases(unsigned seed, unsigned count)
   for (unsigned i = 0; i < count; ++i)
   {
     doc::Quote quote;
-    doc::List list;
     Column page;
     // Every case authors a container, including empty and adjacent siblings.
     gen.authored = "[[\"blockquote\",";
-    gen.append(quote, 1, false);
-    gen.authored += "],[\"ul\",";
-    gen.append(list, 1, true);
-    gen.authored += "],[\"ol\",";
-    doc::NumberedList ordered;
-    gen.ordered(ordered);
-    gen.authored += "]]";
-    page << quote << list << ordered;
+    gen.quoteContents(quote, 1);
+    gen.authored += "],";
+    page << quote << gen.list<doc::List>("ul", 1, gen.pick(4));
+    gen.authored += ',';
+    page << gen.list<doc::NumberedList>("ol", 1, gen.pick(14));
+    gen.authored += ']';
     Fixture<Column> f(page, false);
     std::string md, html;
     std::printf("%s\t", gen.authored.c_str());

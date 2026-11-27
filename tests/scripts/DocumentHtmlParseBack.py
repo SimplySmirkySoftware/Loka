@@ -24,7 +24,14 @@ def html_projection(html5lib, source):
                 if len(block) != 1 or block.text or block[0].tag != "code" or block[0].tail or len(block[0]):
                     raise ValueError("unexpected code block")
                 value = [(c, 0, "") for c in block[0].text or ""]
-            elif block.tag in ("h2", "li", "p"):
+            elif block.tag == "li":
+                first_list = next((i for i, child in enumerate(block) if child.tag in ("ul", "ol")), len(block))
+                value = inline_glyphs(block, first_list)
+                for child in block[first_list:]:
+                    if child.tag not in ("ul", "ol") or child.tail:
+                        raise ValueError("unexpected content after child list")
+                    value.append((child.tag, blocks(child, "\n")))
+            elif block.tag in ("h2", "p"):
                 value = inline_glyphs(block)
             else:
                 raise ValueError(block.tag)
@@ -33,15 +40,15 @@ def html_projection(html5lib, source):
     return blocks(fragment)
 
 
-def inline_glyphs(block):
+def inline_glyphs(block, end=None):
     rows, anchors = [], []
 
     def text(value, flags, target):
         rows.extend((c, flags, target) for c in value or "")
 
-    def visit(node, flags, target):
+    def visit(node, flags, target, end=None):
         text(node.text, flags, target)
-        for child in node:
+        for child in node[:end]:
             if child.tag == "br":
                 text("\n", flags, target)
             elif child.tag == "a":
@@ -53,7 +60,7 @@ def inline_glyphs(block):
                 visit(child, flags | {"em": 1, "strong": 2, "code": 4}[child.tag], target)
             text(child.tail, flags, target)
 
-    visit(block, 0, "")
+    visit(block, 0, "", end)
     if sorted(anchors) != list(anchor_ranges(rows)):
         raise ValueError("anchor boundaries")
     return rows

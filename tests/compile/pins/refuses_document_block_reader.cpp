@@ -15,6 +15,14 @@ struct Reader : BlockReader
   {
     return true;
   }
+  bool enter(const NestedItemProps &)
+  {
+    return true;
+  }
+  bool leave(const NestedItemProps &)
+  {
+    return true;
+  }
   bool enter(const ListProps &)
   {
     return true;

@@ -1031,3 +1031,27 @@ endif()
 loka_compile_pin(document-numbered-list-item
   REFUSES pins/refuses_document_numbered_list_item.cpp
   ACCEPTS pins/accepts_document_numbered_list_item.cpp)
+
+loka_compile_pin(document-nested-reader
+  REFUSES pins/refuses_document_nested_reader.cpp
+  ACCEPTS pins/accepts_document_block_reader.cpp)
+
+loka_compile_pin(document-item-child
+  REFUSES pins/refuses_document_item_child.cpp
+  ACCEPTS pins/accepts_document_item_child.cpp)
+
+loka_compile_pin(document-nested-child
+  REFUSES pins/refuses_document_nested_child.cpp
+  ACCEPTS pins/accepts_document_nested_child.cpp)
+
+loka_compile_pin(document-nested-parent
+  REFUSES pins/refuses_document_nested_parent.cpp
+  ACCEPTS pins/accepts_document_nested_parent.cpp)
+
+loka_compile_pin(document-direct-list
+  REFUSES pins/refuses_document_direct_list.cpp
+  ACCEPTS pins/accepts_document_direct_list.cpp)
+
+loka_compile_pin(document-nested-parentheses
+  REFUSES pins/refuses_document_nested_parentheses.cpp
+  ACCEPTS pins/accepts_document_nested_parentheses.cpp)

@@ -91,14 +91,33 @@ def expected_leaf(kind, glyphs):
     return [({"h": "h2", "c": "pre", "p": "p"}[kind], glyphs)] if glyphs or kind != "p" else []
 
 
-def authored_forest(nodes, parent=None):
+def authored_list(kind, items, markdown):
+    emitted = []
+    loose = False
+    for tag, item in items:
+        if tag != "li":
+            raise ValueError(f"unexpected authored list child {tag}")
+        head = [(c, 0, item["link"]) for c in item["body"]]
+        lists = authored_forest(item["lists"], markdown)
+        if head or lists or kind == "ol":
+            emitted.append((head, lists))
+        # Only a bare first marker interrupts a nonempty head paragraph. An empty
+        # head followed by descendants starts a compound marker line instead.
+        if head and lists and lists[0][0] == "ol" and lists[0][1][0] == ("li", []):
+            loose = True
+    return [("li", ([("p", head)] if markdown and loose and head else head) + lists)
+            for head, lists in emitted]
+
+
+def authored_forest(nodes, markdown):
     forest = []
     for tag, value in nodes:
         if tag in ("blockquote", "ul", "ol"):
-            children = authored_forest(value, tag)
+            children = (authored_forest(value, markdown) if tag == "blockquote"
+                        else authored_list(tag, value, markdown))
             if children:
                 forest.append((tag, children))
-        elif value or tag in ("h2", "pre") or (tag == "li" and parent == "ol"):
+        elif value or tag in ("h2", "pre"):
             if tag == "h2":
                 value = value.replace("\n", " ")
             if tag == "pre" and value and not value.endswith("\n"):
@@ -109,17 +128,25 @@ def authored_forest(nodes, parent=None):
 
 def containers(args, field, parse):
     command = [args.executable, "--document-container-cases", str(args.seed), str(args.count)]
-    rows = subprocess.check_output(command, encoding="utf-8").splitlines()
-    for index, row in enumerate(rows):
-        fields = row.split("\t")
-        expected = authored_forest(json.loads(fields[0]))
-        source = decode(fields[field])
-        actual = parse(source)
-        if actual != expected:
-            print(f"case {index}, {source!r}, expected {expected!r}, got {actual!r}")
+    count = 0
+    with subprocess.Popen(command, stdout=subprocess.PIPE, encoding="utf-8") as generator:
+        for index, row in enumerate(generator.stdout):
+            fields = row.rstrip("\n").split("\t")
+            expected = authored_forest(json.loads(fields[0]), markdown=field == 1)
+            try:
+                source = decode(fields[field])
+                actual = parse(source)
+            except (ValueError, KeyError, IndexError) as error:
+                print(f"case {index}, authored {fields[0]}, export {fields[field]}: {error}")
+                return 1
+            if actual != expected:
+                print(f"case {index}, {source!r}, expected {expected!r}, got {actual!r}")
+                return 1
+            count += 1
+        if generator.wait():
             return 1
-    print(f"seed {args.seed}, {len(rows)} authored container forests, zero mismatches")
-    return int(len(rows) != args.count)
+    print(f"seed {args.seed}, {count} authored container forests, zero mismatches")
+    return int(count != args.count)
 
 
 def main():

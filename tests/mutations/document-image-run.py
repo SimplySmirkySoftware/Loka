@@ -14,7 +14,7 @@ MUTATIONS = [
      "class ImageNode : public scene::ComponentNodeWithProps<ImageProps>", "Markdown",
      (": BlockNode<ImageProps>(props)", ": scene::ComponentNodeWithProps<ImageProps>(props)")),
     ("retain-old-alt", IMAGE, "doc::Lower(props).applyPropsToNode(leaf);", "(void)leaf;", "Screen"),
-    ("allow-list-image", FRAMES, "!this->accepts(false) || !CollectDocumentLine(p.source",
+    ("allow-list-image", FRAMES, "!this->acceptsBlock() || !CollectDocumentLine(p.source",
      "!CollectDocumentLine(p.source", "Html"),
     ("body-escape-alt", TAG, "AppendHtmlByte(out, alt[i], true);",
      "AppendHtmlByte(out, alt[i], false);", "Html"),
