@@ -369,6 +369,10 @@ namespace loka
           {
             return WriteInline(content, false, body);
           }
+          void rule()
+          {
+            this->block("***");
+          }
           /** Cost: once per image, escape its label and destination and emit one block. */
           bool image(const std::string &source, const std::string &alt, const ImageSize *size)
           {

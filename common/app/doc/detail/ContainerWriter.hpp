@@ -180,6 +180,14 @@ namespace loka
             return this->readItem(p.content, &p);
           }
 
+          virtual bool read(const RuleProps &)
+          {
+            if (!this->acceptsBlock())
+              return false;
+            static_cast<Writer &>(*this).rule();
+            return true;
+          }
+
           /** Cost: once per image, check its parent and collect its two fields before emitting it. */
           virtual bool read(const ImageProps &p)
           {

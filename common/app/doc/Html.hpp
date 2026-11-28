@@ -143,6 +143,11 @@ namespace loka
             if (this->parentNeedsNewline())
               this->fragment += '\n';
           }
+          void rule()
+          {
+            this->beginLeaf();
+            this->fragment += "<hr>\n";
+          }
           /** Cost: once per image, emit one block and escape both of its attribute values. */
           bool image(const std::string &source, const std::string &alt, const ImageSize *size)
           {

@@ -4,6 +4,7 @@
 #include "app/doc/CodeBlock.hpp"
 #include "app/doc/Heading.hpp"
 #include "app/doc/Paragraph.hpp"
+#include "app/doc/Rule.hpp"
 #include "app/doc/Inline.hpp"
 #include "app/doc/Render.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
@@ -46,6 +47,7 @@ namespace
                    << (doc::NumberedList()
                        << (doc::Item("Find the trail.") << doc::CodeBlock("survey --offline"))
                        << (doc::Item("Follow the signs.") << (doc::List() << doc::Item("Look for blue posts."))))
+                   << doc::Rule()
                    << (Show(*this->showNotes_.state())
                        << (doc::Quote() << doc::Image("map.svg", "Trail & ridge", doc::ImageSize(480, 320))
                                         << doc::Paragraph("Record the trail conditions."))));

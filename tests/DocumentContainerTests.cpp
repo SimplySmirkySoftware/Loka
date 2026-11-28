@@ -1,5 +1,6 @@
 #include "DocumentContainerTests.hpp"
 #include "CardTests.hpp"
+#include "app/doc/Rule.hpp"
 #include "app/doc/Inline.hpp"
 #include "platform/null/context/NullTextContext.hpp"
 #include "app/doc/Markdown.hpp"
@@ -84,6 +85,10 @@ namespace
     virtual bool read(const doc::CodeBlockProps &)
     {
       return this->event('c');
+    }
+    virtual bool read(const doc::RuleProps &)
+    {
+      return this->event('R');
     }
     virtual bool read(const doc::ImageProps &)
     {
@@ -272,10 +277,10 @@ void testDocumentMarkdownContainers()
 {
   const Exit e = {false};
   containers(e);
-  Fixture<doc::Quote> f(doc::Quote() << doc::Image("map", "")
+  Fixture<doc::Quote> f(doc::Quote() << doc::Rule() << doc::Image("map", "")
                                      << (doc::List() << doc::Item("first") << doc::Item("second"))
                                      << (doc::NumberedList() << (doc::Item("") << doc::List())));
-  const std::string complete = "QILiilNSoLlsnq";
+  const std::string complete = "QRILiilNSoLlsnq";
   for (size_t stop = 1; stop <= complete.size() + 1; ++stop)
   {
     RefusingReader reader(stop);
@@ -913,6 +918,72 @@ void testDocumentNestedListScreen()
   checkNestedScreen<doc::NumberedList>(28);
 }
 
+void testDocumentRuleBlocks()
+{
+  bothExits(doc::Rule().tag(2), "***\n", "<hr>\n");
+  bothExits(Column() << doc::Paragraph("* * *") << doc::Rule(), "\\* \\* \\*\n\n***\n", "<p>* * *</p>\n<hr>\n");
+  bothExits(Column() << doc::Rule() << doc::Paragraph("a") << doc::Rule() << doc::Paragraph("b") << doc::Rule()
+                     << doc::Rule(),
+            "***\n\na\n\n***\n\nb\n\n***\n\n***\n",
+            "<hr>\n<p>a</p>\n<hr>\n<p>b</p>\n<hr>\n<hr>\n");
+  bothExits(Column() << (doc::List() << doc::Item("x")) << doc::Rule() << (doc::NumberedList() << doc::Item("y"))
+                     << doc::Rule() << doc::CodeBlock("c") << doc::Rule() << doc::Heading(2, "h") << doc::Rule(),
+            "- x\n\n***\n\n1. y\n\n***\n\n```\nc\n```\n\n***\n\n## h\n\n***\n",
+            "<ul>\n<li>x</li>\n</ul>\n<hr>\n<ol>\n<li>y</li>\n</ol>\n<hr>\n"
+            "<pre><code>c\n</code></pre>\n<hr>\n<h2>h</h2>\n<hr>\n");
+  bothExits(
+      Column() << doc::Image("m", "a", doc::ImageSize(1, 2)) << doc::Rule() << doc::Image("m", "a") << doc::Rule(),
+      "<img src=\"m\" alt=\"a\" width=\"1\" height=\"2\">\n\n***\n\n![a](<m>)\n\n***\n",
+      "<p><img src=\"m\" alt=\"a\" width=\"1\" height=\"2\"></p>\n<hr>\n<p><img src=\"m\" alt=\"a\"></p>\n<hr>\n");
+}
+
+void testDocumentRuleQuotes()
+{
+  const Box wrapped = Box() << (Column() << doc::Rule());
+  bothExits(Column() << wrapped
+                     << (doc::Quote() << doc::Rule() << doc::Paragraph("a") << wrapped << (doc::Quote() << doc::Rule())
+                                      << doc::Rule()),
+            "***\n\n> ***\n>\n> a\n>\n> ***\n>\n> > ***\n>\n> ***\n",
+            "<hr>\n<blockquote>\n<hr>\n<p>a</p>\n<hr>\n<blockquote>\n<hr>\n</blockquote>\n<hr>\n</blockquote>\n");
+}
+
+void testDocumentRuleGrammar()
+{
+  bothExits(Column() << doc::Paragraph("before") << (doc::List() << doc::Rule()), 0, 0);
+  doc::RuleDefinition rule = doc::Rule();
+  doc::NumberedList numbered;
+  numbered << doc::Item("first");
+  static_cast<INestableDefinition &>(numbered) << rule;
+  bothExits(numbered, 0, 0);
+  doc::List list = doc::List() << (doc::Item("head") << doc::CodeBlock("c"));
+  list.childrenHead()->asNestableDefinition()->addChild(&rule);
+  bothExits(list, 0, 0);
+}
+
+void testDocumentRuleScreen()
+{
+  Fixture<doc::RuleDefinition> f(doc::Rule().tag(2));
+  Node *rule = f.node();
+  LOKA_VERIFY(rule && rule->nodeTag() == 2);
+  LOKA_VERIFY(doc::Rule().tag(3).applyPropsToNode(rule) && rule->nodeTag() == 3);
+  Node *child = rule->asNestable()->childrenHead();
+  LOKA_VERIFY(child && !child->nextInComposition);
+  TextNode *text = child->asTextNode();
+  LOKA_VERIFY(text && text->props.text_->get().equals(String("* * *")));
+  LayoutState offer;
+  offer.width = 100;
+  offer.height = 100;
+  offer.lineHeight = 12;
+  f.controller.projectLayoutForTesting(rule, offer);
+  NullTextContext *context = static_cast<NullTextContext *>(text->getContext());
+  LOKA_VERIFY(context && context->measurement().lineCount() == 1);
+  const Frame ink = loka::app::testing::NullTextMeasurementAccess::line(context->measurement(), 0);
+  LOKA_VERIFY(ink.width > 1 && ink.x > 0 && ink.x == (100 - ink.width) / 2);
+  offer.width = 5;
+  f.controller.projectLayoutForTesting(rule, offer);
+  LOKA_VERIFY(context->measurement().reusable(5) && context->measurement().lineCount() == 1 && ink.width > 5);
+}
+
 void testDocumentItemBlocksOrder()
 {
   const doc::CodeBlockDefinition code = doc::CodeBlock("c");
@@ -1167,10 +1238,15 @@ namespace
       {
         if (i)
           this->authored += ',';
-        const unsigned kind = this->pick(depth < 4 ? 6 : 3);
-        if (kind == 5)
+        const unsigned kind = this->pick(depth < 4 ? 7 : 4);
+        if (kind == 3)
+        {
+          this->authored += "[\"hr\",\"\"]";
+          quote << doc::Rule();
+        }
+        else if (kind == 6)
           quote << this->list<doc::NumberedList>("ol", 1, this->pick(14));
-        else if (kind == 4)
+        else if (kind == 5)
         {
           doc::Quote child;
           this->authored += "[\"blockquote\",";
@@ -1178,7 +1254,7 @@ namespace
           this->authored += ']';
           quote << child;
         }
-        else if (kind == 3)
+        else if (kind == 4)
           quote << this->list<doc::List>("ul", 1, this->pick(4));
         else
         {
@@ -1215,6 +1291,11 @@ int documentContainerCases(unsigned seed, unsigned count)
     gen.authored += "],";
     page << quote << gen.list<doc::List>("ul", 1, gen.pick(4));
     gen.authored += ',';
+    if (gen.pick(2))
+    {
+      page << doc::Rule();
+      gen.authored += "[\"hr\",\"\"],";
+    }
     page << gen.list<doc::NumberedList>("ol", 1, gen.pick(14));
     gen.authored += ']';
     Fixture<Column> f(page, false);

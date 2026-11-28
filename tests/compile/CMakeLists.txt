@@ -1014,6 +1014,18 @@ loka_compile_pin(document-block-reader
   REFUSES pins/refuses_document_block_reader.cpp
   ACCEPTS pins/accepts_document_block_reader.cpp)
 
+loka_compile_pin(document-rule-reader
+  REFUSES pins/refuses_document_rule_reader.cpp
+  ACCEPTS pins/accepts_document_block_reader.cpp)
+
+loka_compile_pin(document-item-rule
+  REFUSES pins/refuses_document_item_rule.cpp
+  ACCEPTS pins/accepts_document_item_rule.cpp)
+
+loka_compile_pin(document-numbered-list-rule
+  REFUSES pins/refuses_document_numbered_list_rule.cpp
+  ACCEPTS pins/accepts_document_numbered_list_rule.cpp)
+
 loka_compile_pin(document-image-reader
   REFUSES pins/refuses_document_image_reader.cpp
   ACCEPTS pins/accepts_document_block_reader.cpp)

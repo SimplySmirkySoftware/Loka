@@ -13,6 +13,7 @@
 #include "app/doc/Heading.hpp"
 #include "app/doc/Paragraph.hpp"
 #include "app/doc/CodeBlock.hpp"
+#include "app/doc/Rule.hpp"
 #include "app/doc/Inline.hpp"
 #include "app/doc/Markdown.hpp"
 #include "app/doc/Html.hpp"
@@ -25,7 +26,7 @@ void documentVocabularyAfterSdk(loka::app::scene::NodeComposition &composition)
   composition.declare(Column() << doc::Heading(1, "Guide")
                                << doc::Paragraph(doc::Link("Guide", "https://example.com/guide") + doc::Code("x"))
                                << (doc::List() << doc::Item("entry")) << (doc::Quote() << doc::Paragraph("quoted"))
-                               << doc::Image("map.png", "Trail map") << doc::CodeBlock("one\ntwo"));
+                               << doc::Image("map.png", "Trail map") << doc::Rule() << doc::CodeBlock("one\ntwo"));
 }
 
 namespace

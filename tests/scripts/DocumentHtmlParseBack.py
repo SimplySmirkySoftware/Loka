@@ -14,6 +14,10 @@ def html_projection(html5lib, source):
     def block_value(block):
         if block.tag in ("ul", "ol", "blockquote"):
             return blocks(block, "\n")
+        if block.tag == "hr":
+            if block.attrib or block.text or len(block):
+                raise ValueError("unexpected thematic break content")
+            return []
         if block.tag == "pre":
             if len(block) != 1 or block.text or block[0].tag != "code" or block[0].tail or len(block[0]):
                 raise ValueError("unexpected code block")
