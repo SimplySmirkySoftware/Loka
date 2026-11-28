@@ -11,6 +11,7 @@
 #include "core/util/StateTrackerGuard.hpp"
 #include "platform/StringUTF8.hpp"
 #include <cstdio>
+#include <stdio.h>
 
 namespace link_press_probe
 {
@@ -59,7 +60,7 @@ namespace link_press_probe
       std::printf("activated %s count=%u\n", name.c_str(), this->count_);
       std::fflush(stdout);
       char count[32];
-      std::sprintf(count, "%u", this->count_);
+      ::snprintf(count, sizeof(count), "%u", this->count_);
       loka::core::StateTrackerGuard guard(this->tracker());
       this->display_.set(String("last: ") + target.text() + "  count: " + std::string(count));
     }
