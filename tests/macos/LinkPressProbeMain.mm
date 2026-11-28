@@ -67,6 +67,10 @@ namespace
       {41, 41, @"last: alpha  count: 1"}, {42, 99, @"last: alpha  count: 1"}, {43, 43, @"last: alpha  count: 2"}};
   const unsigned pairCount = sizeof(pairs) / sizeof(pairs[0]);
 
+  // Posted events reach the window only intermittently while the console is locked, so a run that
+  // times out on a locked console proves nothing either way and reports this reason with exit 2.
+  const char *const kConsoleLocked = "console screen is locked (inconclusive)";
+
   class SelfCheck : public ProbeApp
   {
   public:
@@ -146,13 +150,15 @@ namespace
     {
       if (this->passed_)
         std::puts("self-check PASS");
+      else if (this->failure_ == kConsoleLocked)
+        std::printf("[skip] self-check: %s\n", kConsoleLocked);
       else
         std::printf("self-check FAIL %s (pairs posted=%u, entries=%u)\n",
                     this->failure_ ? this->failure_ : "run ended early",
                     this->posted_,
                     this->entries_);
       std::fflush(stdout);
-      return this->passed_ ? 0 : 1;
+      return this->passed_ ? 0 : this->failure_ == kConsoleLocked ? 2 : 1;
     }
 
     App *app;
@@ -162,7 +168,7 @@ namespace
     {
       if (this->elapsed_ >= 5)
       {
-        this->failure_ = reason;
+        this->failure_ = loka::testing::MacConsoleScreenIsLocked() ? kConsoleLocked : reason;
         this->app->quit();
       }
     }
@@ -238,10 +244,9 @@ int main(int argc, char **argv)
   for (int i = 1; i < argc; ++i)
     if (std::strcmp(argv[i], "--self-check") == 0)
       checking = true;
-  // Posted events do not reach a window on a locked console; that run proves nothing either way.
   if (checking && loka::testing::MacConsoleScreenIsLocked())
   {
-    std::puts("[skip] self-check: console screen is locked (inconclusive)");
+    std::printf("[skip] self-check: %s\n", kConsoleLocked);
     [pool drain];
     return 2;
   }

@@ -280,6 +280,23 @@ execute_process(COMMAND git rev-parse HEAD
 if(NOT LOKA_MAC_PROBE_REVISION_RESULT EQUAL 0)
   # Source archives can still build shipping targets without Git metadata.
   set(LOKA_MAC_PROBE_REVISION "unavailable")
+else()
+  # The stamp is read at configure time; a checkout or commit rewrites logs/HEAD, so re-run configure
+  # then and the probe never prints the previous candidate's revision. Git before 2.5 has no
+  # --git-path; there the stamp refreshes on the next explicit configure.
+  execute_process(COMMAND git rev-parse --git-path logs/HEAD
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    OUTPUT_VARIABLE LOKA_MAC_PROBE_HEAD_LOG
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE LOKA_MAC_PROBE_HEAD_LOG_RESULT
+    ERROR_QUIET)
+  if(LOKA_MAC_PROBE_HEAD_LOG_RESULT EQUAL 0)
+    get_filename_component(LOKA_MAC_PROBE_HEAD_LOG "${LOKA_MAC_PROBE_HEAD_LOG}" ABSOLUTE
+      BASE_DIR "${PROJECT_SOURCE_DIR}")
+    if(EXISTS "${LOKA_MAC_PROBE_HEAD_LOG}")
+      set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${LOKA_MAC_PROBE_HEAD_LOG}")
+    endif()
+  endif()
 endif()
 
 add_executable(LokaLinkPressProbeMacOS EXCLUDE_FROM_ALL MACOSX_BUNDLE
