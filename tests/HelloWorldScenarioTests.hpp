@@ -7,6 +7,7 @@ void testHelloWorldVehiclePresentationUsesExampleDeclaration();
 void testHelloWorldBmiRoundtripDrivesEditTextInput();
 void testHelloWorldStandaloneMenuMatchesExample();
 void testHelloWorldStandaloneWindowMatchesExample();
+void testHelloWorldStandaloneDeclarationRefusalIsWindowless();
 void testHelloWorldStandaloneMountRefusalFailsClosed();
 
 #endif // LOKA_TESTS_HELLO_WORLD_SCENARIO_TESTS_HPP

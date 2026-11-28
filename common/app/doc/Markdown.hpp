@@ -3,6 +3,7 @@
 
 #include "app/doc/detail/Projection.hpp"
 #include "app/doc/detail/ContainerWriter.hpp"
+#include "app/doc/detail/HtmlImage.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -95,6 +96,12 @@ namespace loka
           }
         };
 
+        /** Cost: one fixed punctuation lookup per plain ASCII scalar or image label byte. */
+        inline bool MarkdownTextPunctuation(unsigned c)
+        {
+          return c < 128 && std::strchr("\\`*_[]<&#~", c);
+        }
+
         /** A block-local projection whose byte ranges are rewritten to their Markdown spellings. */
         struct MarkdownInline : InlineProjection
         {
@@ -143,7 +150,7 @@ namespace loka
                     bool beforeLink = i == run.end && r + 1 < this->runs.size() && this->runs[r + 1].style.link
                                       && !run.style.link && !run.style.marks;
                     if (v < 128
-                        && (std::strchr("\\`*_[]<&#~", v) || (lineStart && std::strchr(">+-=", v))
+                        && (MarkdownTextPunctuation(v) || (lineStart && std::strchr(">+-=", v))
                             || (digits && (v == '.' || v == ')')) || (v == '!' && beforeLink)))
                       spelled += '\\';
                     spelled.append(this->bytes, pos, i - pos);
@@ -175,7 +182,7 @@ namespace loka
                  && !AsciiAlphanumeric(outside);
         }
 
-        /** Cost: once per maximal link, escaping only its own destination bytes. */
+        /** Cost: once per link or image, escaping only its own destination bytes. */
         inline void CloseMarkdownLink(std::string &out, const char *target)
         {
           out += "](<";
@@ -260,6 +267,7 @@ namespace loka
         class MarkdownReader : public ContainerWriter<MarkdownReader>
         {
         public:
+          using ContainerWriter<MarkdownReader>::read;
           std::string fragment;
           /** Cost: once per physical line, append one prefix per enclosing quote. */
           void prefix(unsigned quotes, bool blank)
@@ -273,42 +281,83 @@ namespace loka
             this->prefix(quotes, true);
             this->fragment += '\n';
           }
-          /** Cost: Markdown containers need no separate opening or closing line. */
-          void open(Kind) {}
-          /** Cost: each completed Markdown container needs no closing delimiter. */
-          void close(Kind) {}
-          /** Cost: each emitted leaf scans its own spelling once, prefixing physical lines. */
-          void block(const std::string &value)
+          void open(unsigned level, bool firstLineBare)
           {
-            this->beginLeaf();
-            const bool item = this->frames[this->depth].kind == LIST;
-            const unsigned quotes = this->depth - (item ? 1 : 0);
+            const Frame &frame = this->frames[level];
+            if (frame.kind == NESTED_ITEM)
+            {
+              this->item(level - 1, frame.head, true);
+              if (!frame.head.empty() && firstLineBare)
+                this->separator(this->quoteCount(level));
+            }
+          }
+          void close(Kind) {}
+          unsigned quoteCount(unsigned level) const
+          {
+            unsigned quotes = 0;
+            for (unsigned i = 1; i <= level; ++i)
+              if (this->frames[i].kind == QUOTE)
+                ++quotes;
+            return quotes;
+          }
+          std::string itemMarker(unsigned level) const
+          {
+            const char delimiter = this->frames[level - 1].siblingMarker();
+            const Frame &list = this->frames[level];
+            return list.kind == NUMBERED_LIST ? OrdinalMarker(list.ordinal(), delimiter) : std::string(1, delimiter);
+          }
+          /** Count the indentation of the enclosing items once for all physical lines of this block. */
+          void writeLines(unsigned level, const std::string &value, const std::string &marker, bool withChildren)
+          {
+            const unsigned quotes = this->quoteCount(level);
+            size_t indent = 0;
+            for (unsigned i = 1; i <= level; ++i)
+              if (this->frames[i].kind == NESTED_ITEM)
+                indent += this->itemMarker(i - 1).size() + 1;
             size_t start = 0;
             for (;;)
             {
               const size_t end = value.find('\n', start);
-              this->prefix(quotes, !item && end == start);
-              if (item)
+              // An empty enclosing head has already written this physical line's prefix and marker.
+              if (this->fragment.empty() || this->fragment[this->fragment.size() - 1] == '\n')
+              {
+                const bool blank = marker.empty() && end == start;
+                this->prefix(quotes, blank);
+                if (!blank)
+                  this->fragment.append(indent, ' ');
+              }
+              if (!marker.empty())
               {
                 if (start)
-                  this->fragment += "  ";
+                  this->fragment.append(marker.size() + 1, ' ');
                 else
                 {
-                  this->fragment += this->frames[this->depth - 1].previous;
-                  this->fragment += ' ';
+                  this->fragment += marker;
+                  if (!value.empty() || withChildren)
+                    this->fragment += ' ';
                 }
               }
               this->fragment.append(value, start, end == std::string::npos ? end : end - start);
-              this->fragment += '\n';
+              if (!withChildren || !value.empty())
+                this->fragment += '\n';
               if (end == std::string::npos)
                 break;
               start = end + 1;
             }
           }
+          void item(unsigned level, const std::string &body, bool withChildren)
+          {
+            this->writeLines(level, body, this->itemMarker(level), withChildren);
+          }
+          void block(const std::string &value)
+          {
+            this->beginLeaf();
+            this->writeLines(this->depth, value, std::string(), false);
+          }
           /** Cost: one inline projection per visited heading, independent of its visual defaults. */
           virtual bool read(const HeadingProps &p)
           {
-            if (!this->accepts(false))
+            if (!this->acceptsBlock())
               return false;
             std::string body;
             if (!WriteInline(p.content, true, body))
@@ -316,30 +365,47 @@ namespace loka
             this->block(std::string(p.level(), '#') + (body.empty() ? "" : " ") + body);
             return true;
           }
-          /** Cost: once per inline leaf, check its parent and spell its own runs once. */
-          bool inlineLeaf(const AttributedString &content, bool item)
+          bool spellItem(const AttributedString &content, std::string &body)
           {
-            std::string body;
-            if (!this->accepts(item) || !WriteInline(content, false, body))
-              return false;
-            if (!body.empty())
-              this->block(body);
+            return WriteInline(content, false, body);
+          }
+          /** Cost: once per image, escape its label and destination and emit one block. */
+          bool image(const std::string &source, const std::string &alt, const ImageSize *size)
+          {
+            if (size)
+            {
+              std::string tag;
+              if (!AppendHtmlImage(tag, source, alt, size))
+                return false;
+              this->block(tag);
+              return true;
+            }
+            std::string body = "![";
+            for (size_t i = 0; i < alt.size(); ++i)
+            {
+              // A label never starts a line, so '#' stays literal there.
+              if (alt[i] != '#' && MarkdownTextPunctuation(static_cast<unsigned char>(alt[i])))
+                body += '\\';
+              body += alt[i];
+            }
+            CloseMarkdownLink(body, source.c_str());
+            this->block(body);
             return true;
           }
           /** Cost: each visited paragraph forwards one input. */
           virtual bool read(const ParagraphProps &p)
           {
-            return this->inlineLeaf(p.content, false);
-          }
-          /** Cost: each visited item forwards one input. */
-          virtual bool read(const ItemProps &p)
-          {
-            return this->inlineLeaf(p.content, true);
+            std::string body;
+            if (!this->acceptsBlock() || !WriteInline(p.content, false, body))
+              return false;
+            if (!body.empty())
+              this->block(body);
+            return true;
           }
           /** Cost: one collection per visited code block, then linear newline and fence scans. */
           virtual bool read(const CodeBlockProps &p)
           {
-            if (!this->accepts(false))
+            if (!this->acceptsListOrCodeBlock())
               return false;
             std::string body;
             if (!CollectCodeBlock(p.text, body))

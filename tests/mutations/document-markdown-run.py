@@ -9,9 +9,9 @@ PROJECTION = MARKDOWN.parent / "detail/Projection.hpp"
 WALK = MARKDOWN.parent / "BlockWalk.hpp"
 FRAMES = MARKDOWN.parent / "detail/ContainerWriter.hpp"
 MUTATIONS = [
-    ("drop-marker", MARKDOWN, "this->fragment += this->frames[this->depth - 1].previous;", "", "Containers"),
+    ("drop-marker", MARKDOWN, "this->fragment += marker;", "", "Containers"),
     ("drop-prefix-level", MARKDOWN, "i < quotes;", "i + 1 < quotes;", "Containers"),
-    ("ignore-sibling-marker", FRAMES, "(parent.previous == '-' ? '*' : '-')", "'-'", "Containers"),
+    ("ignore-sibling-marker", FRAMES, "this->previous == '-' ? '*' : '-'", "'-'", "Containers"),
     ("skip-leave", WALK, "return reader.leave(props) ? scene::DOCUMENT_BLOCK_READ : scene::DOCUMENT_BLOCK_REFUSED;",
      "return scene::DOCUMENT_BLOCK_READ;", "Containers"),
     ("prune", WALK, "case scene::DOCUMENT_BLOCK_READ:\n            return true;",
@@ -25,8 +25,8 @@ MUTATIONS = [
     ("ignore-flanking", MARKDOWN, "if (stars)", "if (stars || (!touching && !literal))", "Inline"),
     ("partial-body", PROJECTION, "!CollectDocumentText(seg.text, this->bytes)",
      "(CollectDocumentText(seg.text, this->bytes), false)", "Failure"),
-    ("partial-destination", PROJECTION, "!CollectDocumentText(seg.link.text(), target)",
-     "(CollectDocumentText(seg.link.text(), target), false)", "Failure"),
+    ("partial-destination", PROJECTION, "!CollectDocumentLine(seg.link.text(), target)",
+     "(CollectDocumentLine(seg.link.text(), target), false)", "Failure"),
     ("edge-emphasis", PROJECTION, "AppendRun(projected, plain, run.first, ink.first);", "AppendRun(projected, run.style, run.first, ink.first);", "Inline"),
     ("short-fence", MARKDOWN, "Backticks(body, 0, body.size(), 3)", 'std::string(3, \'`\')', "Blocks"),
     ("partial-commit", MARKDOWN, "if (!root || !detail::WalkDocumentBlocks(root, reader))\n          return false;",

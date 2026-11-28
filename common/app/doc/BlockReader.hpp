@@ -9,11 +9,15 @@ namespace loka
   {
     namespace doc
     {
+      struct NestedItemProps;
       struct ListProps;
       struct ItemProps;
+      struct NumberedItemProps;
+      struct NumberedListProps;
       struct QuoteProps;
       struct HeadingProps;
       struct ParagraphProps;
+      struct ImageProps;
       struct CodeBlockProps;
 
       /** A synchronous exit borrows the authored props. Ordinary nodes allow descent.
@@ -30,8 +34,18 @@ namespace loka
         /** Cost: one call per visited CodeBlock block, borrowing its props only. */
         virtual bool read(const CodeBlockProps &) = 0;
 
+        /** Cost: one call per visited image, borrowing its props only. */
+        virtual bool read(const ImageProps &) = 0;
+
         /** Cost: one borrowed input per visited item. */
         virtual bool read(const ItemProps &) = 0;
+        /** Each numbered container has one entry and one successful leave, with one read per item. */
+        virtual bool enter(const NumberedListProps &) = 0;
+        virtual bool leave(const NumberedListProps &) = 0;
+        virtual bool read(const NumberedItemProps &) = 0;
+        /** Visit the head and its children once per nested item. */
+        virtual bool enter(const NestedItemProps &) = 0;
+        virtual bool leave(const NestedItemProps &) = 0;
         /** Cost: the walk calls once per List enter, borrowing its props only. */
         virtual bool enter(const ListProps &) = 0;
         /** Cost: the walk calls once per List leave, borrowing its props only. */

@@ -17,6 +17,22 @@ bool MacTestEligibleRun(const MacTextHit &hit,
 /** One out-of-line budget check per test size. */
 bool MacTestTextBudget(NSSize size, CGFloat scale);
 
+#include "testing/MacPresentedOwnerTestAccess.hpp"
+namespace loka
+{
+  namespace testing
+  {
+    /** Arm or disarm one borrowed buffer around the synthetic same-image replacement. */
+    void traceMacPresentedImage(char *buffer);
+  } // namespace testing
+} // namespace loka
+/** Pass trace reads, once per receiver hook in the test binary. */
+unsigned MacTestRepaintEntries();
+/** One lexical interval read per forwarded native send. */
+bool MacTestInsideRepaint();
+/** One production coverage calculation on the supplied damage rects per test. */
+bool MacTestRectsCover(const NSRect *rects, NSInteger count, NSRect target);
+
 // The implementation and ownership of these getters stay on the rail-private leaf.
 @interface NSView (LokaAttributedTextTestReads)
 - (NSTextStorage *)lokaTextStorage;
@@ -29,7 +45,7 @@ bool MacTestTextBudget(NSSize size, CGFloat scale);
 - (BOOL)installValue:(NSAttributedString *)value
             snapshot:(const loka::app::AttributedString *)snapshot
               extent:(CGFloat *)extent;
-/** One current-layer tuple read per observation. */
+/** One routed native tuple read per observation. */
 - (BOOL)queryPresentedFact:(MacPresentedText *)out;
 /** One draw of this view's glyphs in the requested band per display. */
 - (void)drawTextInRect:(NSRect)rect;
@@ -39,6 +55,10 @@ bool MacTestTextBudget(NSSize size, CGFloat scale);
 - (BOOL)lokaHasInstalledText;
 /** One retained-pointer read per owner observation. */
 - (BOOL)lokaHasPresentationImage;
+/** One presentation path read per fixture observation. */
+- (int)lokaPresentedPath;
+/** One production placement invalidation per interval pin. */
+- (void)dropWindowPresentation;
 @end
 
 namespace loka
@@ -97,7 +117,26 @@ namespace loka
 
       class MacAttributedTextTestAccess
       {
+        static char readAccess(MacAttributedTextContext::Projection &);
+        static short readAccess(const MacAttributedTextContext::Projection &);
+
       public:
+        enum PresentedPath
+        {
+          NONE,
+          LAYER,
+          WINDOW
+        };
+        /** One out-of-line tag read per observation, independent of SDK. */
+        static int presentedPath(NSView *view)
+        {
+          return [view lokaPresentedPath];
+        }
+        /** One invalidation of the supplied leaf per fixture reset. */
+        static void dropWindowPresentation(NSView *view)
+        {
+          [view dropWindowPresentation];
+        }
         static NSView *view(const MacAttributedTextContext &context)
         {
           return (NSView *)context.view_;
@@ -129,26 +168,35 @@ namespace loka
         {
           LOKA_VERIFY(node.getContext());
           const MacAttributedTextContext *context = static_cast<MacAttributedTextContext *>(node.getContext());
-          return (NSAttributedString *)context->projection_.value();
+          return (NSAttributedString *)context->links_.table().value();
+        }
+        /** One session borrow per placement pin; shared test access inspects the actual procedure. */
+        static app::internal::LinkPressSession<MacPressedLink> &session(MacAttributedTextContext &context)
+        {
+          // Even a mutable table owner can only read through table().
+          typedef char ProjectionMustBeReadOnly[sizeof(readAccess(context.links_.table())) == sizeof(short) ? 1 : -1];
+          (void)sizeof(ProjectionMustBeReadOnly);
+          return context.links_.session();
         }
         static int height(const MacAttributedTextContext &context)
         {
-          return context.projection_.height();
+          return context.links_.table().height();
         }
         static bool reusable(const MacAttributedTextContext &context, const macos::MacLength &width)
         {
-          return context.projection_.reusable(width);
+          return context.links_.table().reusable(width);
         }
         static bool build(MacAttributedTextContext &context,
                           const app::AttributedString &value,
                           const MacScenePlatformController &controller)
         {
-          return context.projection_.build(value, app::BlockStyle(), controller);
+          context.links_.invalidatePress();
+          return context.links_.projection_.build(value, app::BlockStyle(), controller);
         }
         static bool
         query(const MacAttributedTextContext &context, NSUInteger start, NSUInteger end, app::TextSegmentRange &out)
         {
-          return context.projection_.queryProvenance(start, end, out);
+          return context.links_.table().queryProvenance(start, end, out);
         }
         /** One context preparation per test point; the forwarder walks no rows. */
         static MacTextHitAnswer
@@ -171,16 +219,16 @@ namespace loka
         /** One borrowed snapshot per projection lifetime pin. */
         static const app::AttributedString &snapshot(const MacAttributedTextContext &context)
         {
-          return context.projection_.snapshot();
+          return context.links_.table().snapshot();
         }
         static bool complete(const MacAttributedTextContext &context)
         {
-          return context.projection_.value() != 0;
+          return context.links_.table().value() != 0;
         }
         static bool measured(const MacAttributedTextContext &context)
         {
           CGFloat constraint = 0;
-          return context.projection_.measurement_.queryConstraint(constraint);
+          return context.links_.table().measurement_.queryConstraint(constraint);
         }
       };
     } // namespace testing

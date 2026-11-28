@@ -2,7 +2,9 @@
 #define LOKA_APP_POLICY_SCOPE_HPP
 
 #include <cassert>
+#include <new>
 #include "app/nodes/nestable/Fragment.hpp"
+#include "core/util/OwnedDef.hpp"
 
 namespace loka
 {
@@ -82,9 +84,22 @@ namespace loka
         return 1;
       }
       typedef PolicyScopeDefinition CloneType;
+      /** Returns 0 if a child in the stored content refuses to clone. The count
+          check is exact because a by-value FragmentDefinition copy is all-or-nothing.
+          By-value copies of PolicyScope cannot report refusal. Callers needing that result
+          use clone(). Inside a composition window, refusal is also reported to the boundary. */
       virtual scene::NodeDefinitionBase *clone() const
       {
-        return new PolicyScopeDefinition(*this);
+        loka::core::OwnedDef<PolicyScopeDefinition> copy(new (std::nothrow) PolicyScopeDefinition(*this));
+        if (!copy.isSet())
+        {
+          return 0;
+        }
+        if (copy->content_.childrenCount() != this->content_.childrenCount())
+        {
+          return 0;
+        }
+        return copy.take();
       }
       virtual scene::NodeKind nodeKind() const
       {

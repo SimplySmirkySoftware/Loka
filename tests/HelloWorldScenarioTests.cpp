@@ -25,7 +25,8 @@
 #include "scenarios/SceneScenarioDriver.hpp"
 #include "standalone/HelloWorldStandaloneFlowAppConfig.hpp"
 #include "support/MenuPresentationVerify.hpp"
-#include "support/StandaloneMountTestSupport.hpp"
+#include "StandaloneLoopLaunchTests.hpp"
+#include "WindowRootRefusalTests.hpp"
 #include "testing/scene/ScenarioAudit.hpp"
 
 namespace
@@ -297,6 +298,18 @@ void testHelloWorldStandaloneWindowMatchesExample()
   std::printf("testHelloWorldStandaloneWindowMatchesExample passed\n");
 }
 
+void testHelloWorldStandaloneLoopCloseBeforeFirstIdleSucceeds()
+{
+  StandaloneLoopLaunchTestSupport::verifyCloseBeforeFirstIdle<
+      loka::standalone_tests::HelloWorldStandaloneFlowAppConfig>("_loka_helloworld_loop_close.audit");
+}
+
+void testHelloWorldStandaloneDeclarationRefusalIsWindowless()
+{
+  WindowRootRefusalTestSupport::verifyDeclarationRefusal<loka::standalone_tests::HelloWorldStandaloneFlowAppConfig>(
+      "_loka_helloworld_declaration_refusal.audit");
+}
+
 void testHelloWorldStandaloneMountRefusalFailsClosed()
 {
   const char *auditPath = "_loka_hello_standalone_mount_refusal.log";
@@ -307,26 +320,16 @@ void testHelloWorldStandaloneMountRefusalFailsClosed()
   {
     loka::platform::file::FileHandle auditFile;
     auditFile.displayPath = loka::core::String::Literal(auditPath);
-    loka::testing::StandaloneMountTestPlatformContext context;
+    NullPlatformContext context;
     loka::standalone_tests::HelloWorldStandaloneFlowAppConfig config(&context, &auditFile, diagnostics);
     LOKA_VERIFY(config.exitCode() == 0);
     NullApp app(&config);
     config.setApp(&app);
 
-    loka::scenario_tests::testing::failObservedMainDefinitionClones(1);
-    AppComposition composition(&context);
-    config.compose(composition);
-    std::vector<AppComponent *> components = composition.build();
-    loka::scenario_tests::testing::allowObservedMainDefinitionClones();
-
-    LOKA_VERIFY(components.size() == 1);
-    Window *window = components[0] ? components[0]->asWindow() : 0;
-    LOKA_VERIFY(window != 0);
+    Window *window = WindowRootRefusalTestSupport::launchWithRefusedMount(app);
     LOKA_VERIFY(window->visibilityState().get());
     LOKA_VERIFY(window->displayTitleState().get().equals(
-        loka::core::String::Literal(
-            "Loka HelloWorld Standalone Flow - toggle-action-probe (cycle 1)")));
-    LOKA_VERIFY(window->scene() == 0);
+        loka::core::String::Literal("Loka HelloWorld Standalone Flow - toggle-action-probe (cycle 1)")));
     for (int tick = 0; tick < 8; ++tick)
     {
       LOKA_VERIFY(window->handleIdle(0.1));
@@ -343,11 +346,6 @@ void testHelloWorldStandaloneMountRefusalFailsClosed()
     LOKA_VERIFY(output
                 == "Loka HelloWorld standalone startup failed: "
                    "MainNode was not mounted after 5 idle ticks.\n");
-
-    for (std::size_t i = 0; i < components.size(); ++i)
-    {
-      delete components[i];
-    }
   }
 
   LOKA_VERIFY(std::fclose(diagnostics) == 0);

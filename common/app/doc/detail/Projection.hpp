@@ -31,6 +31,12 @@ namespace loka
           return true;
         }
 
+        /** Cost: collect and validate one single-line field into fresh scratch. */
+        inline bool CollectDocumentLine(const core::String &value, std::string &line)
+        {
+          return CollectDocumentText(value, line) && line.find_first_of("\r\n") == std::string::npos;
+        }
+
         /** Cost: normalization tests one scalar at a time against the fixed document whitespace set. */
         inline bool EdgeSpace(unsigned c)
         {
@@ -135,8 +141,7 @@ namespace loka
               const AttributedString::Segment &seg = content.segment(s);
               const size_t first = this->bytes.size();
               std::string target;
-              if (!CollectDocumentText(seg.text, this->bytes) || !CollectDocumentText(seg.link.text(), target)
-                  || target.find_first_of("\r\n") != std::string::npos)
+              if (!CollectDocumentText(seg.text, this->bytes) || !CollectDocumentLine(seg.link.text(), target))
                 return false;
               if (this->bytes.size() == first)
                 continue;

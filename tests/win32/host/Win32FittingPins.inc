@@ -1,3 +1,4 @@
+#include "support/LinkPressSessionAccess.hpp"
 namespace loka
 {
   namespace testing
@@ -11,11 +12,7 @@ namespace loka
       }
       static void expectInvalidated(Win32AttributedTextContext &context, bool active)
       {
-        Win32PressedRun run;
-        LOKA_VERIFY(!context.links_.candidate_.take(run));
-        LOKA_VERIFY((context.links_.active_ != 0) == active);
-        if (active)
-          LOKA_VERIFY(context.links_.active_->invalidated());
+        LinkPressSessionAccess::expectInvalidated(context.links_.session(), active);
       }
       static void
       present(Win32AttributedTextContext &context, const loka::app::AttributedString &value, const RECT &seat)
@@ -27,7 +24,7 @@ namespace loka
       {
         loka::app::TextLineBreaker *rows = context.links_.table_.lines_;
         context.links_.table_.lines_ = 0;
-        Win32PressedRun run;
+        app::internal::PressedRun run;
         const bool eligible = context.queryEligibleRun(hit, run);
         context.links_.table_.lines_ = rows;
         return eligible;
@@ -38,7 +35,7 @@ namespace loka
       }
       static bool eligible(const Win32AttributedTextContext &context, const LinkHit &hit)
       {
-        Win32PressedRun run;
+        app::internal::PressedRun run;
         return context.queryEligibleRun(hit, run);
       }
       static void draw(Win32AttributedTextContext &context, HDC dc, const RECT &seat)

@@ -1,0 +1,27 @@
+#ifndef LOKA_MAC_ATTRIBUTED_TEXT_PRESS_TESTS_HPP
+#define LOKA_MAC_ATTRIBUTED_TEXT_PRESS_TESTS_HPP
+void testMacLinkPressIdentity();
+void testMacLinkPressModifiers();
+void testMacLinkPressConsumption();
+void testMacLinkPressRun();
+void testMacLinkPressFalseQuery();
+void testMacLinkPressObserver();
+void testMacLinkPressNested();
+void testMacLinkPressFailedClear();
+void testMacLinkPressRebuild();
+void testMacLinkPressPlacement();
+void testMacLinkPressDetach();
+void testMacLinkPressLifetime();
+void testMacLinkPressTurnClose();
+void testMacLinkPressWindow();
+void testMacLinkPressVisibility();
+void testMacLinkPressTransfer();
+void testMacLinkPressNativeClose();
+void testMacLinkPressAppClose();
+void testMacLinkPressPoints();
+void testMacLinkPressClip();
+void testMacLinkPressScroll();
+void testMacLinkPressOverlays();
+void testMacLinkPressButtonCover();
+void testMacLinkPressRepaint();
+#endif

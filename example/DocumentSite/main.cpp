@@ -1,4 +1,5 @@
-#include "SiteWriter.hpp"
+#include "../../tools/site/SiteWriter.hpp"
+#include "app/doc/Image.hpp"
 #include "app/doc/Inline.hpp"
 #include "app/doc/List.hpp"
 #include "app/doc/Quote.hpp"
@@ -42,11 +43,12 @@ namespace
         : loka::app::scene::BoundaryNodeFor<Trail>(props)
     {
     }
-    /** Cost: one declaration of this page's four blocks and one quoted paragraph per mount. */
+    /** Cost: one declaration of this page's five blocks and one quoted paragraph per mount. */
     virtual void composeNode(NodeComposition &c)
     {
       c.declare(Column() << doc::Heading(1, TrailTitle)
                          << doc::Paragraph("At the top step, look back. The kiln chimney lines up with the bell buoy.")
+                         << doc::Image("map.png", "The ridge path above the tidal flats")
                          << (doc::Quote() << doc::Paragraph("From here the blue pencil line looks almost straight."))
                          << doc::Paragraph(doc::Link("Return to the map room", "index.html")));
     }
@@ -58,12 +60,15 @@ int main(int argc, char **argv)
 {
   // A file-size limit then fails the write, so the temporaries are removed on return.
   std::signal(SIGXFSZ, SIG_IGN);
-  if (argc != 3)
+  if (argc != 4)
   {
-    std::fputs("Usage: DocumentSite <out-dir> <stylesheet-file>\n", stderr);
+    std::fputs("Usage: DocumentSite <out-dir> <stylesheet-file> <map-image-file>\n", stderr);
     return 2;
   }
-  return document_site::writeSite(argv[1], argv[2], MapRoomTitle, Boundary<MapRoom>(), TrailTitle, Boundary<Trail>())
+  document_site::SiteOutputs outputs;
+  return document_site::addPage(outputs, "index.html", MapRoomTitle, Boundary<MapRoom>())
+                 && document_site::addPage(outputs, "trail.html", TrailTitle, Boundary<Trail>())
+                 && outputs.addImage("map.png", argv[3]) && document_site::writeSite(argv[1], argv[2], outputs)
              ? 0
              : 1;
 }

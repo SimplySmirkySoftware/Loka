@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320" viewBox="0 0 480 320" role="img" aria-label="Trail and ridge">
+  <title>Trail and ridge</title>
+  <rect width="480" height="320" fill="#f3efe4"/>
+  <path d="M0 250 C70 232 120 262 190 246 S330 226 480 252 V320 H0 Z" fill="#cfe0e6"/>
+  <g fill="none" stroke="#b9ad92" stroke-width="1.5">
+    <path d="M40 200 C110 120 190 96 250 110 S370 150 440 96"/>
+    <path d="M70 206 C130 144 196 124 250 136 S352 168 420 128"/>
+    <path d="M104 212 C150 170 204 152 250 162 S334 186 396 160"/>
+  </g>
+  <path d="M30 196 L120 110 L176 150 L250 70 L318 138 L372 104 L452 178" fill="none" stroke="#6d6249" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M56 286 C96 250 150 236 196 208 S262 150 250 70" fill="none" stroke="#b5482f" stroke-width="3" stroke-dasharray="9 7" stroke-linecap="round"/>
+  <circle cx="56" cy="286" r="6" fill="#b5482f"/>
+  <path d="M250 70 l-9 16 h18 z" fill="#3f3a2d"/>
+  <rect x="188" y="200" width="16" height="16" fill="#2f5d8a"/>
+  <g font-family="Helvetica, Arial, sans-serif" font-size="13" fill="#3f3a2d">
+    <text x="70" y="304">Trailhead</text>
+    <text x="264" y="66">Summit</text>
+    <text x="212" y="214">Blue post</text>
+    <text x="356" y="290">Tidal flats</text>
+  </g>
+  <g transform="translate(430 44)" stroke="#3f3a2d" fill="#3f3a2d">
+    <path d="M0 18 V-14" fill="none" stroke-width="2"/>
+    <path d="M0 -22 l-6 12 h12 z" stroke="none"/>
+    <text x="-5" y="34" font-family="Helvetica, Arial, sans-serif" font-size="13" stroke="none">N</text>
+  </g>
+</svg>

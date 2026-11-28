@@ -7,6 +7,7 @@
 #else
 #error Native SDK include-order probe requires its target SDK
 #endif
+#include "app/doc/Image.hpp"
 #include "app/doc/List.hpp"
 #include "app/doc/Quote.hpp"
 #include "app/doc/Heading.hpp"
@@ -24,7 +25,7 @@ void documentVocabularyAfterSdk(loka::app::scene::NodeComposition &composition)
   composition.declare(Column() << doc::Heading(1, "Guide")
                                << doc::Paragraph(doc::Link("Guide", "https://example.com/guide") + doc::Code("x"))
                                << (doc::List() << doc::Item("entry")) << (doc::Quote() << doc::Paragraph("quoted"))
-                               << doc::CodeBlock("one\ntwo"));
+                               << doc::Image("map.png", "Trail map") << doc::CodeBlock("one\ntwo"));
 }
 
 namespace

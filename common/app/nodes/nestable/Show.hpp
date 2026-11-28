@@ -1,8 +1,10 @@
 #ifndef LOKA_APP_SHOW_HPP
 #define LOKA_APP_SHOW_HPP
 
+#include <new>
 #include "app/nodes/nestable/Fragment.hpp"
 #include "app/scene/node/Conditional.hpp"
+#include "core/util/OwnedDef.hpp"
 
 namespace loka
 {
@@ -74,9 +76,23 @@ namespace loka
         return 1;
       }
       typedef ShowDefinition CloneType;
+      /** Returns 0 if a child in either stored arm refuses to clone. The count
+          check is exact because a by-value FragmentDefinition copy is all-or-nothing.
+          By-value copies of Show cannot report refusal. Callers needing that result
+          use clone(). Inside a composition window, refusal is also reported to the boundary. */
       virtual scene::NodeDefinitionBase *clone() const
       {
-        return new ShowDefinition(*this);
+        loka::core::OwnedDef<ShowDefinition> copy(new (std::nothrow) ShowDefinition(*this));
+        if (!copy.isSet())
+        {
+          return 0;
+        }
+        if (copy->trueBranch_.childrenCount() != this->trueBranch_.childrenCount()
+            || copy->falseBranch_.childrenCount() != this->falseBranch_.childrenCount())
+        {
+          return 0;
+        }
+        return copy.take();
       }
       virtual scene::NodeKind nodeKind() const
       {

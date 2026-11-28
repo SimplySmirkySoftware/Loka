@@ -80,6 +80,7 @@ typedef float CGFloat;
 #endif
 
 #if defined(MAC_OS_X_VERSION_MAX_ALLOWED) && (MAC_OS_X_VERSION_MAX_ALLOWED >= 101200)
+#define LOKA_MAC_CONTROL_MODIFIER NSEventModifierFlagControl
 #define LOKA_MAC_WINDOW_STYLE_TITLED NSWindowStyleMaskTitled
 #define LOKA_MAC_WINDOW_STYLE_CLOSABLE NSWindowStyleMaskClosable
 #define LOKA_MAC_WINDOW_STYLE_RESIZABLE NSWindowStyleMaskResizable
@@ -90,6 +91,7 @@ typedef float CGFloat;
 #define LOKA_MAC_TEXT_ALIGNMENT_RIGHT NSTextAlignmentRight
 #define LOKA_MAC_TEXT_ALIGNMENT_NATURAL NSTextAlignmentNatural
 #else
+#define LOKA_MAC_CONTROL_MODIFIER NSControlKeyMask
 #define LOKA_MAC_WINDOW_STYLE_TITLED NSTitledWindowMask
 #define LOKA_MAC_WINDOW_STYLE_CLOSABLE NSClosableWindowMask
 #define LOKA_MAC_WINDOW_STYLE_RESIZABLE NSResizableWindowMask
@@ -138,6 +140,18 @@ typedef float CGFloat;
 - (void)setUsesSingleLineMode:(BOOL)flag;
 @end
 #endif
+
+#if !LOKA_MAC_HAS_CALAYER
+@interface NSView (LokaLateLayerCompat)
+- (id)layer;
+@end
+#endif
+
+/** Once per text path or stack capture decision, one guarded read of this view. */
+inline id MacLateBoundLayer(NSView *view)
+{
+  return [view respondsToSelector:@selector(layer)] ? [view layer] : nil;
+}
 
 // Late selectors are declared for type checking. Callers test runtime availability.
 @interface NSView (LokaSubviewsCompat)

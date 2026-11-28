@@ -26,6 +26,10 @@
 > coverage, platform support, and some refactoring work are still in progress.
 > Please also see [ROADMAP.md](ROADMAP.md).
 
+A short introduction is published at
+<https://simplysmirkysoftware.github.io/Loka/>. Its pages are written with
+Loka's own document vocabulary ([site/](site/)).
+
 ## Why Loka?
 
 Loka aims to bring new content and creative tools to retro platforms without treating them as novelty targets.
@@ -121,9 +125,10 @@ Loka uses a **CMake + Ninja** based build system.
 
 For the main development and test workflow:
 
-- CMake 3.19 or newer when using `CMakePresets.json`
+- CMake 3.21 or newer when using `CMakePresets.json`
 - Ninja
 - A C++ compiler capable of building C++98 code
+- Python 3, for the test suite only (CTest drives part of it through Python scripts)
 
 The core is intentionally C++98-friendly and already builds with older toolchains such as GCC 4.0-era environments. Modern host builds can use current Clang, GCC, or MSVC.
 

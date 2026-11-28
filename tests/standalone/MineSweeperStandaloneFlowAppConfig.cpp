@@ -28,18 +28,18 @@ namespace loka
       }
     } // namespace
 
-    MineSweeperStandaloneFlowAppConfig::MineSweeperStandaloneFlowAppConfig(
-        PlatformContext *context,
-        const platform::file::FileHandle *auditFile,
-        std::FILE *diagnostics)
+    MineSweeperStandaloneFlowAppConfig::MineSweeperStandaloneFlowAppConfig(PlatformContext *context,
+                                                                           const platform::file::FileHandle *auditFile,
+                                                                           std::FILE *diagnostics,
+                                                                           StandaloneRunControl::CompletionMode mode)
         : AppConfigurable(context),
           audit_(auditFile ? *auditFile : ResolveStandaloneAuditFile(), ConfiguredMineSweeperScenarioName()),
-          scenario_(new (std::nothrow) scenario_tests::MineSweeperScenario(
-              ConfiguredMineSweeperScenarioName(),
-              scenario_tests::SCENARIO_COMPLETION_HOLD_FINAL_SCENE,
-              &this->audit_)),
+          scenario_(new(std::nothrow)
+                        scenario_tests::MineSweeperScenario(ConfiguredMineSweeperScenarioName(),
+                                                            scenario_tests::SCENARIO_COMPLETION_HOLD_FINAL_SCENE,
+                                                            &this->audit_)),
           borrowedMainNode_(0),
-          runControl_("MineSweeper", ConfiguredMineSweeperScenarioCells(), diagnostics)
+          runControl_("MineSweeper", ConfiguredMineSweeperScenarioCells(), diagnostics, mode)
     {
     }
 
@@ -59,16 +59,18 @@ namespace loka
 
     void MineSweeperStandaloneFlowAppConfig::compose(AppComposition &composition)
     {
-      composition << scenario_tests::MakeScenarioWindow<minesweeper::MainProps, minesweeper::MainNode>(
-          minesweeper::MainProps(scenario_tests::MineSweeperScenarioSeed()),
-          &this->borrowedMainNode_,
-          220,
-          240,
-          kMineSweeperStandaloneTitle,
-          app::IdlePolicy::interval(0.1),
-          &MineSweeperStandaloneFlowAppConfig::OnWindowIdle,
-          this,
-          this->runControl_.displayTitleState(kMineSweeperStandaloneTitle));
+      composition << StandaloneWindowDefinition(
+          scenario_tests::MakeScenarioWindowProps<minesweeper::MainProps, minesweeper::MainNode>(
+              minesweeper::MainProps(scenario_tests::MineSweeperScenarioSeed()),
+              &this->borrowedMainNode_,
+              220,
+              240,
+              kMineSweeperStandaloneTitle,
+              app::IdlePolicy::interval(0.1),
+              &MineSweeperStandaloneFlowAppConfig::OnWindowIdle,
+              this,
+              this->runControl_.displayTitleState(kMineSweeperStandaloneTitle)),
+          this->runControl_);
     }
 
     void MineSweeperStandaloneFlowAppConfig::OnWindowIdle(Window *window,

@@ -6,9 +6,18 @@
       "type": "lldb-dap",
       "request": "launch",
       "program": "${workspaceFolder}/build/Testing/DocumentSite",
-      "args": ["${workspaceFolder}/build/document-site", "${workspaceFolder}/example/DocumentSite/site.css"],
+      "args": ["${workspaceFolder}/build/document-site", "${workspaceFolder}/tools/site/site.css", "${workspaceFolder}/build/map.png"],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Build: Linux DocumentSite"
+    },
+    {
+      "name": "Run (Linux LokaSite)",
+      "type": "lldb-dap",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/Testing/LokaSite",
+      "args": ["${workspaceFolder}/build/site", "${workspaceFolder}/tools/site/site.css"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Build: Linux LokaSite"
     },
     {
       "name": "Loka: Preview Extension",

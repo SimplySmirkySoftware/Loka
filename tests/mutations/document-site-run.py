@@ -7,7 +7,7 @@ import signal
 from document_mutations import run
 
 
-HEADER = Path("example/DocumentSite/SiteWriter.hpp")
+HEADER = Path("tools/site/SiteWriter.hpp")
 MUTATIONS = [
     ("title-escape", "Render", [
         ("doc::detail::AppendHtmlByte(staged, bytes[i], false);", "staged += bytes[i];")]),
@@ -16,17 +16,31 @@ MUTATIONS = [
         ('std::string staged = "<!doctype', 'std::string &staged = out;\n    staged += "<!doctype'),
         ("out += staged;", "")]),
     ("early-first-page", "Refusal", [
-        ("if (!renderPage(loka::core::String(secondTitle)", '''SiteFile early(directory, "index.html");
-    if (!early.stage(index) || !early.publish())
-      return false;
-    if (!renderPage(loka::core::String(secondTitle)''')]),
+        ('  LOKA_VERIFY(!outputs.add("index.html", "duplicate"));',
+         '  if (!document_site::writeSite(argv[2], argv[3], outputs))\n    return 1;\n'
+         '  LOKA_VERIFY(!outputs.add("index.html", "duplicate"));')]),
+    ("duplicate-name", "Refusal", [("contains(this->pages_, name)", "(false && contains(this->pages_, name))")]),
+    ("publish-as-staged", "Files", [
+        ("return file->stage(bytes);", "return file->stage(bytes) && file->publish();"),
+        ('files.stage(directory, "site.css", css) && files.publish()', 'files.stage(directory, "site.css", css)')]),
+    ("any-name", "Refusal", [('!hasStemAndSuffix(name, ".html")', "name.empty()")]),
+    ("any-suffix", "Refusal", [("name.compare(name.size() - suffix, suffix, ending) != 0",
+                                '(std::string(ending) != ".html" && name.compare(name.size() - suffix, suffix, ending) != 0)')]),
     ("ignore-stylesheet", "Output", [
-        ('std::fopen(path, "rb")', '(static_cast<void>(path), std::fopen("../../example/DocumentSite/site.css", "rb"))')]),
+        ('readFile(stylesheetPath, 0, css)', 'readFile((static_cast<void>(stylesheetPath), "../../tools/site/site.css"), 0, css)')]),
+    ("image-suffix", "Refusal", [
+        ('if (!(hasStemAndSuffix(name, ".png")', 'if (false && !(hasStemAndSuffix(name, ".png")')]),
+    ("unlimited-image", "Files", [("readFile(sourcePath, 8 * 1024 * 1024, bytes)", "readFile(sourcePath, 0, bytes)")]),
+    ("duplicate-image", "Refusal", [("if (contains(this->images_, name))", "if (false && contains(this->images_, name))")]),
+    ("unstaged-images", "Output", [(" && outputs.stage(outputs.images_, files, directory)", "")]),
+    ("ignore-image-stage", "Files", [
+        ("&& outputs.stage(outputs.images_, files, directory)",
+         "&& (outputs.stage(outputs.images_, files, directory) || true)")]),
 ]
 
 
 def mutation(root, name, suffix, edits):
-    path = root / HEADER
+    path = root / ("tests/DocumentSiteFixture.cpp" if name == "early-first-page" else HEADER)
     original = path.read_bytes()
     source = original.decode()
     for old, new in edits:

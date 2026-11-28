@@ -2,7 +2,24 @@
 using namespace loka::app::doc;
 struct Reader : BlockReader
 {
+  using BlockReader::read;
+  bool read(const ImageProps &)
+  {
+    return true;
+  }
   bool read(const ItemProps &)
+  {
+    return true;
+  }
+  bool read(const NumberedItemProps &)
+  {
+    return true;
+  }
+  bool enter(const NestedItemProps &)
+  {
+    return true;
+  }
+  bool leave(const NestedItemProps &)
   {
     return true;
   }
@@ -10,7 +27,15 @@ struct Reader : BlockReader
   {
     return true;
   }
+  bool enter(const NumberedListProps &)
+  {
+    return true;
+  }
   bool leave(const ListProps &)
+  {
+    return true;
+  }
+  bool leave(const NumberedListProps &)
   {
     return true;
   }

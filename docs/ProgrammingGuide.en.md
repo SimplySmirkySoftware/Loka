@@ -1501,11 +1501,17 @@ On Win32, pressing and releasing over the same link run activates it: the
 app's `activatedLink` box receives the target. Links have no hover or pressed
 look. A modal or another window taking the mouse cancels a pending press.
 
+On macOS, press and release over the same link run to activate it. Links have
+no hover or pressed appearance. A double click activates twice. Control-click
+does not activate. If a release is lost and AppKit later sends a release
+to the text without its press, it can still activate the same link under the pointer in the window
+where the button was released. It never activates a different link.
+
 Toolbox delivers on release on the same link run. The release point is the
 cursor when the app processes the click (queued clicks may land elsewhere).
 A linked text owns clicks on its whole visible area; plain labels above it
 pass through, while native controls and shields refuse. There is no pressed
-look. Link activation on the remaining rails follows in separate work.
+look. Web link activation follows in separate work.
 
 On Win32, plain `Text` with wrap=NONE, CLIP truncation, and CENTER/RIGHT alignment
 can wrap overflowing words inside its one-line-high native control; ellipsis uses
@@ -2381,6 +2387,15 @@ Column()
   << doc::CodeBlock("Column() << Text(\"hello\")");
 ```
 
+Include `app/doc/Image.hpp` to write an image block. For example,
+`doc::Image("map.png", "Trail map")` writes `![Trail map](<map.png>)` in
+Markdown and `<p><img src="map.png" alt="Trail map"></p>` in HTML. On screen
+it currently shows the alternative text in italics. The alternative text is
+required. Pass `""` for a decorative image. An image cannot be a list item.
+Pass `doc::ImageSize(480, 320)` as the third argument to supply a positive
+width and height in CSS pixels. HTML adds both attributes to the image, and
+Markdown emits the same raw HTML image tag as its own block.
+
 Include `app/doc/List.hpp` and `app/doc/Quote.hpp` to group document blocks.
 
 ```cpp
@@ -2390,18 +2405,45 @@ Column()
 ```
 
 On screen, each item has a bullet and its continuation lines align with its
-body. A quote indents its blocks. Markdown writes tight bullet lists and
+body. A quote indents its blocks. Markdown writes tight lists for flat bullet items and
 prefixes quoted lines with `>`. HTML writes `ul` with `li` children and wraps
 quoted blocks in `blockquote`. An empty item shows a bullet on screen. Both
-exports omit empty items and containers with no emitted content.
+exports omit a bullet item when its body and children contribute nothing.
+They also omit containers with no emitted content.
 
-Items accept inline content and belong inside a list. Lists accept only items.
-A quote accepts paragraphs, headings, code blocks, lists and other quotes.
-Ordinary layout wrappers can surround these blocks. Numbered and nested lists
-are unavailable. A mis-nested tree can display on screen, but exporting it
-returns false and preserves the destination. These rules apply from the root
-passed to the export. Both exports accept at most 16 enclosing lists and quotes
-combined.
+Write a numbered list as `doc::NumberedList() << doc::Item("Find the trail.") << doc::Item("Follow the signs.")`.
+It accepts up to 99 items; an item added after the 99th is ignored. Numbers start at 1 and are fixed at declaration.
+To change the count, swap the whole list with `Show` or `Match`.
+Markdown writes numbered markers and HTML writes an `ol` with one `li` per item.
+An empty numbered item keeps its number on screen and in both exports.
+
+To nest either kind of list, attach it to the item that owns it. Keep the
+parentheses around the item and its child list. An item can own several child
+lists of either kind. Placing a list directly in another list does not compile.
+
+```cpp
+doc::List() << (doc::Item("Fruit") << (doc::List() << doc::Item("Apple")))
+            << doc::Item("Bread");
+```
+
+The child list aligns with the parent item's body on screen. Markdown indents
+it by the width of the parent marker and its following space. An empty head
+shares its line with the first emitted child. HTML places each child list inside
+its parent's `li`. Markdown adds one blank line after a nonempty head when its
+first emitted child is a list that starts with a bare numbered marker.
+
+An item can own code blocks and lists in any order. For example,
+`doc::NumberedList() << (doc::Item("Configure:") << doc::CodeBlock("cmake --preset testing"))`
+puts the command under its step, aligned with the item body. Markdown writes
+an indented fenced block. HTML places `<pre><code>` directly inside the item's
+`li`. Other block types under an item do not compile.
+
+Items accept inline content and belong inside a list. A list accepts only items.
+A quote accepts paragraphs, headings, images, code blocks, lists and other
+quotes. Ordinary layout wrappers can surround these blocks.
+Exporting a mis-nested tree returns false and
+preserves the destination. From the export root, both formats accept up to 16
+enclosing lists, items with children, and quotes combined.
 
 Inline content is `AttributedString`. Use `Styled` for bold, italic, and other
 styles; `doc::Link` contributes a linked segment and `doc::Code` contributes
@@ -2434,7 +2476,7 @@ exhaustion follow the normal process behavior.
 | Window and app services | During composition, `c.componentContext()->window()` and the node's `attachedContext()` return null. The node's strict `window()`, `scene()` and `boundary()` accessors and the composition's `c.window()` are unsupported here. App and PlatformContext services are unavailable. |
 | Idle and input | Idle callbacks, timers and native input never run. Animations and Flows waiting on them keep their initial state. |
 | Focus, editors and menus | Focus stays none, text documents await their store, and menu commands are never dispatched. Editor bodies do not become document blocks. |
-| Images | Images contribute no document blocks. The producer of a native image remains responsible for draining its resources. |
+| Images | A native `ImageView` contributes no document blocks; `doc::Image` is a document block and is exported. The producer of a native image remains responsible for draining its resources. |
 | Composition | Only attached document blocks contribute bytes. A page containing only ordinary controls can succeed with empty output. A fixed Component can locally discard children, including unsupported branch seats, without reporting a refusal. |
 
 The sample tool writes Markdown by default and HTML with `--html`. To append
@@ -2446,6 +2488,10 @@ already mounted subtree on the main thread, include `app/doc/Html.hpp` or
 To make a standalone HTML page, wrap the fragment in a document with a title
 and place it inside `main`. The two-page example links its pages with relative
 `doc::Link` destinations and shares one stylesheet. [DocumentSite](../example/DocumentSite/main.cpp)
+The repository’s own pages use the same document vocabulary. Their source lives in
+[`site/`](../site/). Build the `LokaSite` target, then run it with an existing output
+directory and the stylesheet: `build/Testing/LokaSite build/site tools/site/site.css`
+writes `index.html`, `start.html` and `site.css` there.
 
 Both exits preserve the meaning of attached document blocks in declaration order.
 Ordinary controls, underline, color, and font size are omitted. Empty headings

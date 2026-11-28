@@ -4,6 +4,7 @@
 #include "app/doc/Paragraph.hpp"
 #include "app/doc/CodeBlock.hpp"
 #include "app/doc/Inline.hpp"
+#include "app/doc/Image.hpp"
 #include "support/DocumentFixture.hpp"
 #include "platform/null/context/NullAttributedTextContext.hpp"
 #include "support/LokaAllocFailure.hpp"
@@ -71,6 +72,34 @@ namespace
     }
   };
 } // namespace
+
+void testDocumentImageScreen()
+{
+  Fixture<doc::ImageDefinition> f(doc::Image("map", "Route"));
+  doc::ImageNode *node = static_cast<doc::ImageNode *>(f.node());
+  AttributedTextNode *text = leaf(node);
+  const char *labels[] = {"Route", "Detour", ""};
+  for (size_t i = 0; i < 3; ++i)
+  {
+    if (i)
+      LOKA_VERIFY(doc::Image("map", labels[i]).applyPropsToNode(node));
+    LOKA_VERIFY(node->childrenHead() == text && !text->nextInComposition);
+    LOKA_VERIFY(text->props.blockStyle_.wrap_ == TEXT_WRAP_WORD);
+    const AttributedString content = value(text);
+    LOKA_VERIFY(content.segmentCount() == 1);
+    bool italic = false;
+    LOKA_VERIFY(content.segment(0).style.queryItalic(italic) && italic);
+    LOKA_VERIFY(content.segment(0).text.equals(String(labels[i])));
+    LOKA_VERIFY(node->props.alt.equals(String(labels[i])));
+  }
+
+  const doc::ImageProps a = doc::Image("a", "z").props;
+  const doc::ImageProps b = doc::Image("b", "a").props;
+  const doc::ImageProps c = doc::Image("b", "z").props;
+  LOKA_VERIFY(a < b && !(b < a));
+  LOKA_VERIFY(b < c && !(c < b));
+  LOKA_VERIFY(!(c < doc::Image("b", "z").props));
+}
 
 void testDocumentVocabularyLowering()
 {

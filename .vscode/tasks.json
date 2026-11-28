@@ -4,7 +4,15 @@
     {
       "label": "Build: Linux DocumentSite",
       "type": "shell",
-      "command": "cmake --preset testing && cmake --build build/Testing --target DocumentSite && cmake -E make_directory build/document-site",
+      "command": "cmake --preset testing && cmake --build build/Testing --target DocumentSite && cmake -E make_directory build/document-site && python3 tests/scripts/DocumentSite.py --write-png build/map.png",
+      "options": {"cwd": "${workspaceFolder}"},
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Build: Linux LokaSite",
+      "type": "shell",
+      "command": "cmake --preset testing && cmake --build build/Testing --target LokaSite && cmake -E make_directory build/site",
       "options": {"cwd": "${workspaceFolder}"},
       "group": "build",
       "problemMatcher": "$gcc"

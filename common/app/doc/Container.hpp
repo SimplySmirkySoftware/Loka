@@ -13,6 +13,7 @@ namespace loka
       {
         QuoteIndent = 16,
         MarkerWidth = 12,
+        NumberedMarkerWidth = 24,
         ItemGap = 4,
         ListGap = 2
       };

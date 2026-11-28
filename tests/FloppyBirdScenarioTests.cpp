@@ -21,7 +21,8 @@
 #include "scenarios/FloppyBirdScenarios.hpp"
 #include "scenarios/ObservedMainDefinition.hpp"
 #include "standalone/FloppyBirdStandaloneFlowAppConfig.hpp"
-#include "support/StandaloneMountTestSupport.hpp"
+#include "StandaloneLoopLaunchTests.hpp"
+#include "WindowRootRefusalTests.hpp"
 #include "testing/scene/ScenarioAudit.hpp"
 
 namespace
@@ -386,6 +387,18 @@ void testFloppyBirdStandaloneFlowWritesExpectedAudit()
   std::printf("testFloppyBirdStandaloneFlowWritesExpectedAudit passed\n");
 }
 
+void testFloppyBirdStandaloneLoopCloseBeforeFirstIdleSucceeds()
+{
+  StandaloneLoopLaunchTestSupport::verifyCloseBeforeFirstIdle<
+      loka::standalone_tests::FloppyBirdStandaloneFlowAppConfig>("_loka_floppybird_loop_close.audit");
+}
+
+void testFloppyBirdStandaloneDeclarationRefusalIsWindowless()
+{
+  WindowRootRefusalTestSupport::verifyDeclarationRefusal<loka::standalone_tests::FloppyBirdStandaloneFlowAppConfig>(
+      "_loka_floppybird_declaration_refusal.audit");
+}
+
 void testFloppyBirdStandaloneMountRefusalFailsClosed()
 {
   const char *auditPath = "_loka_floppybird_standalone_mount_refusal.audit";
@@ -396,21 +409,12 @@ void testFloppyBirdStandaloneMountRefusalFailsClosed()
   {
     loka::platform::file::FileHandle auditFile;
     auditFile.displayPath = loka::core::String::Literal(auditPath);
-    loka::testing::StandaloneMountTestPlatformContext context;
+    NullPlatformContext context;
     loka::standalone_tests::FloppyBirdStandaloneFlowAppConfig config(&context, &auditFile, diagnostics);
     NullApp app(&config);
     config.setApp(&app);
 
-    loka::scenario_tests::testing::failObservedMainDefinitionClones(1);
-    AppComposition composition(&context);
-    config.compose(composition);
-    std::vector<AppComponent *> components = composition.build();
-    loka::scenario_tests::testing::allowObservedMainDefinitionClones();
-
-    LOKA_VERIFY(components.size() == 1);
-    Window *window = components[0] ? components[0]->asWindow() : 0;
-    LOKA_VERIFY(window != 0);
-    LOKA_VERIFY(window->scene() == 0);
+    Window *window = WindowRootRefusalTestSupport::launchWithRefusedMount(app);
     for (int tick = 0; tick < 8; ++tick)
     {
       LOKA_VERIFY(window->handleIdle(0.1));
@@ -426,11 +430,6 @@ void testFloppyBirdStandaloneMountRefusalFailsClosed()
     LOKA_VERIFY(output
                 == "Loka FloppyBird standalone startup failed: "
                    "MainNode was not mounted after 5 idle ticks.\n");
-
-    for (std::size_t i = 0; i < components.size(); ++i)
-    {
-      delete components[i];
-    }
   }
 
   LOKA_VERIFY(std::fclose(diagnostics) == 0);

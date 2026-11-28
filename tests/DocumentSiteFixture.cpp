@@ -1,4 +1,4 @@
-#include "../example/DocumentSite/SiteWriter.hpp"
+#include "../tools/site/SiteWriter.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "support/TestVerify.hpp"
 #include <cstring>
@@ -64,7 +64,7 @@ namespace
   }
 } // namespace
 
-/** Cost: one render-pin sequence or one two-page site per fixture invocation. */
+/** Cost: one render-pin sequence or one site per fixture invocation. */
 int main(int argc, char **argv)
 {
   if (argc == 1)
@@ -74,10 +74,58 @@ int main(int argc, char **argv)
   }
   if (argc != 4)
     return 2;
-  const StdCompositionBoundaryDefinition first;
-  if (std::strcmp(argv[1], "valid") == 0)
-    return document_site::writeSite(argv[2], argv[3], "First", first, "Second", first) ? 0 : 1;
+  document_site::SiteOutputs outputs;
+  if (std::strcmp(argv[1], "empty") == 0)
+    return document_site::writeSite(argv[2], argv[3], outputs) ? 0 : 1;
+  // The stylesheet doubles as an opaque image source in this fixture.
+  LOKA_VERIFY(!outputs.addImage("map.png", argv[2])); // A failed read leaves the name available.
+  LOKA_VERIFY(outputs.addImage("map.png", argv[3]));
+  if (std::strcmp(argv[1], "image-only") == 0)
+    return document_site::writeSite(argv[2], argv[3], outputs) ? 0 : 1;
+  const std::string refused[] = {"a.svg",
+                                 "a.jpeg",
+                                 "A.png",
+                                 "a.PNG",
+                                 "a/b.png",
+                                 ".png",
+                                 "index.html",
+                                 "-a.png",
+                                 "map.png",
+                                 std::string("a\0b.png", 7)};
+  for (size_t i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i)
+    LOKA_VERIFY(!outputs.addImage(refused[i], argv[3]));
+  document_site::SiteOutputs otherFormats;
+  LOKA_VERIFY(otherFormats.addImage("1-a.jpg", argv[3]));
+  LOKA_VERIFY(otherFormats.addImage("2-b.gif", argv[3]));
+  const StdCompositionBoundaryDefinition page;
+  if (!document_site::addPage(outputs, "index.html", "First", page))
+    return 1;
+  LOKA_VERIFY(!outputs.add("index.html", "duplicate"));
+  LOKA_VERIFY(!outputs.add("", "empty"));
+  LOKA_VERIFY(!outputs.add("nested/page", "slash"));
+  LOKA_VERIFY(!outputs.add("site.css", "reserved"));
+  LOKA_VERIFY(!outputs.add(".", "directory"));
+  LOKA_VERIFY(!outputs.add("..", "parent"));
+  LOKA_VERIFY(!outputs.add("SITE.CSS", "case alias of the stylesheet"));
+  LOKA_VERIFY(!outputs.add("Index.html", "case alias of a page"));
+  LOKA_VERIFY(!outputs.add("index.html.", "trailing dot"));
+  LOKA_VERIFY(!outputs.add("a.b.html", "dot in the stem"));
+  LOKA_VERIFY(!outputs.add(".html", "empty stem"));
+  LOKA_VERIFY(!outputs.add("page.htm", "another suffix"));
+  LOKA_VERIFY(!document_site::addPage(outputs, "unrendered.html", " ", page));
+  LOKA_VERIFY(!outputs.add(std::string("index.html\0alias", 16), "truncated"));
   if (std::strcmp(argv[1], "refuse") == 0)
-    return document_site::writeSite(argv[2], argv[3], "First", first, "Second", Boundary<LooseItem>()) ? 0 : 1;
-  return 2;
+    return document_site::addPage(outputs, "trail.html", "Second", Boundary<LooseItem>())
+                   && document_site::writeSite(argv[2], argv[3], outputs)
+               ? 0
+               : 1;
+  if (!document_site::addPage(outputs, "trail.html", "Second", page))
+    return 1;
+  const bool valid = std::strcmp(argv[1], "valid") == 0;
+  if (!valid && std::strcmp(argv[1], "blank") != 0)
+    return 2;
+  return document_site::addPage(outputs, "third.html", valid ? "Third landmark" : " ", page)
+                 && document_site::writeSite(argv[2], argv[3], outputs)
+             ? 0
+             : 1;
 }

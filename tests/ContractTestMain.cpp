@@ -125,6 +125,7 @@
 #include "DerivedNodeStateTests.hpp"
 #ifdef __APPLE__
 #include "MacWindowAdmissionTests.hpp"
+#include "MacAttributedTextPressTests.hpp"
 #include "MacQuitEventTests.hpp"
 #include "MacURLOpenTests.hpp"
 #include "MacWindowFrameClampTests.hpp"
@@ -133,6 +134,8 @@
 #include "WindowFrameStateTests.hpp"
 #include "WindowIdleTests.hpp"
 #include "DefinitionCloneTests.hpp"
+#include "StandaloneLoopLaunchTests.hpp"
+#include "WindowRootRefusalTests.hpp"
 #include "NodeMatchTests.hpp"
 #include "AttrDslTests.hpp"
 #include "MenuCheckedTests.hpp"
@@ -192,6 +195,7 @@
 #include "TextAlignmentTests.hpp"
 // UTF-8 route, edge, and style-boundary pins are registered in ContractTestRegistry.inc.
 #include "AttributedStringTests.hpp"
+#include "LinkPressSessionTests.hpp"
 #include "AttributedTextTests.hpp"
 #include "DocumentVocabularyTests.hpp"
 #include "DocumentHeadlessTests.hpp"
