@@ -26,6 +26,10 @@
 > coverage, platform support, and some refactoring work are still in progress.
 > Please also see [ROADMAP.md](ROADMAP.md).
 
+A short introduction is published at
+<https://simplysmirkysoftware.github.io/Loka/>. Its pages are written with
+Loka's own document vocabulary ([site/](site/)).
+
 ## Why Loka?
 
 Loka aims to bring new content and creative tools to retro platforms without treating them as novelty targets.
