@@ -1,0 +1,63 @@
+name: Site
+
+# PRs do not publish because linux-headless already builds and tests the site.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Let the active run finish. A newer push may replace a waiting run.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - run: cmake --preset testing
+      - run: cmake --build --preset testing --target LokaSite
+      - name: Generate the site
+        run: |
+          mkdir _site
+          build/Testing/LokaSite _site tools/site/site.css
+
+      # Inspect the upload directory itself because generator tests use a separate copy.
+      - name: Check the Pages artifact
+        shell: python3 {0}
+        run: |
+          import stat
+          from pathlib import Path
+
+          site = Path("_site")
+          expected = {"index.html", "site.css", "start.html"}
+          actual = {entry.name for entry in site.iterdir()}
+          if actual != expected:
+              raise SystemExit(f"_site: missing {sorted(expected - actual)}, unexpected {sorted(actual - expected)}")
+
+          for name in sorted(expected):
+              entry = site / name
+              info = entry.lstat()
+              if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size == 0:
+                  raise SystemExit(f"{entry}: expected a nonempty regular file with one link")
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+
+  deploy:
+    needs: build
+    # Only upstream main may publish, including when a manual run selects another ref.
+    if: github.repository == 'SimplySmirkySoftware/Loka' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
