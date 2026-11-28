@@ -1344,6 +1344,17 @@ namespace loka
     {
       MacLinkPressHook linkPressHook = 0;
       void *linkPressData = 0;
+      const MacLinkPressEntry *linkPressEntry = 0;
+
+      void dispatchLinkPress(MacLinkPressVisit visit, const MacLinkPressEntry *entry)
+      {
+        if (!linkPressHook)
+          return;
+        const MacLinkPressEntry *previous = linkPressEntry;
+        linkPressEntry = entry;
+        linkPressHook(visit, linkPressData);
+        linkPressEntry = previous;
+      }
     } // namespace
     void observeMacLinkPress(MacLinkPressHook hook, void *data)
     {
@@ -1352,8 +1363,19 @@ namespace loka
     }
     void visitMacLinkPress(MacLinkPressVisit visit)
     {
-      if (linkPressHook)
-        linkPressHook(visit, linkPressData);
+      dispatchLinkPress(visit, 0);
+    }
+    void visitMacLinkPressEntry(MacLinkPressVisit visit, long eventNumber, long clickCount)
+    {
+      const MacLinkPressEntry entry = {eventNumber, clickCount};
+      dispatchLinkPress(visit, &entry);
+    }
+    bool queryMacLinkPressEntry(MacLinkPressEntry &out)
+    {
+      if (!linkPressEntry)
+        return false;
+      out = *linkPressEntry;
+      return true;
     }
   } // namespace testing
 } // namespace loka

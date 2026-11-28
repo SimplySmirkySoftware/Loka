@@ -17,6 +17,7 @@ loka_target_manifest() {
     "LokaLazyListMacOS|default|executable|example/LazyList/LokaLazyListMacOS" \
     "ScrapbookUIMacOS|default|bundle|example/ScrapbookUI/ScrapbookUIMacOS.app/Contents/MacOS/ScrapbookUIMacOS" \
     "LokaTutorialMacOS|default|executable|example/Tutorial/LokaTutorialMacOS" \
+    "LokaLinkPressProbeMacOS|explicit|bundle|apple/macos/LokaLinkPressProbeMacOS.app/Contents/MacOS/LokaLinkPressProbeMacOS" \
     "LokaScrapbookStandaloneFlowMacOS|explicit|bundle|apple/macos/LokaScrapbookStandaloneFlowMacOS.app/Contents/MacOS/LokaScrapbookStandaloneFlowMacOS" \
     "LokaScrapbookStandaloneLoopMacOS|standalone-release|bundle|apple/macos/LokaScrapbookStandaloneLoopMacOS.app/Contents/MacOS/LokaScrapbookStandaloneLoopMacOS" \
     "LokaHelloWorldStandaloneLoopMacOS|standalone-release|bundle|apple/macos/LokaHelloWorldStandaloneLoopMacOS.app/Contents/MacOS/LokaHelloWorldStandaloneLoopMacOS" \

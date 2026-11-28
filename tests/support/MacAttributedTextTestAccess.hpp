@@ -1,6 +1,6 @@
 #ifndef LOKA_MAC_ATTRIBUTED_TEXT_TEST_ACCESS_HPP
 #define LOKA_MAC_ATTRIBUTED_TEXT_TEST_ACCESS_HPP
-#include "MacObjCCompat.hpp"
+#include "MacLinkPressEvent.hpp"
 #ifndef LOKA_MAC_HAS_CALAYER
 #error "include MacObjCCompat.hpp first"
 #endif
@@ -36,8 +36,6 @@ bool MacTestRectsCover(const NSRect *rects, NSInteger count, NSRect target);
 // The implementation and ownership of these getters stay on the rail-private leaf.
 @interface NSView (LokaAttributedTextTestReads)
 - (NSTextStorage *)lokaTextStorage;
-- (NSLayoutManager *)lokaLayoutManager;
-- (NSTextContainer *)lokaTextContainer;
 - (CGFloat)appliedWidth;
 /** One production width application per invalidation pin. */
 - (void)applyContainerWidth:(CGFloat)width;

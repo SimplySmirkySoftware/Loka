@@ -29,12 +29,8 @@ namespace loka
 } // namespace loka
 
 #if MAC_OS_X_VERSION_MAX_ALLOWED >= 101200
-#define PRESS_DOWN NSEventTypeLeftMouseDown
-#define PRESS_UP NSEventTypeLeftMouseUp
 #define PRESS_DRAG NSEventTypeLeftMouseDragged
 #else
-#define PRESS_DOWN NSLeftMouseDown
-#define PRESS_UP NSLeftMouseUp
 #define PRESS_DRAG NSLeftMouseDragged
 #endif
 
@@ -137,19 +133,9 @@ namespace
   /** Always derive even the refusal points from the installed manager and container. */
   NSPoint Glyph(NSView *view, NSUInteger ch)
   {
-    NSLayoutManager *m = Access::manager(view);
-    NSUInteger count = 0;
-    NSRectArray rects = [m rectArrayForCharacterRange:NSMakeRange(ch, 1)
-                         withinSelectedCharacterRange:NSMakeRange(NSNotFound, 0)
-                                      inTextContainer:Access::container(view)
-                                            rectCount:&count];
-    LOKA_VERIFY(count);
-    const NSRect r = rects[0];
-    NSRange glyph = [m glyphRangeForCharacterRange:NSMakeRange(ch, 1) actualCharacterRange:NULL];
-    const NSRect visible =
-        NSIntersectionRect(r, [m lineFragmentUsedRectForGlyphAtIndex:glyph.location effectiveRange:NULL]);
-    LOKA_VERIFY(!NSIsEmptyRect(visible));
-    return NSMakePoint(NSMidX(visible), NSMidY(visible));
+    NSPoint point;
+    LOKA_VERIFY(queryMacPressGlyph(view, ch, point));
+    return point;
   }
 
   NSEvent *Event(NSWindow *window,
@@ -159,18 +145,7 @@ namespace
                  NSUInteger flags = 0,
                  NSInteger clicks = 1)
   {
-    mach_timebase_info_data_t scale;
-    LOKA_VERIFY(mach_timebase_info(&scale) == KERN_SUCCESS);
-    NSTimeInterval timestamp = mach_absolute_time() * static_cast<double>(scale.numer) / scale.denom / 1.0e9;
-    NSEvent *event = [NSEvent mouseEventWithType:type
-                                        location:inWindow
-                                   modifierFlags:flags
-                                       timestamp:timestamp
-                                    windowNumber:[window windowNumber]
-                                         context:nil
-                                     eventNumber:number
-                                      clickCount:clicks
-                                        pressure:type == PRESS_UP ? 0 : 1];
+    NSEvent *event = macPressEvent(window, type, inWindow, number, flags, clicks);
     LOKA_VERIFY(event && [event eventNumber] == number);
     return event;
   }
@@ -302,6 +277,49 @@ namespace
     std::printf("[complete] %s\n", test);
   }
 } // namespace
+
+namespace
+{
+  struct EntryEvents
+  {
+    Press &press;
+    unsigned entries;
+    static void visit(MacLinkPressVisit v, void *data)
+    {
+      EntryEvents &events = *static_cast<EntryEvents *>(data);
+      MacLinkPressEntry entry;
+      if (v != MAC_LINK_DOWN_ENTRY && v != MAC_LINK_UP_ENTRY)
+      {
+        LOKA_VERIFY(!queryMacLinkPressEntry(entry));
+        return;
+      }
+      ++events.entries;
+      LOKA_VERIFY(queryMacLinkPressEntry(entry));
+      if (v == MAC_LINK_DOWN_ENTRY)
+      {
+        LOKA_VERIFY(entry.eventNumber == 77 && entry.clickCount == 1);
+        events.press.up(78, 0, 2);
+        LOKA_VERIFY(queryMacLinkPressEntry(entry));
+        LOKA_VERIFY(entry.eventNumber == 77 && entry.clickCount == 1);
+      }
+      else
+        LOKA_VERIFY(entry.eventNumber == 78 && entry.clickCount == 2);
+    }
+  };
+} // namespace
+
+void testMacLinkPressEntryEvent()
+{
+  Press f;
+  EntryEvents events = {f, 0};
+  Observe trace(&EntryEvents::visit, &events);
+  MacLinkPressEntry entry;
+  LOKA_VERIFY(!queryMacLinkPressEntry(entry));
+  f.down(77);
+  LOKA_VERIFY(events.entries == 2);
+  LOKA_VERIFY(!queryMacLinkPressEntry(entry));
+  Completed(__func__);
+}
 
 void testMacLinkPressIdentity()
 {
