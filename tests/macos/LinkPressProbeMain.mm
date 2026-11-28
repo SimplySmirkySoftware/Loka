@@ -1,7 +1,8 @@
 // Build with TARGET=LokaLinkPressProbeMacOS scripts/macos/build.sh (Tiger: scripts/macos/build-10_4.sh
 // with the same TARGET). From Terminal run the bundle executable, e.g.
 // build/macos/Release/apple/macos/LokaLinkPressProbeMacOS.app/Contents/MacOS/LokaLinkPressProbeMacOS
-// Append --self-check for the posted 41/41, 42/99, 43/43 control. Omit it for physical input.
+// Append --self-check for the posted 41/41, 42/99, 43/43 control (exit 0 PASS, 1 FAIL, 2 locked screen).
+// Omit it for physical input.
 //
 // Step  Physical gesture                          Required observation (activation delta)
 // P0    Click alpha                               DOWN, UP, alpha +1; otherwise rig inconclusive
@@ -18,6 +19,7 @@
 
 #include "LinkPressProbeApp.hpp"
 #include "../support/MacLinkPressEvent.hpp"
+#include "../support/MacWindowSession.hpp"
 #include "testing/MacLinkPressHooks.hpp"
 #include "app/bootstrap/PlatformBootstrap.hpp"
 #include "app/core/App.hpp"
@@ -236,6 +238,13 @@ int main(int argc, char **argv)
   for (int i = 1; i < argc; ++i)
     if (std::strcmp(argv[i], "--self-check") == 0)
       checking = true;
+  // Posted events do not reach a window on a locked console; that run proves nothing either way.
+  if (checking && loka::testing::MacConsoleScreenIsLocked())
+  {
+    std::puts("[skip] self-check: console screen is locked (inconclusive)");
+    [pool drain];
+    return 2;
+  }
   const int result = Run(checking);
   [pool drain];
   return result;
