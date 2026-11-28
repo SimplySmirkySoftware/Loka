@@ -17,6 +17,7 @@ namespace loka
       struct QuoteProps;
       struct HeadingProps;
       struct ParagraphProps;
+      struct RuleProps;
       struct ImageProps;
       struct CodeBlockProps;
 
@@ -36,6 +37,9 @@ namespace loka
 
         /** Cost: one call per visited image, borrowing its props only. */
         virtual bool read(const ImageProps &) = 0;
+
+        /** Borrow the fixed input once per visited thematic break. */
+        virtual bool read(const RuleProps &) = 0;
 
         /** Cost: one borrowed input per visited item. */
         virtual bool read(const ItemProps &) = 0;

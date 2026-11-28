@@ -7,6 +7,10 @@ struct Reader : BlockReader
   {
     return true;
   }
+  bool read(const RuleProps &)
+  {
+    return true;
+  }
   bool read(const ItemProps &)
   {
     return true;

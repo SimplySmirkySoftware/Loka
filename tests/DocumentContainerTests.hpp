@@ -1,5 +1,9 @@
 #ifndef LOKA_DOCUMENT_CONTAINER_TESTS_HPP
 #define LOKA_DOCUMENT_CONTAINER_TESTS_HPP
+void testDocumentRuleBlocks();
+void testDocumentRuleQuotes();
+void testDocumentRuleGrammar();
+void testDocumentRuleScreen();
 void testDocumentItemBlocksOrder();
 void testDocumentItemBlocksPayload();
 void testDocumentItemBlocksIndent();

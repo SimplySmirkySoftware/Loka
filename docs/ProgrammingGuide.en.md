@@ -2387,6 +2387,12 @@ Column()
   << doc::CodeBlock("Column() << Text(\"hello\")");
 ```
 
+Include `app/doc/Rule.hpp` to use `doc::Rule()` for a change of topic. Place
+it at the document root or inside a `doc::Quote()`. A `Box` or `Column` can
+wrap it in either place. Both exports refuse a rule inside a list or list
+item. Markdown writes `***` on its own line, and HTML writes `<hr>`. On screen
+the break appears as a centered, unwrapped `* * *`.
+
 Include `app/doc/Image.hpp` to write an image block. For example,
 `doc::Image("map.png", "Trail map")` writes `![Trail map](<map.png>)` in
 Markdown and `<p><img src="map.png" alt="Trail map"></p>` in HTML. On screen

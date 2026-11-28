@@ -15,6 +15,8 @@ def projection(parser, source):
             continue
         if token.type == "inline":
             stack[-1][1].extend(inline_glyphs(token))
+        elif token.type == "hr" and token.nesting == 0:
+            stack[-1][1].append(("hr", []))
         elif token.type == "fence" and not token.info:
             stack[-1][1].append(("pre", plain_glyphs(token.content)))
         elif token.nesting == 1:
@@ -117,7 +119,7 @@ def authored_forest(nodes, markdown):
                         else authored_list(tag, value, markdown))
             if children:
                 forest.append((tag, children))
-        elif value or tag in ("h2", "pre"):
+        elif value or tag in ("h2", "pre", "hr"):
             if tag == "h2":
                 value = value.replace("\n", " ")
             if tag == "pre":
