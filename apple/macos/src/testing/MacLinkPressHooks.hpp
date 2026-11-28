@@ -14,6 +14,16 @@ namespace loka
       MAC_LINK_INSTALL,
       MAC_LINK_DROP_WINDOW
     };
+    /** Identity and multiplicity of the native event supplied to the leaf. */
+    struct MacLinkPressEntry
+    {
+      long eventNumber;
+      long clickCount;
+    };
+    /** Publish the DOWN or UP event for the duration of one observer call. */
+    void visitMacLinkPressEntry(MacLinkPressVisit visit, long eventNumber, long clickCount);
+    /** Copy the current entry. Outside its callback, return false and leave out untouched. */
+    bool queryMacLinkPressEntry(MacLinkPressEntry &out);
     typedef void (*MacLinkPressHook)(MacLinkPressVisit, void *);
     /** A fixture borrows one observer for its lexical interval; no row walk. */
     void observeMacLinkPress(MacLinkPressHook hook, void *data);
